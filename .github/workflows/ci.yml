@@ -1,0 +1,198 @@
+name: CI
+
+# Only on pull requests. A `push` trigger as well would double every run for
+# a branch with a pull request open, since both fire for the same commit.
+# Once merged, `release.yml` runs these same checks on main, then releases.
+on:
+  # pull_request:
+  #   branches: [main]
+  workflow_dispatch:
+  # workflow_call:
+
+# A new push to a pull request makes the run for the previous one worthless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# No debug info: nothing reads it in CI, and linking it (PDBs on Windows) is a
+# large share of a debug build. Incremental builds don't survive the cache.
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_TERM_COLOR: always
+
+# The four checks `CLAUDE.md` asks for run as parallel jobs rather than one
+# after another, and each job does its part once: the WASM package is built a
+# single time for typecheck, UI tests and the build, instead of once per script.
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Clippy checks the desktop host too, which links against these on Linux
+      # (Tauri's webview and GTK, ALSA for cpal and midir).
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libwebkit2gtk-4.1-dev libasound2-dev libjack-jackd2-dev libxdo-dev libssl-dev librsvg2-dev
+
+      # Reads the pnpm version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # dtolnay/rust-toolchain is versioned by branch, not release: @stable is
+      # always the current stable Rust.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+      # Includes the check that the example Plugins use only the SDK.
+      - run: pnpm lint
+      # That check's own tests, the web build check's (`app` runs that check
+      # on its build), the Windows and macOS sign commands' and the updater's.
+      - run: node --test scripts/check-example-plugins.test.ts scripts/check-web-build.test.ts scripts/sign-windows.test.ts scripts/sign-macos.test.ts scripts/updater.test.ts
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The desktop host's tests are the `desktop` job's.
+      - run: cargo test -p soundcheck-engine
+      # The Plugin SDK, the test Plugins' own checks of their expected output,
+      # and the example Plugins' own tests. The desktop and app jobs build all
+      # four Plugins for wasm32 and play them through wasmtime and WebAssembly.
+      - run: >-
+          cargo test -p soundcheck-sdk -p soundcheck-test-effect -p soundcheck-test-instrument
+          -p soundcheck-example-bitcrusher -p soundcheck-example-wavetable
+
+  # typecheck, the UI tests and the build: all three need the WASM package.
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm engine:build
+      - run: pnpm --filter @soundcheck/app typecheck
+      - run: pnpm --filter @soundcheck/app test
+      - run: pnpm --filter @soundcheck/app build
+      # The one build works under a sub-path as well as at `/` (ADR 0006).
+      - run: node scripts/check-web-build.ts
+
+  # The Relay (ADR 0007): its tests, and its container image, built and
+  # tried for every change. Once a change is on `main` the image goes to the
+  # GitHub Container Registry, for whoever runs a Relay to pull (ADR 0012).
+  relay:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soundcheck-relay
+      - run: docker build -f relay/Dockerfile -t soundcheck-relay .
+      # The image starts and answers its health check.
+      - run: |
+          docker run --detach --rm --publish 8080:8080 --name relay soundcheck-relay
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/; then docker stop relay; exit 0; fi
+            sleep 1
+          done
+          docker logs relay
+          exit 1
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/relay"
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag soundcheck-relay "$image:latest"
+          docker tag soundcheck-relay "$image:$GITHUB_SHA"
+          docker push --all-tags "$image"
+
+  # The desktop app ships on Windows first (ADR 0002), and on Linux (#71) and
+  # macOS (#72) too, so its host is tested on all three. There is no audio
+  # device on any runner: the tests render into buffers. Clippy for it runs
+  # in `lint`.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # What `lint` installs: the host links against these on Linux.
+      - if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libwebkit2gtk-4.1-dev libasound2-dev libjack-jackd2-dev libxdo-dev libssl-dev librsvg2-dev
+      # The WASM Plugin tests build the test and example Plugins for wasm32
+      # and run them in wasmtime. Clippy is for the `asio` build below.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soundcheck-desktop
+      # The `asio` feature (the README's "Low latency: ASIO") compiles, so it
+      # can't break unseen. With CPAL_ASIO_DIR unset, cpal's asio-sys
+      # downloads the ASIO SDK from Steinberg into the runner's temp folder
+      # itself, and nothing redistributes it; its bindgen finds the LLVM the
+      # Windows runner has installed.
+      - if: runner.os == 'Windows'
+        run: cargo clippy -p soundcheck-desktop --all-targets --features asio -- -D warnings
+
+  # The VST3 helper (#70, ADR 0008): `desktop/vst3-host/`, C++ built with
+  # CMake against the VST3 SDK at the tag its CMakeLists pins, with the test
+  # Plugin and the SDK's own example Plugins, which the desktop host's VST3
+  # tests then load. Those tests skip without a built helper, so here
+  # SOUNDCHECK_VST3_REQUIRE makes a missing one a failure. Windows first (ADR
+  # 0002), and Linux; the macOS row is for later (ADR 0008's slice 6). The
+  # runners have CMake and a C++ compiler already.
+  vst3:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libwebkit2gtk-4.1-dev libasound2-dev libjack-jackd2-dev libxdo-dev libssl-dev librsvg2-dev
+      - run: cmake -S desktop/vst3-host -B desktop/vst3-host/build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build desktop/vst3-host/build --config Release --parallel
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soundcheck-desktop vst3
+        env:
+          SOUNDCHECK_VST3_REQUIRE: 1

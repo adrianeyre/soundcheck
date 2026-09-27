@@ -1,0 +1,16 @@
+[package]
+name = "soundcheck-relay"
+version = "0.1.0"
+description = "The Soundcheck Relay: passes a Live Session's encrypted Changes between its members, and stores nothing"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.30.0"
+# The token bucket's test runs on paused time.
+tokio = { version = "1.53.1", features = ["test-util"] }

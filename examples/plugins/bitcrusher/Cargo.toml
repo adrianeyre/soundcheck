@@ -1,0 +1,14 @@
+[package]
+name = "soundcheck-example-bitcrusher"
+version = "1.0.0"
+description = "An example Plugin Effect: a bitcrusher, written only against the Soundcheck SDK"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+# cdylib for the .wasm Plugin, rlib so `cargo test` can run it natively.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soundcheck-sdk = { version = "1.0.0", path = "../../../sdk" }

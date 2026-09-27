@@ -1,0 +1,22 @@
+# A throwaway spike for #115: Stem Separation with Demucs on ONNX Runtime. Its
+# own workspace, so nothing here is built, linted or tested with the app.
+[workspace]
+
+[package]
+name = "spike-stem-separation"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+hound = "3.5.1"
+# rustls rather than the default native TLS for downloading ONNX Runtime, so no
+# OpenSSL is needed to build it.
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "copy-dylibs", "api-27"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_ProcessStatus", "Win32_System_Threading"] }
+
+[profile.release]
+opt-level = 3

@@ -1,0 +1,4 @@
+# The SDK is fetched, and everything is built, outside git: no SDK sources and
+# no plugin binaries are ever committed.
+build/
+target/

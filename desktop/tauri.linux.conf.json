@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.png"],
+    "category": "Music",
+    "shortDescription": "Music creation with an LLM co-producer",
+    "longDescription": "A music-creation app whose Assistant can edit and listen to a song.",
+    "linux": {
+      "deb": {
+        "section": "sound",
+        "depends": ["libasound2"],
+        "recommends": ["libjack-jackd2-0 | libjack0 | pipewire-jack"]
+      }
+    }
+  }
+}

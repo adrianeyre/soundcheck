@@ -1,0 +1,13 @@
+# A throwaway spike for #53: how the Audio Engine hosts WASM Plugins. Its own
+# workspace, so nothing here is built, linted or tested with the app.
+[workspace]
+resolver = "3"
+members = ["plugin", "host", "component"]
+
+[workspace.package]
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[profile.release]
+opt-level = 3
+lto = true

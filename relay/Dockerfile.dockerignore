@@ -1,0 +1,14 @@
+# Only what building the Relay needs: the workspace's manifests and its
+# members, as Cargo reads every member's manifest.
+*
+!Cargo.toml
+!Cargo.lock
+!engine
+!desktop
+!sdk
+!examples
+!relay
+**/target
+**/node_modules
+desktop/vst3-host/build
+desktop/gen

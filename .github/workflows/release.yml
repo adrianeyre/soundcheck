@@ -1,0 +1,514 @@
+name: Release
+
+# Runs on every push to main, which includes the merge of a pull request.
+# The pull request's checks (`ci.yml`) run again on the merged tree; then
+# semantic-release reads the Conventional Commits since the last tag,
+# decides the next version, bumps package.json, writes CHANGELOG.md, tags
+# it and makes a draft GitHub Release. The Desktop App is built from that
+# tag for Windows, macOS and Linux, its installers and the updater's
+# latest.json go on the Release, and the Release is published. The
+# Browser Version is built from the bumped main and deployed to Pages.
+on:
+  # push:
+  #   branches: [main]
+  workflow_dispatch:
+
+# Never cancel a release in flight, and never run two at once: a cancelled
+# one could leave a tag with no installers, or Pages half deployed.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Everything a pull request is checked with, on what was merged.
+  verify:
+    uses: ./.github/workflows/ci.yml
+    # A called workflow's jobs get no more than this: `relay` pushes the
+    # Relay's image to the GitHub Container Registry once on main (ADR 0012).
+    permissions:
+      contents: read
+      packages: write
+
+  # semantic-release (`.releaserc.json`): `feat:` makes a minor version,
+  # `fix:`, `perf:`, `refactor:`, `revert:` and `build:` a patch, a `!` or
+  # `BREAKING CHANGE:` a major; `docs:`, `test:`, `chore:`, `ci:` and
+  # `style:` none. Its commit is `[skip ci]`, so it doesn't start another run.
+  # The Release it makes is a draft until `publish` has put the installers
+  # on it: the installed Desktop App asks the latest Release for updates.
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the tag, the version commit and the Release
+      issues: write # comment on released issues
+      pull-requests: write # comment on released pull requests
+    outputs:
+      released: ${{ steps.made.outputs.released }}
+      tag: ${{ steps.made.outputs.tag }}
+      version: ${{ steps.made.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history and its tags, to find the last release and the
+          # commits since.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: before
+        run: echo "tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        # This repository, whatever package.json's `repository` says, so a
+        # fork releases to itself.
+        run: pnpm exec semantic-release --repository-url "https://github.com/$GITHUB_REPOSITORY"
+
+      # Whether it made a version: the newest tag on main, after it pushed.
+      - id: made
+        run: |
+          git fetch --quiet --tags origin main
+          tag=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || true)
+          if [ -n "$tag" ] && [ "$tag" != "${{ steps.before.outputs.tag }}" ]; then
+            { echo "released=true"; echo "tag=$tag"; echo "version=${tag#v}"; } >> "$GITHUB_OUTPUT"
+            echo "::notice title=Released $tag::semantic-release made $tag; the Desktop App is built from it next."
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No release::No commit since the last release calls for one (only docs, tests, chores or CI), so no version and no installers."
+          fi
+
+  # The Windows installer (#73, ADR 0009): `desktop/tauri.windows.conf.json`
+  # turns bundling on for Windows, so `pnpm desktop:build` makes the release
+  # build (LTO, the bundled UI) and an NSIS installer, and Tauri runs
+  # `scripts/sign-windows.ts` on the app, the installer and its uninstaller.
+  # That signs through Azure Artifact Signing or a PFX, whichever secrets are
+  # set (the README's "Signing the installer" names them), and leaves them
+  # unsigned when neither is, as on a fork. The slowest thing CI does, and it
+  # adds nothing a pull request's tests don't already check, so it runs once a
+  # release is made on `main`, rather than blocking the merge.
+  # With the updater's key (the README's "Releases and updates") it signs
+  # the installer for the updater too, after Windows' signature (#74).
+  desktop-release:
+    needs: release
+    # Only when semantic-release has just made a version: a merge of docs,
+    # tests or chores makes none, and there's nothing new to package.
+    if: needs.release.outputs.released == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tagged release: its package.json has the version semantic-release
+          # just gave it, which Tauri names the installers and the updater with.
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # Fails here, before the build, on half a set of secrets. The secrets
+      # are given to this step and the build only, not the whole job.
+      - id: signing
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          how=$(node scripts/sign-windows.ts --how)
+          echo "how=$how" >> "$GITHUB_OUTPUT"
+          if [ "$how" = unsigned ]; then
+            echo "::notice title=Windows installer not signed::No Windows signing secret is set, so the installer and the app in it are unsigned. The README's \"Signing the installer\" says which secrets to add."
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Signs through Azure Artifact Signing, with the Azure CLI, .NET and the
+      # Windows SDK's signtool the runner already has. A pinned version, which
+      # Dependabot doesn't update: bump it by hand.
+      - if: steps.signing.outputs.how == 'artifact-signing'
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
+
+      - run: pnpm install --frozen-lockfile
+
+      # The VST3 helper, which the installer puts beside the app (#70, ADR
+      # 0008), and Tauri signs with it. Only the helper: not the test Plugins.
+      - run: cmake -S desktop/vst3-host -B desktop/vst3-host/build -DCMAKE_BUILD_TYPE=Release -DSOUNDCHECK_VST3_TEST_PLUGINS=OFF
+      - run: cmake --build desktop/vst3-host/build --config Release --parallel --target soundcheck-vst3-host
+
+      - run: pnpm desktop:build
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
+          VITE_RELAY_URL: ${{ vars.RELAY_URL }}
+
+      # With the updater's signature, where there is one.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: soundcheck-windows
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+
+  # The macOS app (#72, ADR 0010): `desktop/tauri.macos.conf.json` turns
+  # bundling on for macOS, so `pnpm desktop:build`, run through
+  # `scripts/sign-macos.ts`, makes Soundcheck.app and a disk image of it, for
+  # Apple silicon (the runner's own). With the `APPLE_*` secrets (the
+  # README's "Signing and notarising the Mac app" names them) Tauri signs it
+  # with the Developer ID and notarises it, and the script then notarises the
+  # disk image too; with none, as on a fork, the app is signed ad hoc. Like
+  # `desktop-release`, only for a release. With the updater's key it also makes the app's update package, a
+  # .tar.gz of it, signed for the updater (#74).
+  desktop-macos:
+    needs: release
+    # Only when semantic-release has just made a version: a merge of docs,
+    # tests or chores makes none, and there's nothing new to package.
+    if: needs.release.outputs.released == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tagged release: its package.json has the version semantic-release
+          # just gave it, which Tauri names the installers and the updater with.
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # Fails here, before the build, on half a set of secrets. The secrets
+      # are given to this step, the build and the notarising only.
+      - id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          how=$(node scripts/sign-macos.ts --how)
+          echo "how=$how" >> "$GITHUB_OUTPUT"
+          if [ "$how" = ad-hoc ]; then
+            echo "::notice title=Mac app not signed::No Apple signing secret is set, so the app is signed ad hoc and not notarised, and macOS stops a downloaded copy. The README's \"Signing and notarising the Mac app\" says which secrets to add."
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: node scripts/sign-macos.ts -- pnpm desktop:build
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
+          VITE_RELAY_URL: ${{ vars.RELAY_URL }}
+
+      - if: steps.signing.outputs.how == 'developer-id'
+        run: node scripts/sign-macos.ts --notarise target/release/bundle/dmg/*.dmg
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # Asks what a Mac asks: the signature holds over the whole app, with the
+      # entitlements it was meant to have; and, with the Developer ID, that
+      # Gatekeeper accepts the app and the disk image as notarised, with the
+      # tickets stapled so they open offline too.
+      - env:
+          HOW: ${{ steps.signing.outputs.how }}
+        run: |
+          app=target/release/bundle/macos/Soundcheck.app
+          dmg=$(ls target/release/bundle/dmg/*.dmg)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --entitlements - "$app"
+          if [ "$HOW" = developer-id ]; then
+            spctl --assess --type execute --verbose=4 "$app"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+            xcrun stapler validate "$app"
+            xcrun stapler validate "$dmg"
+          fi
+
+      # Tauri names the update package `Soundcheck.app.tar.gz`, whatever the
+      # version; a Release's files are named for theirs, as the others are.
+      - run: |
+          cd target/release/bundle/macos
+          if [ -f Soundcheck.app.tar.gz ]; then
+            name="Soundcheck_$(node -p "require('../../../../package.json').version")_aarch64.app.tar.gz"
+            mv Soundcheck.app.tar.gz "$name"
+            mv Soundcheck.app.tar.gz.sig "$name.sig"
+          fi
+
+      # The disk image, and the update package if there is one: not the app
+      # itself, as an artifact is a zip, which would lose the app's symlinks
+      # and executable bits.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: soundcheck-macos
+          path: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/macos/*.app.tar.gz
+            target/release/bundle/macos/*.app.tar.gz.sig
+          if-no-files-found: error
+
+  # The Linux packages (#71): `desktop/tauri.linux.conf.json` turns bundling
+  # on for Linux, so the same `pnpm desktop:build` makes a .deb and an
+  # AppImage here, as `tauri.windows.conf.json` makes the NSIS installer on
+  # Windows (#73) and `tauri.macos.conf.json` the app on macOS (#72).
+  # Not signed for the distributions; with the updater's key, signed for the
+  # updater (#74). Like `desktop-release`, only for a release.
+  desktop-linux-packages:
+    needs: release
+    # Only when semantic-release has just made a version: a merge of docs,
+    # tests or chores makes none, and there's nothing new to package.
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tagged release: its package.json has the version semantic-release
+          # just gave it, which Tauri names the installers and the updater with.
+          ref: ${{ needs.release.outputs.tag }}
+
+      # What `lint` installs, and `file`, which the AppImage bundler runs.
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libwebkit2gtk-4.1-dev libasound2-dev libjack-jackd2-dev libxdo-dev libssl-dev librsvg2-dev file
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+      # The VST3 helper, which the packages put beside the app (#70).
+      - run: cmake -S desktop/vst3-host -B desktop/vst3-host/build -DCMAKE_BUILD_TYPE=Release -DSOUNDCHECK_VST3_TEST_PLUGINS=OFF
+      - run: cmake --build desktop/vst3-host/build --config Release --parallel --target soundcheck-vst3-host
+      - run: pnpm desktop:build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
+          VITE_RELAY_URL: ${{ vars.RELAY_URL }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: soundcheck-linux
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/deb/*.deb.sig
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/appimage/*.AppImage.sig
+          if-no-files-found: error
+
+  # The installers, and the updater's `latest.json` (#74, ADR 0011), go on
+  # semantic-release's draft Release, and only then is it published, so the
+  # latest Release never lacks either. A pre-release (a version with a `-`)
+  # is never made latest. `scripts/updater.ts` checks every update
+  # package's signature against the committed public key and the version
+  # first. With no updater key yet, the Release has the installers and no
+  # `latest.json`, and says so.
+  publish:
+    needs: [release, desktop-release, desktop-macos, desktop-linux-packages]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # An artifact keeps the folders its files came from (the Mac's dmg/ and
+      # macos/, Linux's deb/ and appimage/); a Release's files are flat.
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: soundcheck-*
+          merge-multiple: true
+      - run: |
+          mkdir release
+          find artifacts -type f -exec mv -t release {} +
+          ls -l release
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          gh release view "$TAG" --json body --jq .body > notes.md
+          node scripts/updater.ts manifest release "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" notes.md
+          if [ ! -f release/latest.json ]; then
+            echo "::notice title=No auto-update::The updater has no key yet, so this Release has no latest.json and installed copies won't update to it. The README's \"Releases and updates\" says how to make one."
+          fi
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          gh release upload "$TAG" release/* --clobber
+          latest=(--latest)
+          case "$VERSION" in *-*) latest=(--prerelease --latest=false) ;; esac
+          gh release edit "$TAG" --draft=false --title "Soundcheck $VERSION" "${latest[@]}"
+
+  # The Browser Version (ADR 0006) goes to GitHub Pages after every merge to
+  # `main`, once the checks have passed and semantic-release has run, so the
+  # site is built with the version it just made, if it made one. Pages must be on,
+  # with GitHub Actions as its source (Settings → Pages); where it isn't, on a
+  # fork or before the maintainer turns it on, this says so and `web` is
+  # skipped, so CI stays green.
+  pages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: read
+    outputs:
+      on: ${{ steps.pages.outputs.on }}
+    steps:
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type 2>/dev/null || true)
+          if [ "$source" = workflow ]; then
+            echo "on=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Browser Version not deployed::GitHub Pages isn't on for this repository with GitHub Actions as its source (Settings → Pages), so the web job is skipped."
+            echo "on=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  web:
+    needs: [release, pages]
+    if: needs.pages.outputs.on == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # One deploy at a time, and a newer push's waits rather than cancelling one
+    # half done.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `main`, not the commit that triggered the run: semantic-release's
+          # version bump is one commit further on, and the footer shows it.
+          ref: main
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      # The site's address, for the share tags, robots.txt and the sitemap.
+      - id: site
+        uses: actions/configure-pages@v6
+
+      # The WASM engine and the app, then the check that the build works
+      # under the site's sub-path.
+      - run: pnpm build
+        env:
+          VITE_SITE_URL: ${{ steps.site.outputs.base_url }}
+          # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
+          VITE_RELAY_URL: ${{ vars.RELAY_URL }}
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: app/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

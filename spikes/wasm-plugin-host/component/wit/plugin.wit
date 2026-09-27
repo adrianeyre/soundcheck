@@ -1,0 +1,15 @@
+// The alternative interface the spike measured against the C-style ABI: the
+// same Effect as a WASM Component, lists copied across by the canonical ABI.
+package soundcheck:spike;
+
+interface effect {
+  resource tone {
+    constructor(sample-rate: f32);
+    set-param: func(index: u32, value: f32);
+    process: func(left: list<f32>, right: list<f32>) -> tuple<list<f32>, list<f32>>;
+  }
+}
+
+world plugin {
+  export effect;
+}

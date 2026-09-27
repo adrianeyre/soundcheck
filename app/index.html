@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-GB" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f3f4fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0d17" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="dark light" />
+
+    <title>Soundcheck — Make music with an AI co-producer</title>
+    <meta
+      name="description"
+      content="Soundcheck is a music-creation app (DAW), on the desktop and in the browser, with an AI Assistant that edits and listens to your song. Build Tracks with the Synth, Drum Sampler and Step Sequencer, arrange Clips on the Timeline, mix with effects, record, and export to WAV."
+    />
+    <meta name="keywords" content="Soundcheck, DAW, digital audio workstation, music production, AI music assistant, step sequencer, synth, drum sampler, mixer, audio recording" />
+    <meta name="author" content="Adrian Eyre" />
+    <meta name="application-name" content="Soundcheck" />
+    <meta name="apple-mobile-web-app-title" content="Soundcheck" />
+    <link rel="canonical" href="%VITE_SITE_URL%/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+    <!-- Open Graph: the preview card Slack, Teams, LinkedIn, Facebook and iMessage show for a shared link. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:site_name" content="Soundcheck" />
+    <meta property="og:title" content="Soundcheck — Make music with an AI co-producer" />
+    <meta property="og:description" content="A DAW for the desktop and the browser, with Tracks, a Step Sequencer, a Mixer, and an AI Assistant that edits and listens to your song." />
+    <meta property="og:url" content="%VITE_SITE_URL%/" />
+    <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta property="og:image:secure_url" content="%VITE_SITE_URL%/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Soundcheck logo and name above a timeline of coloured Clips with a red playhead." />
+
+    <!-- X / Twitter card; Slack also reads these. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Soundcheck — Make music with an AI co-producer" />
+    <meta name="twitter:description" content="A DAW for the desktop and the browser, with Tracks, a Step Sequencer, a Mixer, and an AI Assistant that edits and listens to your song." />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta name="twitter:image:alt" content="The Soundcheck logo and name above a timeline of coloured Clips with a red playhead." />
+
+    <!-- Favicons and device icons -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Soundcheck",
+        "description": "A music-creation app (DAW), on the desktop and in the browser, with an AI Assistant that edits and listens to your song.",
+        "applicationCategory": "MultimediaApplication",
+        "applicationSubCategory": "Digital audio workstation",
+        "operatingSystem": "Windows, Linux, web browser",
+        "url": "%VITE_SITE_URL%/",
+        "image": "%VITE_SITE_URL%/og-image.png",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "codeRepository": "https://github.com/adrianeyre/soundcheck",
+        "author": { "@type": "Person", "name": "Adrian Eyre" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" }
+      }
+    </script>
+
+    <!-- The saved theme and palette, before first paint, so there is no flash of the wrong one. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("soundcheck.theme");
+          var light = window.matchMedia("(prefers-color-scheme: light)").matches;
+          var theme = saved === "dark" || saved === "light" ? saved : light ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", theme);
+          var palette = localStorage.getItem("soundcheck.palette");
+          if (/^(ocean|aqua|rose|tangerine|slate)$/.test(palette || "")) {
+            document.documentElement.setAttribute("data-palette", palette);
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>Soundcheck needs JavaScript to run.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

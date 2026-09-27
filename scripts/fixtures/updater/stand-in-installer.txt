@@ -1,0 +1,1 @@
+Not an installer: a stand-in, signed by a throwaway key for the updater script's tests.

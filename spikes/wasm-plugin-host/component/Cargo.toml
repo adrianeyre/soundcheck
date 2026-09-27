@@ -1,0 +1,13 @@
+[package]
+name = "spike-component"
+version = "0.1.0"
+description = "The spike Effect as a WASM Component, to compare with the C-style ABI"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spike-plugin = { path = "../plugin" }
+wit-bindgen = "0.62.0"

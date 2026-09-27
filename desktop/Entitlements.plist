@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  What the macOS app may do under the hardened runtime, which notarisation
+  requires (#72, ADR 0010). Tauri signs the app with these.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Recording: CoreAudio input. macOS still asks the musician first, with Info.plist's NSMicrophoneUsageDescription. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!-- WASM Plugins (ADR 0003): wasmtime compiles them into memory it then makes executable, without MAP_JIT, so allow-jit isn't enough. -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>

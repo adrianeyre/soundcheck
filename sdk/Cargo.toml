@@ -1,0 +1,7 @@
+[package]
+name = "soundcheck-sdk"
+version = "1.0.0"
+description = "Write a Soundcheck Plugin: the ABI v1 exports, from one trait"
+edition.workspace = true
+license.workspace = true
+readme = "README.md"

@@ -1,0 +1,13 @@
+[package]
+name = "spike-host"
+version = "0.1.0"
+description = "Hosts the spike Plugin in wasmtime and measures its per-block cost"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+spike-plugin = { path = "../plugin" }
+wasmtime = { version = "49.0.1", default-features = false, features = ["cranelift", "runtime", "std", "component-model"] }
+# Only for the Component Model comparison: a Rust component built for
+# wasm32-wasip2 imports WASI even when it never uses it.
+wasmtime-wasi = "49.0.1"

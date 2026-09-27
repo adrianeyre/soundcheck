@@ -1,0 +1,3568 @@
+/*
+ * Soundcheck's design system: semantic tokens, a dark studio theme with a
+ * light one beside it, and the few layout classes the pages share.
+ *
+ * Every text colour here meets WCAG 2.2 AA (4.5:1) against the surfaces it
+ * sits on, and every control border, icon and focus ring meets 3:1, in both
+ * themes; `app/src/theme-contrast.test.ts` checks the pairs.
+ */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d17;
+  --surface: #141726;
+  --surface-2: #1b1f33;
+  --surface-3: #262b44;
+  --border: #2c3150;
+  --control-border: #737ba3;
+  --text: #eef0fa;
+  --text-muted: #a9b0cd;
+  --primary: #9d8fff;
+  --primary-hover: #b3a8ff;
+  --on-primary: #0b0d17;
+  --primary-soft: #2d2a5c;
+  --play: #3ddc97;
+  --on-play: #06140e;
+  --record: #ff7a7a;
+  --on-record: #1a0606;
+  --warning: #fbbf24;
+  --on-warning: #1a1204;
+  --focus: #7dd3fc;
+  --meter-low: #3ddc97;
+  --meter-clip: #ff5c5c;
+  --lane: #171a2b;
+  --lane-line: #2f3452;
+  --lane-bar: #4a5178;
+  --clip-pattern: #4453b8;
+  /* Each kind of Track has a colour of its own, the same in every palette, for the stripe down its
+     left edge wherever it is shown: 3:1 on every surface, so it tells them apart at a glance. */
+  --kind-instrument: #8b9bff;
+  --kind-drum: #f5a524;
+  --kind-audio: #34d399;
+  --clip-audio: #1f7a5c;
+  --clip-ink: #f5f7ff;
+  --loop: #8a6d1f;
+  --loop-off: #3a3f5c;
+  --playhead: #ff5c5c;
+  --scrim: rgb(3 4 10 / 0.72);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+  --logo-from: #8b7cff;
+  --logo-to: #3ddc97;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='240' height='96'%3E%3Cpath d='M0 48 Q30 12 60 48 T120 48 T180 48 T240 48' fill='none' stroke='#000' stroke-width='1.5'/%3E%3C/svg%3E");
+  --motif-size: 240px 96px;
+  --motif-repeat: repeat;
+  --motif-position: 0 0;
+  --glow: 0.16;
+  --motif-strength: 0.08;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4fa;
+  --surface: #ffffff;
+  --surface-2: #eef0f7;
+  --surface-3: #e1e4f0;
+  --border: #d3d7e6;
+  --control-border: #6b7290;
+  --text: #141726;
+  --text-muted: #4a5070;
+  --primary: #5140d6;
+  --primary-hover: #4232c0;
+  --on-primary: #ffffff;
+  --primary-soft: #e4e0ff;
+  --play: #0b7a50;
+  --on-play: #ffffff;
+  --record: #c02727;
+  --on-record: #ffffff;
+  --warning: #8a5a00;
+  --on-warning: #ffffff;
+  --focus: #1d4ed8;
+  --meter-low: #0e8a58;
+  --meter-clip: #d42a2a;
+  --lane: #f7f8fc;
+  --lane-line: #dde0ec;
+  --lane-bar: #9aa1bd;
+  --clip-pattern: #4d5fd0;
+  --kind-instrument: #4d5fd0;
+  --kind-drum: #a85a00;
+  --kind-audio: #177a58;
+  --clip-audio: #177a58;
+  --clip-ink: #ffffff;
+  --loop: #f4c54a;
+  --loop-off: #d7dbe8;
+  --playhead: #d42a2a;
+  --scrim: rgb(10 12 24 / 0.55);
+  --shadow: 0 1px 2px rgb(20 23 38 / 0.08), 0 8px 24px rgb(20 23 38 / 0.12);
+  --glow: 0.08;
+  --motif-strength: 0.05;
+}
+
+/* Colour palettes. Each tints the backgrounds, panels and lines toward its
+   hue (only the hue changes, so every contrast pair still holds), recolours
+   the accent and the Pattern Clips, gives the logo its colours and draws its
+   own faint motif behind the pages. Play, record, warning and focus keep
+   their colours, so what they mean never changes. Violet is the stylesheet's
+   own, above. */
+
+:root[data-palette="ocean"] {
+  --bg: #0b1117;
+  --surface: #141c26;
+  --surface-2: #1c2632;
+  --surface-3: #273443;
+  --border: #2d3d4f;
+  --control-border: #7489a2;
+  --text: #eef4fa;
+  --text-muted: #aabacc;
+  --lane: #18202b;
+  --lane-line: #303f51;
+  --lane-bar: #4b6077;
+  --loop-off: #3b4a5b;
+  --primary: #6cb2ff;
+  --primary-hover: #8fc4ff;
+  --on-primary: #0b0d17;
+  --primary-soft: #15325a;
+  --clip-pattern: #2563a8;
+  --logo-from: #4f9dff;
+  --logo-to: #3fd0d4;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='160' height='48'%3E%3Cpath d='M0 24 C20 8 40 8 60 24 S100 40 120 24 S150 12 160 24' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Cpath d='M0 44 C20 30 40 30 60 44 S100 58 120 44 S150 34 160 44' fill='none' stroke='#000' stroke-width='1' opacity='.6'/%3E%3C/svg%3E");
+  --motif-size: 160px 48px;
+  --motif-repeat: repeat;
+  --motif-position: 0 0;
+}
+
+:root[data-theme="light"][data-palette="ocean"] {
+  --bg: #f3f6fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --surface-3: #e1e8f0;
+  --border: #d3dce6;
+  --control-border: #6c7c8f;
+  --text: #141c26;
+  --text-muted: #4b5c6f;
+  --lane: #f7f9fc;
+  --lane-line: #dde4ec;
+  --lane-bar: #9baabc;
+  --loop-off: #d7dfe8;
+  --primary: #1f5fb8;
+  --primary-hover: #174f9c;
+  --on-primary: #ffffff;
+  --primary-soft: #dbe9fb;
+  --clip-pattern: #2f6fc4;
+}
+
+:root[data-palette="aqua"] {
+  --bg: #0c1516;
+  --surface: #162324;
+  --surface-2: #1d2f31;
+  --surface-3: #293f41;
+  --border: #304a4c;
+  --control-border: #789a9e;
+  --text: #eff8f9;
+  --text-muted: #adc7c9;
+  --lane: #192729;
+  --lane-line: #334c4e;
+  --lane-bar: #4f7073;
+  --loop-off: #3d5659;
+  --primary: #3fd0d4;
+  --primary-hover: #6adde0;
+  --on-primary: #0b0d17;
+  --primary-soft: #0f3d44;
+  --clip-pattern: #16757a;
+  --logo-from: #3fd0d4;
+  --logo-to: #3ddc97;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='900' height='900'%3E%3Ccircle cx='900' cy='900' r='90' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='160' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='230' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='300' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='370' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='440' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='510' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='580' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='650' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='720' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='790' fill='none' stroke='#000' stroke-width='1.5'/%3E%3Ccircle cx='900' cy='900' r='860' fill='none' stroke='#000' stroke-width='1.5'/%3E%3C/svg%3E");
+  --motif-size: 900px 900px;
+  --motif-repeat: no-repeat;
+  --motif-position: 100% 100%;
+}
+
+:root[data-theme="light"][data-palette="aqua"] {
+  --bg: #f4f9f9;
+  --surface: #ffffff;
+  --surface-2: #eff5f6;
+  --surface-3: #e2edee;
+  --border: #d5e3e4;
+  --control-border: #6f898c;
+  --text: #162324;
+  --text-muted: #4e696c;
+  --lane: #f8fbfc;
+  --lane-line: #dfe9ea;
+  --lane-bar: #9eb7ba;
+  --loop-off: #d9e5e6;
+  --primary: #0b6e73;
+  --primary-hover: #085a5e;
+  --on-primary: #ffffff;
+  --primary-soft: #d3f1f1;
+  --clip-pattern: #12777c;
+}
+
+:root[data-palette="rose"] {
+  --bg: #150d11;
+  --surface: #23171d;
+  --surface-2: #2f1f27;
+  --surface-3: #402a35;
+  --border: #4b313e;
+  --control-border: #9c7a8b;
+  --text: #f8f0f4;
+  --text-muted: #c8aebb;
+  --lane: #281a21;
+  --lane-line: #4d3440;
+  --lane-bar: #715161;
+  --loop-off: #573f4b;
+  --primary: #ff8fb8;
+  --primary-hover: #ffadc9;
+  --on-primary: #0b0d17;
+  --primary-soft: #4a1e33;
+  --clip-pattern: #a3345f;
+  --logo-from: #ff8fb8;
+  --logo-to: #9d8fff;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='260' height='260'%3E%3Ccircle cx='40' cy='50' r='18'/%3E%3Ccircle cx='170' cy='30' r='8'/%3E%3Ccircle cx='210' cy='150' r='26'/%3E%3Ccircle cx='90' cy='190' r='12'/%3E%3Ccircle cx='140' cy='110' r='5'/%3E%3Ccircle cx='20' cy='230' r='6'/%3E%3C/svg%3E");
+  --motif-size: 260px 260px;
+  --motif-repeat: repeat;
+  --motif-position: 0 0;
+  /* Filled dots, not lines: drawn fainter to weigh the same. */
+  --motif-strength: 0.05;
+}
+
+:root[data-theme="light"][data-palette="rose"] {
+  --bg: #f9f4f6;
+  --surface: #ffffff;
+  --surface-2: #f6eff2;
+  --surface-3: #eee3e8;
+  --border: #e3d6dc;
+  --control-border: #8a717e;
+  --text: #23171d;
+  --text-muted: #6a505d;
+  --lane: #fbf8fa;
+  --lane-line: #eadfe4;
+  --lane-bar: #b89fac;
+  --loop-off: #e5dae0;
+  --primary: #b8285f;
+  --primary-hover: #9c1f50;
+  --on-primary: #ffffff;
+  --primary-soft: #fbdce8;
+  --clip-pattern: #b8336a;
+  --motif-strength: 0.03;
+}
+
+:root[data-palette="tangerine"] {
+  --bg: #15100d;
+  --surface: #221c18;
+  --surface-2: #2e2620;
+  --surface-3: #3e332c;
+  --border: #493c33;
+  --control-border: #99887d;
+  --text: #f8f3f0;
+  --text-muted: #c6b9b0;
+  --lane: #27201b;
+  --lane-line: #4b3e36;
+  --lane-bar: #6f5e53;
+  --loop-off: #554941;
+  --primary: #ffa35c;
+  --primary-hover: #ffb87f;
+  --on-primary: #0b0d17;
+  --primary-soft: #4a2a12;
+  --clip-pattern: #a4501a;
+  --logo-from: #ffa35c;
+  --logo-to: #ff6f91;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='900' height='900'%3E%3Cg stroke='#000' stroke-width='2'%3E%3Cline x1='0' y1='900' x2='1257' y2='812'/%3E%3Cline x1='0' y1='900' x2='1237' y2='660'/%3E%3Cline x1='0' y1='900' x2='1198' y2='511'/%3E%3Cline x1='0' y1='900' x2='1142' y2='368'/%3E%3Cline x1='0' y1='900' x2='1069' y2='232'/%3E%3Cline x1='0' y1='900' x2='979' y2='107'/%3E%3Cline x1='0' y1='900' x2='875' y2='-6'/%3E%3Cline x1='0' y1='900' x2='758' y2='-106'/%3E%3Cline x1='0' y1='900' x2='630' y2='-191'/%3E%3Cline x1='0' y1='900' x2='492' y2='-260'/%3E%3Cline x1='0' y1='900' x2='347' y2='-311'/%3E%3Cline x1='0' y1='900' x2='197' y2='-344'/%3E%3Cline x1='0' y1='900' x2='44' y2='-359'/%3E%3C/g%3E%3C/svg%3E");
+  --motif-size: 900px 900px;
+  --motif-repeat: no-repeat;
+  --motif-position: 0 100%;
+}
+
+:root[data-theme="light"][data-palette="tangerine"] {
+  --bg: #f9f6f4;
+  --surface: #ffffff;
+  --surface-2: #f5f2f0;
+  --surface-3: #ede8e4;
+  --border: #e2dbd7;
+  --control-border: #897b72;
+  --text: #221c18;
+  --text-muted: #685b52;
+  --lane: #fbf9f8;
+  --lane-line: #e9e4e0;
+  --lane-bar: #b6a9a1;
+  --loop-off: #e5deda;
+  --primary: #b04a0c;
+  --primary-hover: #943e08;
+  --on-primary: #ffffff;
+  --primary-soft: #fde3d0;
+  --clip-pattern: #b3561a;
+}
+
+:root[data-palette="slate"] {
+  --bg: #0f1113;
+  --surface: #1a1c20;
+  --surface-2: #23262b;
+  --surface-3: #30343a;
+  --border: #383d44;
+  --control-border: #838a93;
+  --text: #f2f4f6;
+  --text-muted: #b5bac1;
+  --lane: #1e2024;
+  --lane-line: #3a3f47;
+  --lane-bar: #596069;
+  --loop-off: #454a51;
+  --primary: #b4bdd6;
+  --primary-hover: #cad1e4;
+  --on-primary: #0b0d17;
+  --primary-soft: #2e3447;
+  --clip-pattern: #4e5877;
+  --logo-from: #b4bdd6;
+  --logo-to: #6b7a99;
+  --motif: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='1.2'/%3E%3C/svg%3E");
+  --motif-size: 24px 24px;
+  --motif-repeat: repeat;
+  --motif-position: 0 0;
+}
+
+:root[data-theme="light"][data-palette="slate"] {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f1f2f4;
+  --surface-3: #e6e8eb;
+  --border: #d9dce0;
+  --control-border: #777c84;
+  --text: #1a1c20;
+  --text-muted: #565c64;
+  --lane: #f9f9fa;
+  --lane-line: #e2e4e7;
+  --lane-bar: #a5aab2;
+  --loop-off: #dddfe2;
+  --primary: #46506e;
+  --primary-hover: #39425d;
+  --on-primary: #ffffff;
+  --primary-soft: #e2e5ee;
+  --clip-pattern: #56607f;
+}
+
+:root {
+  --font: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  /* One height scale for every button, field and menu row, so what shares a
+     row lines up. Compact is for dense chrome (lane headers, Mixer strips,
+     Widget bars); the smallest still meets WCAG 2.2's 24px target (2.5.8). */
+  --control-h-xs: 24px;
+  --control-h-sm: 28px;
+  --control-h: 36px;
+  --control-h-lg: 44px;
+  --focus-ring: 3px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 150ms;
+  --z-sticky: 20;
+  --z-banner: 40;
+  --z-dialog: 100;
+  font-family: var(--font);
+  font-size: 100%;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* A finger needs more room than a pointer: on a touch screen every control
+   grows toward 44px (WCAG 2.5.5). Lane headers keep the smallest size, so
+   the Timeline's rows keep their height. */
+@media (pointer: coarse) {
+  :root {
+    --control-h-sm: 36px;
+    --control-h: 44px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+h2 {
+  font-size: 1.125rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--primary);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--surface-3);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Focus: always visible, never removed ---------- */
+
+:focus-visible {
+  outline: var(--focus-ring) solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- Controls ---------- */
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 550;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--fast) var(--ease-out),
+    border-color var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-out);
+}
+
+button:hover:not(:disabled, [aria-pressed="true"], .btn-danger, .btn-primary, .btn-play) {
+  background: var(--surface-3);
+}
+
+/* A coloured or pressed button keeps its colour under the pointer, a shade
+   brighter, so it still says it is on and its text keeps its contrast. */
+button:is([aria-pressed="true"], .btn-danger):hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Working on it: still shown, not pressed again. */
+button[aria-busy="true"] {
+  cursor: progress;
+}
+
+button[aria-pressed="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+button svg {
+  flex: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.btn-play {
+  background: var(--play);
+  border-color: var(--play);
+  color: var(--on-play);
+}
+
+.btn-play:hover:not(:disabled) {
+  background: var(--play);
+  filter: brightness(1.08);
+}
+
+.btn-record[aria-pressed="true"],
+.btn-danger {
+  background: var(--record);
+  border-color: var(--record);
+  color: var(--on-record);
+}
+
+.btn-record svg {
+  color: var(--record);
+}
+
+.btn-record[aria-pressed="true"] svg {
+  color: var(--on-record);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.btn-sm {
+  min-height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.btn-icon {
+  padding: 0;
+}
+
+/* Fields are exactly as tall as buttons, whatever the browser draws a select or a number box at. */
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+select,
+textarea {
+  min-height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.875rem;
+  line-height: 1.2;
+  transition:
+    border-color var(--fast) var(--ease-out),
+    background-color var(--fast) var(--ease-out);
+}
+
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea):hover:not(:disabled, :focus) {
+  border-color: var(--text-muted);
+}
+
+:is(input, select, textarea):disabled {
+  opacity: 0.5;
+}
+
+textarea {
+  padding: var(--space-2);
+  min-height: 5rem;
+  resize: vertical;
+  width: 100%;
+}
+
+select {
+  padding-right: var(--space-5);
+  cursor: pointer;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+input[type="range"] {
+  accent-color: var(--primary);
+  cursor: pointer;
+  min-height: var(--control-h-xs);
+  margin: 0;
+}
+
+input[type="file"] {
+  font-size: 0.875rem;
+  max-width: 100%;
+}
+
+input[type="file"]::file-selector-button {
+  font: inherit;
+  font-weight: 550;
+  min-height: var(--control-h);
+  margin-right: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease-out);
+}
+
+input[type="file"]:hover:not(:disabled)::file-selector-button {
+  background: var(--surface-3);
+}
+
+:disabled {
+  cursor: not-allowed;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.field-legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+progress {
+  accent-color: var(--primary);
+  width: 10rem;
+  height: 10px;
+}
+
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: var(--space-1) 0;
+  min-height: var(--control-h-xs);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+}
+
+thead th {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+output,
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Form rows ---------- */
+
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.field > :is(input, select, textarea) {
+  color: var(--text);
+}
+
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.row-end {
+  align-items: flex-end;
+}
+
+/* A compact button beside a field takes the field's height, so the row lines up. */
+:is(.row, .toolbar-group, .panel-head, .track-row):has(> :is(.field, .field-inline, input, select)) > button.btn-sm,
+.panel-head:has(> :is(.field, .field-inline, input, select)) > .row > button.btn-sm {
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  font-size: 0.875rem;
+}
+
+:is(.row, .toolbar-group, .panel-head, .track-row):has(> :is(.field, .field-inline, input, select)) > button.btn-sm:not(.btn-icon) {
+  padding: 0 var(--space-3);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* The Conversation so far, in the Request box: each Request with what it changed, no numbers. */
+.transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.transcript > li {
+  gap: var(--space-1);
+}
+
+/* What the chosen model can do, in the Assistant's settings: a tick or a cross, no bullet. */
+.capability-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: var(--space-2);
+}
+
+/* Yes in green with its tick, no in red with its cross: the words say it too, not the colour alone. */
+.capability-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--record);
+}
+
+.capability-value[data-on="true"] {
+  color: var(--play);
+}
+
+.divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 var(--space-1);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Messages ---------- */
+
+.alert,
+.notice {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--record);
+  background: color-mix(in srgb, var(--record) 12%, var(--surface));
+  font-size: 0.875rem;
+}
+
+.notice {
+  border-color: var(--control-border);
+  background: var(--surface-2);
+}
+
+/* The message takes the room; a button in it keeps its label on one line, and goes under when narrow. */
+:is(.alert, .notice) {
+  flex-wrap: wrap;
+}
+
+:is(.alert, .notice) > button {
+  flex: none;
+}
+
+:is(.alert, .notice) > p {
+  flex: 1 1 16rem;
+}
+
+:is(.alert, .notice):has(> button) {
+  align-items: center;
+}
+
+/* The Assistant's separation, in the Request box. */
+.stem-separation {
+  align-items: center;
+}
+
+/* Stem Separation under way: a card in the centre of the screen. Only the
+   card takes clicks, so the song can still be edited around it. */
+.separation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-dialog) - 1);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  pointer-events: none;
+}
+
+.separation-card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: min(26rem, 100%);
+  padding: var(--space-5) var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.separation-card > p {
+  margin: 0;
+}
+
+.separation-spinner {
+  color: var(--primary);
+}
+
+.separation-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.separation-card progress {
+  width: 100%;
+}
+
+.separation-detail {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* ---------- App shell ---------- */
+
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -100px;
+  z-index: calc(var(--z-dialog) + 1);
+  padding: var(--space-2) var(--space-4);
+  background: var(--primary);
+  color: var(--on-primary);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+  color: var(--on-primary);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* The palette's backdrop, fixed behind everything: a glow of its accent
+   from the top corner, and its motif drawn faintly in the accent. Panels
+   are opaque, so it only shows between them; text on the page itself is
+   contrast-checked against its strongest point. */
+.app::before,
+.app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.app::before {
+  background: radial-gradient(
+    ellipse 70% 60% at 100% 0%,
+    color-mix(in srgb, var(--primary) calc(var(--glow) * 100%), transparent),
+    transparent 70%
+  );
+}
+
+.app::after {
+  background: var(--primary);
+  opacity: var(--motif-strength);
+  -webkit-mask-image: var(--motif);
+  mask-image: var(--motif);
+  -webkit-mask-size: var(--motif-size);
+  mask-size: var(--motif-size);
+  -webkit-mask-repeat: var(--motif-repeat);
+  mask-repeat: var(--motif-repeat);
+  -webkit-mask-position: var(--motif-position);
+  mask-position: var(--motif-position);
+}
+
+/* High-contrast modes draw their own colours: no decoration behind them. */
+@media (forced-colors: active) {
+  .app::before,
+  .app::after {
+    display: none;
+  }
+}
+
+/* The title bar and footer stay put; only the page between them scrolls,
+   so neither can ever cover what has focus (WCAG 2.4.11). */
+.app-header {
+  flex: none;
+  z-index: var(--z-sticky);
+  /* The menu and the Project at the start, the app's name in the middle and
+     whatever needs saying at the end: the outer columns share what is left
+     equally, so the name stays centred. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.header-end {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.0625rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+
+/* Too narrow for three columns: the name goes first, on a row of its own. */
+@media (max-width: 600px) {
+  .app-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .brand {
+    order: -1;
+    justify-self: center;
+  }
+
+  .header-end:empty {
+    display: none;
+  }
+}
+
+/* The Project's name, edited where it is shown, and whether it is saved. */
+.project-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+input.project-name {
+  /* As wide as the name, so its save state sits right beside it. */
+  field-sizing: content;
+  width: auto;
+  min-width: 6rem;
+  max-width: min(20rem, 100%);
+  border-color: transparent;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-overflow: ellipsis;
+  transition: border-color var(--fast) var(--ease-out), background var(--fast) var(--ease-out);
+}
+
+input.project-name:hover {
+  border-color: var(--control-border);
+}
+
+input.project-name:focus {
+  border-color: var(--control-border);
+  background: var(--surface);
+}
+
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Unsaved: a dot beside the words, so it isn't told by colour alone. */
+.save-state[data-dirty="true"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+@media (max-width: 900px) {
+  input.project-name {
+    max-width: 10rem;
+  }
+}
+
+/* Only said when it goes wrong: the footer gives the version. */
+.header-alert {
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.8125rem;
+}
+
+/* Problems with the Project's file, above whichever page is showing. */
+.file-alerts {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.file-alerts .alert {
+  align-items: center;
+}
+
+.file-alerts .alert > span {
+  flex: 1;
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+.page {
+  width: 100%;
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.page-title {
+  font-size: 1.25rem;
+  margin-bottom: var(--space-4);
+}
+
+.app-main:focus {
+  outline: none;
+}
+
+.app-footer {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1) var(--space-4);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.app-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 550;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+.footer-link .link-button,
+.app-footer .link-button {
+  color: var(--text-muted);
+  min-height: var(--control-h-sm);
+}
+
+.app-footer .link-button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+/* ---------- View menu ---------- */
+
+.menu {
+  position: relative;
+}
+
+.menu-button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.menu-button[aria-expanded="true"] .menu-chevron {
+  transform: rotate(180deg);
+}
+
+.menu-chevron {
+  transition: transform var(--fast) var(--ease-out);
+}
+
+.menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: calc(var(--z-dialog) - 1);
+  min-width: 240px;
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: dialog-in 150ms var(--ease-out);
+}
+
+/* A context menu opens where it was asked for, over everything but a dialog. */
+.context-menu {
+  position: fixed;
+  z-index: calc(var(--z-dialog) - 1);
+}
+
+.context-menu > .menu-list {
+  top: 0;
+}
+
+.menu-item {
+  width: 100%;
+  /* Each item on one line: the menu is as wide as its longest. */
+  white-space: nowrap;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  border-color: transparent;
+  background: transparent;
+  font-weight: 500;
+}
+
+.menu-item:focus-visible {
+  outline-offset: -3px;
+}
+
+.menu-item[aria-checked="true"] {
+  background: var(--primary-soft);
+}
+
+.menu-icon {
+  display: inline-flex;
+  width: 18px;
+  color: var(--text-muted);
+}
+
+.menu-label {
+  flex: 1;
+  text-align: left;
+}
+
+/* A reason can be a sentence, so it wraps where its item's label doesn't: left
+   on one line, it runs out past the menu's edge. */
+.menu-description {
+  display: block;
+  max-width: 20rem;
+  white-space: normal;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.menu-shortcut {
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.menu-item[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.menu-item[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+.menu-separator {
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border);
+}
+
+/* A checkbox shows it is on by its tick; the highlight is for the one page chosen. */
+.menu-item[role="menuitemcheckbox"][aria-checked="true"] {
+  background: transparent;
+}
+
+.menu-item[role="menuitemcheckbox"]:hover {
+  background: var(--surface-3);
+}
+
+.menu-item[role="menuitemcheckbox"] > svg {
+  color: var(--primary);
+}
+
+.menu-submenu-anchor {
+  position: relative;
+}
+
+.menu-item[aria-expanded="true"] {
+  background: var(--surface-3);
+}
+
+/* A side menu: level with the item that opened it, just clear of its menu's right edge. */
+.menu-submenu {
+  top: calc(-1 * var(--space-1) - 1px);
+  left: calc(100% + var(--space-1) + 2px);
+  min-width: 220px;
+}
+
+/* No room beside it: it opens in place, under its item. */
+@media (max-width: 600px) {
+  .menu-submenu {
+    position: static;
+    min-width: 0;
+    margin-left: var(--space-4);
+    border: 0;
+    border-left: 2px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    animation: none;
+  }
+}
+
+/* ---------- Panels ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.panel-head > h2,
+.panel-head > h3 {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.panel-head svg {
+  color: var(--primary);
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* ---------- Studio layout ---------- */
+
+.studio {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Not sticky: a bar this tall would cover whatever Tab scrolls into view (WCAG 2.4.11). */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+}
+
+.toolbar-group > .hint,
+.toolbar-group > output.hint {
+  min-height: var(--control-h);
+  display: inline-flex;
+  align-items: center;
+  /* A flex box drops the space between its words and a number in a span. */
+  gap: 0.3em;
+}
+
+.position {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  font-family: var(--mono);
+  font-size: 1.125rem;
+  font-weight: 600;
+  min-width: 7ch;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .toolbar .divider {
+    display: none;
+  }
+}
+
+/* ---------- Widget Grid (ADR 0004) ---------- */
+
+/* The pinned Zones sit in slots of their own between the title bar, the page and the footer:
+   flush against both, the window's full width, and never over what has focus (WCAG 2.4.11). */
+.pinned-slot {
+  flex: none;
+  min-width: 0;
+}
+
+.widget-zone[data-zone="top"],
+.widget-zone[data-zone="bottom"] {
+  max-height: 45dvh;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.widget-zone,
+.widget-grid {
+  min-width: 0;
+}
+
+.widget-grid {
+  display: grid;
+}
+
+.widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* A Widget is only as tall as its content, up to its cell: rows come in whole steps, and what is
+   left of the last goes under the frame, as part of the gap, rather than blank inside it. */
+.widget-grid > .widget {
+  align-self: start;
+  max-height: 100%;
+}
+
+.widget[data-dragging] {
+  z-index: 2;
+  border-color: var(--primary);
+  cursor: grabbing;
+  opacity: 0.92;
+}
+
+.widget:focus-within {
+  border-color: var(--control-border);
+}
+
+.widget-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.widget-bar > button {
+  min-height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.widget-bar > button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.widget-bar > button[aria-pressed="true"] {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.widget-grip {
+  margin-right: auto;
+  cursor: grab;
+}
+
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Made this tall by the musician: the content fills the Widget, and whatever can grow into the space does. */
+.widget[data-sized] .widget-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.widget[data-sized] .widget-content > .panel {
+  flex: 1;
+}
+
+/* The Widget is the frame, so what sits in it drops its own. */
+.widget-content > :is(.panel, .toolbar) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-top: 0;
+}
+
+.widget-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--control-border) 50% 60%, transparent 60% 70%, var(--control-border) 70% 80%, transparent 80%);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+/* Pinned, a Widget is a full-width band: square, edge to edge, divided from the next by a rule. */
+.widget-zone:not([data-zone="main"]) .widget {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.widget-zone[data-zone="top"] .widget {
+  border-bottom-width: 1px;
+}
+
+.widget-zone[data-zone="bottom"] .widget {
+  border-top-width: 1px;
+}
+
+.widget-zone:not([data-zone="main"]) :is(.widget-placeholder, .widget-resize) {
+  border-radius: 0;
+}
+
+/* Only a pinned band's height changes, by the edge that faces the page. */
+.widget-resize[data-edge] {
+  left: 0;
+  width: auto;
+  height: 8px;
+  cursor: ns-resize;
+  background: none;
+}
+
+.widget-resize[data-edge="top"] {
+  top: 0;
+  bottom: auto;
+}
+
+/* Clear of the top edge's handle. */
+.widget-zone[data-zone="bottom"] .widget-bar {
+  padding-top: var(--space-2);
+}
+
+.widget-resize[data-edge]:hover {
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.widget-placeholder {
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+/* Too narrow for columns: the Widgets stack in Grid order at their natural height, and aren't dragged. */
+@media (max-width: 768px) {
+  .widget-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3) !important;
+  }
+
+  /* The column's full width, not the content's: a wide Timeline scrolls inside its Widget, not the page. */
+  .widget-grid > .widget {
+    align-self: stretch;
+  }
+
+  .widget {
+    max-height: none;
+    overflow: visible;
+    transform: none !important;
+  }
+
+  .widget-body {
+    overflow: visible;
+  }
+
+  .widget-grip,
+  .widget-resize {
+    display: none;
+  }
+
+  .widget-bar {
+    justify-content: flex-end;
+    cursor: auto;
+  }
+}
+
+/* ---------- Assistant prompt ---------- */
+
+.assistant-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.assistant-bar .prompt {
+  flex: 1 1 280px;
+  min-height: var(--control-h-lg);
+  font-size: 0.9375rem;
+}
+
+.assistant-bar .btn-primary {
+  min-height: var(--control-h-lg);
+}
+
+/* The Skills a slash lists: over the page, placed under (or over) the prompt by RequestBox. */
+.skill-suggestions {
+  position: fixed;
+  z-index: calc(var(--z-dialog) - 1);
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  animation: dialog-in 150ms var(--ease-out);
+}
+
+.skill-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-height: var(--control-h-lg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease-out);
+}
+
+.skill-option:hover {
+  background: var(--surface-3);
+}
+
+.skill-option[aria-selected="true"] {
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.skill-option-text {
+  flex: 1 1 200px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.skill-command {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.skill-argument {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.skill-line,
+.assistant-status,
+.assistant-usage {
+  flex: 1 0 100%;
+}
+
+.assistant-usage,
+.context-meter {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-context {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.context-meter meter {
+  inline-size: 8rem;
+}
+
+.context-meter[data-full="true"] {
+  color: var(--warning);
+}
+
+.context-refreshed {
+  border-block-start: 1px dashed var(--border);
+  padding-block-start: var(--space-2);
+}
+
+/* One Skill at a time: the dialog keeps its height, so Previous and Next never move. */
+.skills-dialog[open] {
+  height: min(560px, 86dvh);
+}
+
+.skills-dialog .dialog-body {
+  flex: 1;
+}
+
+.skills-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.skills-picker {
+  flex: 1;
+  min-width: 12em;
+}
+
+.skills-dialog .skill-title {
+  margin: 0;
+}
+
+.skill-instructions {
+  white-space: pre-wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.skills-count {
+  min-width: 5em;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.skills-use {
+  margin-left: auto;
+}
+
+/* Narrow, Previous and Next keep a row of their own, either side of the count, and Use goes under them. */
+@media (max-width: 520px) {
+  .skills-dialog .dialog-foot {
+    padding-inline: var(--space-4);
+  }
+
+  .skills-count {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .skills-use {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+}
+
+/* ---------- Track list ---------- */
+
+.track-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.track-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--kind-color);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+/* Where the next Track goes: as big as a Track's row, outlined but empty, holding the kinds to add. */
+.track-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 88px;
+  padding: var(--space-2) var(--space-2) var(--space-2) calc(var(--space-2) + 3px);
+  border: 2px dashed var(--control-border);
+  border-radius: var(--radius);
+  transition: border-color var(--fast) var(--ease-out);
+}
+
+.track-add:hover,
+.track-add:focus-within {
+  border-color: var(--primary);
+}
+
+.track-add-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.track-add-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.track-add-choice {
+  /* Never narrower than its label: a narrow widget wraps the choices instead. */
+  flex: 1 0 auto;
+  white-space: nowrap;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.track-add-choice:hover {
+  background: var(--surface-3);
+}
+
+.track-add-choice > svg {
+  color: var(--kind-color);
+}
+
+.track-row .track-name {
+  flex: 1 1 8em;
+  min-width: 6em;
+  font-weight: 600;
+}
+
+.track-kind {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Anything marked with its kind of Track takes that kind's colour as --kind-color. */
+[data-track-kind="instrument"] {
+  --kind-color: var(--kind-instrument);
+}
+
+[data-track-kind="drum"] {
+  --kind-color: var(--kind-drum);
+}
+
+[data-track-kind="audio"] {
+  --kind-color: var(--kind-audio);
+}
+
+/* The stripe down the left edge of a Track wherever it is shown, and of the button or item that adds one. */
+/* Specific enough that a button's or menu item's hover and focus borders leave it. */
+.kind-stripe.kind-stripe[data-track-kind] {
+  border-left: 4px solid var(--kind-color);
+}
+
+/* A heading marked by its Track's kind keeps its text clear of the stripe. */
+h2.kind-stripe,
+h3.kind-stripe {
+  padding-left: var(--space-2);
+}
+
+
+/* ---------- Timeline ---------- */
+
+/* The right edge of the Timeline's column of names, dragged to widen it for a long name. */
+.label-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.label-resize:hover,
+.label-resize:focus-visible,
+.label-resize[data-dragging] {
+  background: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.timeline-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--lane);
+}
+
+.ruler {
+  position: relative;
+  flex: none;
+  height: 24px;
+  cursor: ew-resize;
+  border-bottom: 1px solid var(--lane-bar);
+  background: var(--surface-2);
+}
+
+.ruler-number {
+  position: absolute;
+  top: 3px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-label {
+  flex: none;
+  display: flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 2px var(--space-2);
+  border-right: 1px solid var(--lane-line);
+}
+
+.lane {
+  position: relative;
+  flex: none;
+  border-bottom: 1px solid var(--lane-line);
+}
+
+.clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  cursor: grab;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--clip-pattern) 60%, black);
+  background: var(--clip-pattern);
+  color: var(--clip-ink);
+  transition: box-shadow var(--fast) var(--ease-out);
+}
+
+.clip[data-kind="audio"] {
+  border-color: color-mix(in srgb, var(--clip-audio) 60%, black);
+  background: var(--clip-audio);
+}
+
+.clip[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+
+.clip:focus-visible {
+  outline-offset: 3px;
+}
+
+.clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  cursor: ew-resize;
+  background: rgb(0 0 0 / 0.22);
+}
+
+.clip-note {
+  position: absolute;
+  height: 2px;
+  background: var(--clip-ink);
+  opacity: 0.85;
+}
+
+.clip-label {
+  position: relative;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Below the file name, on its own line: the Clip's audio isn't here. */
+.clip-absent {
+  display: block;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--playhead);
+  pointer-events: none;
+}
+
+/* ---------- Step Sequencer ---------- */
+
+.grid-scroll {
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+
+.step-grid th {
+  font-weight: 500;
+  font-size: 0.8125rem;
+  padding: 0 var(--space-2) 0 0;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.step-grid td {
+  padding: 1px;
+}
+
+.step {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--control-border);
+  background: var(--surface-2);
+}
+
+.step[data-shaded="true"] {
+  background: var(--surface-3);
+}
+
+.step[data-bar="true"] {
+  margin-left: 4px;
+}
+
+.step[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.step[aria-pressed="true"]::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--on-primary);
+}
+
+/* ---------- Piano Roll ---------- */
+
+.pr-scroll {
+  overflow: auto;
+  max-height: 22rem;
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.pr-keys {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  background: var(--surface);
+}
+
+.pr-key {
+  font-size: 0.75rem;
+  line-height: 18px;
+  padding-right: var(--space-2);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--lane-line);
+}
+
+.pr-key[data-shaded="true"] {
+  background: var(--surface-3);
+}
+
+.pr-grid,
+.pr-velocity {
+  position: relative;
+  flex: none;
+  background: var(--lane);
+}
+
+.pr-grid {
+  cursor: crosshair;
+}
+
+.pr-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--surface-2);
+  pointer-events: none;
+}
+
+.pr-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--lane-line);
+  pointer-events: none;
+}
+
+.pr-line[data-bar="true"] {
+  background: var(--lane-bar);
+}
+
+.pr-note {
+  position: absolute;
+  z-index: 1;
+  cursor: grab;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--clip-pattern) 60%, black);
+  background: var(--clip-pattern);
+}
+
+.pr-note[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--text);
+}
+
+.pr-note:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.pr-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  cursor: ew-resize;
+  background: rgb(0 0 0 / 0.22);
+}
+
+.pr-velocity-row {
+  display: flex;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  border-top: 1px solid var(--border);
+}
+
+.pr-velocity-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pr-bar {
+  position: absolute;
+  bottom: 0;
+  width: 5px;
+  cursor: ns-resize;
+  background: var(--clip-pattern);
+}
+
+.pr-bar[data-selected="true"] {
+  background: var(--primary);
+}
+
+/* ---------- Instrument & Effect controls ---------- */
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: var(--space-3);
+}
+
+.param {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.param > :is(select, input) {
+  color: var(--text);
+  width: 100%;
+}
+
+.pad-table input[type="range"] {
+  width: 7rem;
+}
+
+.pad-table input[type="number"] {
+  width: 4.5rem;
+}
+
+.pad-table tbody tr + tr {
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Mixer ---------- */
+
+.mixer-strips {
+  display: flex;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0 0 var(--space-2);
+  margin: 0;
+  overflow-x: auto;
+}
+
+.strip {
+  width: 112px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 0.8125rem;
+}
+
+.strip[data-master="true"] {
+  border-color: var(--primary);
+}
+
+/* A Bus holds no Clips: its strip is set apart from the Tracks'. */
+.strip[data-bus="true"] {
+  border-style: dashed;
+}
+
+input.strip-name {
+  width: 100%;
+  min-width: 0;
+}
+
+.strip select {
+  width: 100%;
+  min-width: 0;
+}
+
+.strip-name {
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-row {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.strip-row > button {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+/* Sends: each Bus's name, level and remove button, then a picker to add one. */
+.sends {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.sends .strip-row {
+  justify-content: space-between;
+}
+
+.sends .strip-row > button {
+  flex: none;
+}
+
+.meter {
+  position: relative;
+  flex: none;
+  background: var(--bg);
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter[data-clipping="true"] {
+  border: 2px solid var(--meter-clip);
+}
+
+.meter-fill {
+  position: absolute;
+  background: var(--meter-low);
+}
+
+.meter[data-clipping="true"] .meter-fill {
+  background: var(--meter-clip);
+}
+
+.btn-mute[aria-pressed="true"] {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: var(--on-warning);
+}
+
+.btn-solo[aria-pressed="true"] {
+  background: var(--focus);
+  border-color: var(--focus);
+  color: var(--on-primary);
+}
+
+:root[data-theme="light"] .btn-solo[aria-pressed="true"] {
+  color: #ffffff;
+}
+
+.chain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.effect {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.effect[data-bypassed="true"] .effect-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.eq-curve {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--space-2) 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Settings ---------- */
+
+.settings {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 0;
+}
+
+.settings-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+.settings-nav a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* The section being read: tinted, with a bar at its edge, so it isn't told by colour alone. */
+.settings-nav a[aria-current="location"] {
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.settings-nav a[aria-current="location"] svg {
+  color: var(--primary);
+}
+
+.settings-nav svg {
+  color: var(--text-muted);
+}
+
+.settings-sections {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 880px;
+}
+
+.settings-sections > .panel {
+  scroll-margin-top: var(--space-4);
+}
+
+.settings-lead {
+  margin-top: -6px;
+  margin-bottom: var(--space-3);
+}
+
+/* What only the Desktop App has, in the Browser Version's Settings. */
+.desktop-only {
+  padding-left: 1.25rem;
+  margin: 0;
+}
+
+.desktop-only li + li {
+  margin-top: var(--space-2);
+}
+
+/* Each palette's swatch: its accent over its own background, in this theme. */
+.swatch {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--control-border);
+}
+
+.swatch[data-swatch="violet"] {
+  background: linear-gradient(135deg, #9d8fff 0 50%, #1b1f33 50% 100%);
+}
+
+.swatch[data-swatch="ocean"] {
+  background: linear-gradient(135deg, #6cb2ff 0 50%, #222d3b 50% 100%);
+}
+
+.swatch[data-swatch="aqua"] {
+  background: linear-gradient(135deg, #3fd0d4 0 50%, #1f2f31 50% 100%);
+}
+
+.swatch[data-swatch="rose"] {
+  background: linear-gradient(135deg, #ff8fb8 0 50%, #3a2730 50% 100%);
+}
+
+.swatch[data-swatch="tangerine"] {
+  background: linear-gradient(135deg, #ffa35c 0 50%, #332a25 50% 100%);
+}
+
+.swatch[data-swatch="slate"] {
+  background: linear-gradient(135deg, #b4bdd6 0 50%, #292c32 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="violet"] {
+  background: linear-gradient(135deg, #5140d6 0 50%, #eef0f7 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="ocean"] {
+  background: linear-gradient(135deg, #1f5fb8 0 50%, #dee6ee 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="aqua"] {
+  background: linear-gradient(135deg, #0b6e73 0 50%, #d9e7e9 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="rose"] {
+  background: linear-gradient(135deg, #b8285f 0 50%, #ede1e7 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="tangerine"] {
+  background: linear-gradient(135deg, #b04a0c 0 50%, #eae4df 50% 100%);
+}
+
+:root[data-theme="light"] .swatch[data-swatch="slate"] {
+  background: linear-gradient(135deg, #46506e 0 50%, #e2e4e8 50% 100%);
+}
+
+.choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h-lg);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.choice:has(input:focus-visible) {
+  outline: var(--focus-ring) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.choice input {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    position: static;
+  }
+
+  .settings-nav ul {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .app-main {
+    padding: var(--space-3);
+  }
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(86dvh, 900px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  animation: dialog-in 200ms var(--ease-out);
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-head h2 {
+  margin-right: auto;
+}
+
+.dialog-body {
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  line-height: 1.6;
+}
+
+.dialog-body h3 {
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.dialog-body p + p {
+  margin-top: var(--space-2);
+}
+
+.dialog-body ul {
+  padding-left: 1.25rem;
+  margin: var(--space-2) 0;
+}
+
+.dialog-body li + li {
+  margin-top: var(--space-2);
+}
+
+.dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.policy-updated {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.status-box {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--play);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--play) 10%, var(--surface));
+}
+
+.status-box svg {
+  color: var(--play);
+  flex: none;
+  margin-top: 2px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.table-scroll table {
+  width: 100%;
+  min-width: 560px;
+  font-size: 0.875rem;
+}
+
+.table-scroll caption {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.table-scroll td,
+.table-scroll th {
+  padding: var(--space-2) var(--space-3);
+  vertical-align: top;
+}
+
+.table-scroll tbody tr + tr {
+  border-top: 1px solid var(--border);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* ---------- Cookie banner ---------- */
+
+/* In the page's own column, between the page and the footer, so it never
+   covers anything, focused or not (WCAG 2.4.11). */
+.cookie-banner {
+  flex: none;
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-top: 1px solid var(--control-border);
+  box-shadow: var(--shadow);
+  animation: dialog-in 250ms var(--ease-out);
+}
+
+.cookie-banner > div {
+  max-width: 960px;
+}
+
+.cookie-banner > svg {
+  color: var(--primary);
+  flex: none;
+  margin-top: 2px;
+}
+
+.cookie-banner .row {
+  margin-top: var(--space-2);
+}
+
+.link-button {
+  display: inline;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-weight: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
+  color: var(--primary-hover);
+}
+
+/* ---------- Motion and contrast preferences ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: var(--control-border);
+    --text-muted: var(--text);
+  }
+}
+
+@media (forced-colors: active) {
+  button[aria-pressed="true"],
+  .step[aria-pressed="true"],
+  .pr-note[aria-pressed="true"],
+  .menu-item[aria-checked="true"],
+  .widget-bar > button[aria-pressed="true"] {
+    outline: 2px solid CanvasText;
+  }
+
+  .meter-fill,
+  .playhead,
+  .pr-note,
+  .pr-bar,
+  .clip-note {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+}
+
+.mt-3 {
+  margin-top: var(--space-3);
+}
+
+/* ---------- Tempo lane ---------- */
+
+.tempo-lane {
+  background: var(--surface-2);
+}
+
+.tempo-change {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  padding: 0 var(--space-2);
+  border-left: 2px solid var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: grab;
+  background: var(--surface);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.tempo-change[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+
+.section-lane {
+  background: var(--surface-2);
+}
+
+.section {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  border-left: 2px solid var(--primary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--primary-soft);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.section[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+
+.section-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.bar-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--lane-bar);
+  pointer-events: none;
+}
+
+/* The sample browser (#52): its folders as a tree, and the selection's details below. */
+.sample-browser-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+/* In a Widget the musician made taller, the tree takes the space and scrolls inside it. */
+.widget[data-sized] .sample-browser {
+  display: flex;
+  flex-direction: column;
+}
+
+.widget[data-sized] .sample-browser-body {
+  flex: 1;
+}
+
+.widget[data-sized] .sample-tree {
+  flex: 1 1 0;
+  min-height: 6rem;
+  max-height: none;
+}
+
+.sample-toolbar {
+  flex-wrap: nowrap;
+}
+
+.sample-search {
+  position: relative;
+  flex: 1;
+  min-width: 8rem;
+  display: flex;
+  align-items: center;
+}
+
+.sample-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-h-sm);
+  padding-right: calc(var(--control-h-xs) + var(--space-2));
+}
+
+/* The browser's own clear button would sit beside ours. */
+.sample-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.sample-search button {
+  position: absolute;
+  right: 2px;
+  min-height: var(--control-h-xs);
+  min-width: var(--control-h-xs);
+}
+
+.sample-summary {
+  margin: 0;
+  min-height: 1lh;
+}
+
+.sample-tree {
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--lane);
+  overscroll-behavior: contain;
+}
+
+.sample-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 var(--space-2) 0 calc(var(--space-1) + var(--level, 0) * 18px);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--fast) var(--ease-out);
+}
+
+.sample-item:hover {
+  background: var(--surface-2);
+}
+
+.sample-item[aria-selected="true"] {
+  background: var(--primary-soft);
+}
+
+.sample-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.sample-item[draggable="true"] {
+  cursor: grab;
+}
+
+.sample-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.sample-item[data-kind="root"] {
+  font-weight: 600;
+}
+
+.sample-item[data-kind="status"],
+.sample-item[data-kind="more"] {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.sample-item[data-kind="more"] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sample-item[data-tone="error"] {
+  color: var(--record);
+  cursor: default;
+}
+
+.sample-item[data-tone="loading"],
+.sample-item[data-tone="empty"] {
+  cursor: default;
+}
+
+.sample-item-chevron,
+.sample-item-icon {
+  flex: none;
+  display: inline-flex;
+  width: 14px;
+  color: var(--text-muted);
+}
+
+.sample-item-chevron svg {
+  transition: transform var(--fast) var(--ease-out);
+}
+
+.sample-item[aria-expanded="true"] .sample-item-chevron svg {
+  transform: rotate(90deg);
+}
+
+.sample-item[data-kind="folder"] .sample-item-icon,
+.sample-item[data-kind="root"] .sample-item-icon {
+  color: var(--kind-drum);
+}
+
+.sample-item[data-kind="file"] .sample-item-icon {
+  color: var(--kind-audio);
+}
+
+.sample-item[data-playing] .sample-item-icon,
+.sample-item[data-playing] .sample-item-name {
+  color: var(--play);
+}
+
+.sample-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sample-item-name mark {
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.sample-item-count,
+.sample-item-format {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sample-item-format {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  letter-spacing: 0.02em;
+}
+
+/* The pointer's shortcuts, shown on the row under the pointer, the selected one and the playing one. */
+.sample-item-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  opacity: 0;
+  transition:
+    opacity var(--fast) var(--ease-out),
+    background-color var(--fast) var(--ease-out);
+}
+
+.sample-item:hover .sample-item-action,
+.sample-item[aria-selected="true"] .sample-item-action,
+.sample-item[data-playing] .sample-item-action {
+  opacity: 1;
+}
+
+.sample-item-action:hover {
+  background: var(--surface-3);
+}
+
+.sample-item-action[data-disabled] {
+  opacity: 0.4 !important;
+  cursor: not-allowed;
+}
+
+/* No hover on a touch screen: the shortcuts are always there. */
+@media (hover: none) {
+  .sample-item-action {
+    opacity: 1;
+  }
+}
+
+.sample-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.sample-details-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sample-details-name strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sample-details :is(select, button) {
+  min-height: var(--control-h-sm);
+}
+
+.sample-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.sample-empty p {
+  margin: 0;
+  max-width: 32ch;
+}
+
+.sample-clear {
+  align-self: flex-start;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.drop-target {
+  outline: 2px dashed var(--focus);
+  outline-offset: -2px;
+}
+
+.lane-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A lit Automation button: something on its channel is automated. */
+.lane-label button[data-automated="true"] {
+  color: var(--focus);
+}
+
+/* A Track's or Bus's header: grip, name, then Mute, Solo and Automation at the end. */
+.lane-head {
+  gap: 2px;
+  padding-right: var(--space-1);
+}
+
+.lane-head .lane-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.lane-head-buttons {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+/* Every button in a lane's label fits the lane, however short. */
+.lane-label .btn-sm {
+  min-height: var(--control-h-xs);
+  min-width: var(--control-h-xs);
+  font-size: 0.75rem;
+}
+
+.lane-grip {
+  cursor: grab;
+  color: var(--text-muted);
+}
+
+.lane-head[data-drop="before"] {
+  box-shadow: inset 0 3px 0 var(--focus);
+}
+
+.lane-head[data-drop="after"] {
+  box-shadow: inset 0 -3px 0 var(--focus);
+}
+
+.master-lane {
+  height: 26px;
+  background: var(--surface-2);
+}
+
+.automation-label {
+  gap: var(--space-1);
+}
+
+.automation-label :is(select, .lane-name) {
+  flex: 1;
+  min-width: 0;
+}
+
+.automation-lane {
+  background: var(--surface-2);
+}
+
+.automation-line {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.automation-line polyline {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.automation-line polyline[data-automated="true"] {
+  stroke: var(--focus);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+
+.breakpoint {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--focus);
+  cursor: grab;
+}
+
+/* A breakpoint that holds is square: its value stays flat to the next. */
+.breakpoint[data-hold="true"] {
+  border-radius: 1px;
+}
+
+.breakpoint[aria-pressed="true"] {
+  background: var(--focus);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.automation-hint {
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.automated {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--focus);
+}
+
+.update-notice {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.update-notice > svg {
+  color: var(--primary);
+  flex: none;
+}
+
+.update-notice > span {
+  flex: 1;
+}
+
+.update-notes {
+  white-space: pre-wrap;
+}
+
+/* ---------- Audio Editor ---------- */
+
+.audio-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Opened below the window, it scrolls up to here, leaving the Timeline above it in sight. */
+  scroll-margin-top: 33vh;
+}
+
+.audio-editor-clip {
+  font-weight: 400;
+  margin-left: var(--space-2);
+}
+
+.audio-editor-tools {
+  flex-wrap: wrap;
+}
+
+/* The waveform: grows into a Widget made taller, and scrolls sideways once zoomed. */
+.audio-editor-view {
+  position: relative;
+  flex: 1 0 auto;
+  min-height: 176px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--lane);
+  cursor: text;
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.audio-editor-view:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.audio-editor-content {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 100%;
+}
+
+.audio-editor-ruler {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 22px;
+  border-bottom: 1px solid var(--lane-line);
+  background: var(--surface-2);
+}
+
+.audio-editor-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding-left: 4px;
+  border-left: 1px solid var(--lane-bar);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Every Slice under the ruler, in turn, so where one ends and the next begins shows even without its cut. */
+.audio-editor-slice {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.audio-editor-slice:nth-child(odd of .audio-editor-slice) {
+  background: color-mix(in srgb, var(--kind-audio) 5%, transparent);
+}
+
+.audio-editor-slice[data-selected] {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+
+/* Left out of the export and the split: struck through, not only dimmed. */
+.audio-editor-slice[data-excluded] {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--text-muted) 32%, transparent) 6px 8px);
+}
+
+.audio-editor-slice-label {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-editor-grid-line {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  width: 1px;
+  background: var(--lane-line);
+  pointer-events: none;
+}
+
+.audio-editor-wave {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  height: calc(100% - 22px);
+  fill: var(--kind-audio);
+  pointer-events: none;
+}
+
+.audio-editor-axis {
+  stroke: var(--lane-bar);
+  stroke-width: 1;
+}
+
+.audio-editor-samples {
+  fill: none;
+  stroke: var(--kind-audio);
+  stroke-width: 1.5;
+}
+
+.audio-editor-status-over {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  transform: translateY(-50%);
+  margin: 0;
+}
+
+/* A cut: a line to see, a tab above it to grab, and a hit area wider than either. */
+.audio-editor-cut {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  margin-left: -12px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.audio-editor-cut::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 11px;
+  width: 2px;
+  background: var(--primary);
+}
+
+.audio-editor-cut::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 6px;
+  width: 12px;
+  height: 14px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--primary);
+  transition: transform var(--fast) var(--ease-out);
+}
+
+.audio-editor-cut:hover::after,
+.audio-editor-cut:focus-visible::after {
+  transform: scaleY(1.3);
+  transform-origin: top;
+}
+
+.audio-editor-cut:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.audio-editor-cursor,
+.audio-editor-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed var(--text);
+  pointer-events: none;
+}
+
+.audio-editor-playhead {
+  border-left: 2px solid var(--playhead);
+}
+
+.audio-editor-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.audio-editor-slices {
+  max-height: 13rem;
+  overflow-y: auto;
+  margin-top: 0;
+}
+
+.audio-editor-slices tbody tr {
+  cursor: pointer;
+}
+
+.audio-editor-slices td {
+  vertical-align: middle;
+}
+
+.audio-editor-slices tr[aria-selected="true"] {
+  background: var(--primary-soft);
+}
+
+.audio-editor-slices tr[data-excluded] td:not(:first-child, :nth-child(6)) {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.audio-editor-slices input:not([type]) {
+  width: 100%;
+  min-width: 8em;
+}
+
+/* The Audio Track whose Clip the Audio Editor has open. */
+.track-row[data-editing] {
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.track-row[data-kind="audio"] {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audio-editor-cut::after {
+    transition: none;
+  }
+}

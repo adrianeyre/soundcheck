@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged by Tauri into the macOS app's own Info.plist, in `pnpm desktop:dev`
+  as well as the bundle (#72, ADR 0010). Without this key macOS ends the app
+  the first time it opens an audio input, rather than asking.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Soundcheck records audio from your microphone or audio interface onto Audio Tracks.</string>
+</dict>
+</plist>

@@ -1,0 +1,21 @@
+[package]
+name = "soundcheck-test-instrument"
+version = "0.1.0"
+description = "The Plugin Instrument the hosts are tested with, written against the SDK"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# cdylib for the .wasm Plugin the hosts load, rlib so its own tests can run
+# the same DSP natively and check the expected output.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soundcheck-sdk = { version = "1.0.0", path = ".." }
+
+[dev-dependencies]
+serde_json = "1.0.151"
+# The expected output is what the engine plays with this Instrument on a
+# Track, so its own test renders it through the engine natively.
+soundcheck-engine = { version = "0.1.0", path = "../../engine" }

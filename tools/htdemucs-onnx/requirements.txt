@@ -1,0 +1,30 @@
+# What exporting htdemucs.onnx needs, pinned at the latest versions that
+# work together (checked 2026-09-27). `export.sh` and `export.ps1` install
+# it into a venv of its own.
+#
+# PyTorch for the CPU, from PyTorch's own index: the export needs no GPU,
+# and PyPI's Linux wheels would bring ~3 GB of CUDA with them.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0
+# openunmix needs it, though the export never reads audio with it. Its
+# latest release is behind torch's: torchaudio is in maintenance, and 2.11
+# installs and imports beside torch 2.14.
+torchaudio==2.11.0
+
+# torch.onnx.export writes the model through these.
+onnx==1.23.0
+onnxscript==0.7.2
+# Loads the exported model once, to check its shapes as the app does.
+onnxruntime==1.30.0
+
+# What the vendored `demucs` modules import (Mixxx's requirements_minimal.txt,
+# less lameenc, which only writes MP3s and which the export never reaches).
+dora-search==0.1.13
+einops==0.8.2
+julius==0.2.8
+openunmix==1.3.0
+pyyaml==6.0.3
+tqdm==4.70.1
+
+# The vendored tests.
+pytest==9.1.1

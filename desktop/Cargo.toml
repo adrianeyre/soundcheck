@@ -1,0 +1,68 @@
+[package]
+name = "soundcheck-desktop"
+version = "0.1.0"
+description = "The Soundcheck desktop app: Tauri, with the Audio Engine native on cpal"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "soundcheck_desktop"
+
+[dependencies]
+# A VST3 Plugin's state, kept in the Project as base64 (ADR 0008).
+base64 = "0.23.1"
+cpal = "0.18.2"
+# A VST3 bundle's moduleinfo.json, which is JSON5.
+json5 = "1.3.1"
+keyring = "4.2.0"
+midir = "0.11.0"
+soundcheck-engine = { version = "0.1.0", path = "../engine" }
+# Runs Stem Separation's model (ADR 0005) on the CPU. ONNX Runtime's prebuilt
+# binaries are downloaded at build time, over rustls so building needs no
+# OpenSSL.
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls", "copy-dylibs", "api-27"] }
+rtrb = "0.4.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tauri = { version = "2.11.6", features = [] }
+tauri-plugin-dialog = "2.7.3"
+# The Assistant's HTTP, so CORS doesn't apply. Native roots: rustls, trusting
+# the OS certificate store rather than webpki's bundle, so a gateway behind a
+# private CA that Windows trusts works.
+tauri-plugin-http = { version = "2.7.0", default-features = false, features = ["rustls-tls-native-roots", "http2", "charset", "system-proxy"] }
+# Auto-update (#74, ADR 0011): downloads a signed package from the GitHub
+# Release and installs it. Its defaults: rustls, the system proxy, and
+# unpacking the Mac app's .tar.gz.
+tauri-plugin-updater = "2.12.0"
+# Runs WASM Plugins (ADR 0003): core modules only, compiled by Cranelift,
+# with epoch interruption to stop a runaway one.
+wasmtime = { version = "49.0.1", default-features = false, features = ["cranelift", "runtime", "std"] }
+
+# JACK as a second audio host on Linux, which PipeWire also serves through its
+# JACK layer. libjack is loaded when the host is first used, not linked, so
+# the app still starts where it isn't installed.
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18.2", features = ["jack"] }
+
+# The shared memory and signals between the app and a VST3 helper (ADR 0008).
+# libc 1.0 is still an alpha; this is its latest stable release.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.189"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Memory", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[features]
+# Adds ASIO as an audio host on Windows, for drivers that can run smaller
+# buffers than WASAPI shared mode. Needs the ASIO SDK: see the README.
+asio = ["cpal/asio"]
+
+[dev-dependencies]
+tauri = { version = "2.11.6", features = ["test"] }
+soundcheck-test-effect = { version = "0.1.0", path = "../sdk/test-effect" }
+soundcheck-test-instrument = { version = "0.1.0", path = "../sdk/test-instrument" }
+tempfile = "3.27.0"
+wat = "1.259.0"

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Adrian Eyre",
+    "homepage": "https://github.com/adrianeyre/soundcheck",
+    "license": "GPL-3.0-or-later",
+    "category": "Music",
+    "shortDescription": "Music creation with an LLM co-producer",
+    "windows": {
+      "signCommand": {
+        "cmd": "node",
+        "args": ["../scripts/sign-windows.ts", "%1"]
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

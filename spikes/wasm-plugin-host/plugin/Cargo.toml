@@ -1,0 +1,11 @@
+[package]
+name = "spike-plugin"
+version = "0.1.0"
+description = "A throwaway Effect written against the proposed C-style Plugin ABI"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+# cdylib for the .wasm Plugin, rlib so the host can run the same DSP natively
+# as a baseline.
+crate-type = ["cdylib", "rlib"]

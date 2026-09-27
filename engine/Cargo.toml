@@ -1,0 +1,24 @@
+[package]
+name = "soundcheck-engine"
+version = "0.1.0"
+description = "The Soundcheck Audio Engine core: platform-free Rust (ADR 0001)"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+# cdylib for the WASM build, rlib for native tests and a future desktop host.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+png = "0.18.1"
+# Encodes an exported mix as MP3: pure Rust, so it builds for WASM too.
+rusty_mp3 = "0.8.0"
+# Reads a Plugin's manifest, which is JSON the Plugin writes (ADR 0003).
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+symphonia = { version = "0.6.1", default-features = false, features = ["adpcm", "flac", "mp3", "pcm", "wav", "id3v2"] }
+wasm-bindgen = "0.2.128"
+
+[build-dependencies]
+# Reads the app's version out of the root package.json (build.rs).
+serde_json = "1.0.151"
