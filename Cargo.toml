@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = [
+    "engine",
+    "desktop",
+    "relay",
+    "sdk",
+    "sdk/test-effect",
+    "sdk/test-instrument",
+    "examples/plugins/*",
+]
+
+[workspace.package]
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[profile.release]
+# The engine runs inside an AudioWorklet in the browser dev host, so size and
+# speed of the WASM both matter.
+opt-level = 3
+lto = true
+
+# Engine tests render seconds to minutes of audio, and one checks offline
+# rendering beats real time; unoptimised DSP is 20-30x slower. Only the engine
+# is optimised: doing it profile-wide compiled every dependency (Tauri, the
+# webview bindings, cpal) at opt-level 3 for every `cargo test`, which is most of
+# what made CI slow. `dev` gets it too, so `tauri dev` plays through an
+# optimised engine and tests share the engine's build with it.
+[profile.dev.package.soundcheck-engine]
+opt-level = 3
+
+[profile.test.package.soundcheck-engine]
+opt-level = 3

@@ -1,0 +1,254 @@
+# Soundcheck
+
+A music-creation app (a DAW) in which a musician can also ask an LLM to create or edit their song.
+
+## Language
+
+### The song
+
+**Project**:
+One song: everything needed to reopen, play and render it, saved as a folder on disk that contains its own copies of all audio it uses.
+_Avoid_: Song file, session
+
+**Track**:
+One horizontal lane of the arrangement, with its own mixer channel. Every Track is either an Audio Track or an Instrument Track.
+_Avoid_: Channel (that is the mixer's view of a Track), lane
+
+**Audio Track**:
+A Track whose Clips are recorded or imported audio.
+
+**Instrument Track**:
+A Track that owns one Instrument and whose Clips are Pattern Clips played by that Instrument.
+
+**Clip**:
+A block placed on a Track at a position in time. It is either an Audio Clip or a Pattern Clip, matching its Track.
+_Avoid_: Region, part, event
+
+**Audio Clip**:
+A Clip that plays a stretch of an audio file.
+
+**Stem**:
+One part of a mixed recording pulled out by Stem Separation: its vocals, drums, bass, or everything else. Once separated it is audio like any other, owned by the Project.
+_Avoid_: Part, source, track (a Track is a lane of the arrangement)
+
+**Stem Separation**:
+Splitting the sound of an Audio Clip into its Stems. The Stems are an estimate, so a little of one can bleed into another.
+_Avoid_: Decompiling, unmixing, splitting
+
+**Pattern Clip**:
+A Clip holding notes for its Track's single Instrument. It belongs to exactly one Track.
+_Avoid_: Pattern (on its own; in other DAWs a pattern spans many instruments), sequence
+
+**Step Sequencer**:
+A grid editor for a Pattern Clip's notes. It is a way of editing, not a separate kind of data.
+
+**Piano Roll**:
+An editor for a Pattern Clip's notes with free pitch, length and velocity. Like the Step Sequencer, it is a way of editing, not a separate kind of data.
+_Avoid_: Note editor, MIDI editor
+
+**Audio Editor**:
+An editor for one Audio Clip's audio: its waveform, drawn down to single samples, and the cuts that make Slices of it. Like the Piano Roll, it is a way of editing; its cuts are the editor's, not the Project's, until the Clip is split.
+_Avoid_: Sample editor, wave editor, chopper
+
+**Slice**:
+One stretch of an Audio Clip between two cuts, or a cut and the Clip's start or end, as the Audio Editor makes it. A Slice can be auditioned, exported as its own WAV or MP3, or left out; splitting the Clip replaces it with one Clip for each Slice kept, as one undo step.
+_Avoid_: Chop, segment, region, part
+
+**Tempo Change**:
+A point in the song where the tempo or time signature changes, taking effect instantly. A time signature can only change at a bar line.
+_Avoid_: Tempo marker, tempo event
+
+**Section**:
+A named bar range of the song, such as an intro, verse or chorus, marked on the ruler. Sections never overlap, and arrangement edits take one as their target.
+_Avoid_: Marker, region, part
+
+**Automation**:
+The breakpoints of one setting over time, which move it while the song plays and override its fixed value. Any number of a channel, its Sends, its Effects or its Instrument (each Pad's volume, pan and pitch among them) can be automated; mute, solo, bypass and settings that pick from a list (a Pad's note and Choke Group among them) never are.
+_Avoid_: Envelope (that is part of a sound), modulation
+
+**Automation Lane**:
+Where one setting's Automation is drawn, under the Track, Bus or Master that owns the setting.
+
+### Sound
+
+**Audio Engine**:
+The part of the app that makes and records sound; the UI only asks it to do things and shows what it reports.
+_Avoid_: Backend, player
+
+**Instrument**:
+A sound source that turns notes into audio: built in, such as the Synth or the Drum Sampler, or a Plugin.
+_Avoid_: Generator, VSTi
+
+**Preset**:
+A named set of an Instrument's or Effect's settings. It is either a Factory Preset, which ships with the app, or a User Preset, which the musician saved. Loading one copies its settings into the Instrument or Effect, where they can then be changed. User Presets live in the app's Preset library, outside any Project, so every Project can load them.
+_Avoid_: Patch, program, sound
+
+**Drum Sampler**:
+The Instrument that plays one sample per Pad, each triggered by its own note.
+_Avoid_: Drum machine, sampler (on its own)
+
+**Pad**:
+One sound of a Drum Sampler: a sample, the note that triggers it, and its volume, pan, pitch and Choke Group.
+_Avoid_: Slot, key, drum
+
+**Kit**:
+A named set of Pads loaded onto a Drum Sampler together, such as the bundled Starter Kit or one the musician saved. A saved Kit lives in the app's library, outside any Project, with a copy of every sample its Pads play; loading it copies those samples into the Project, so the Project still owns all its audio.
+_Avoid_: Bank, preset (that is the name a Kit is saved under)
+
+**Choke Group**:
+A number Pads share so that triggering one cuts off the others, as a closing hi-hat cuts off an open one. 0 is no choking.
+_Avoid_: Mute group, exclusive group
+
+**Effect**:
+A processor that changes audio passing through it: built in, such as EQ, Compressor, Reverb or Delay, or a Plugin.
+_Avoid_: FX, insert
+
+**Plugin**:
+An Instrument or Effect that is not built into the app, loaded by the Audio Engine. It is either a WASM Plugin or a VST3 Plugin.
+_Avoid_: Extension, add-on
+
+**WASM Plugin**:
+A Plugin written against Soundcheck's own SDK, whose settings are declared up front so the app can draw its controls and the Assistant can change them.
+
+**VST3 Plugin**:
+A third-party Plugin in Steinberg's VST3 format, which draws its own window and whose settings are only those it chooses to expose.
+
+**Insert Chain**:
+The ordered list of Effects on one mixer channel.
+_Avoid_: Effects rack, FX chain
+
+**Send**:
+A level-controlled copy of a Track's or Bus's signal, taken after its fader and pan, fed to a Bus. Each has at most one Send to any Bus, and the Master has none.
+_Avoid_: Aux
+
+**Bus**:
+A mixer channel fed by Sends or by Tracks routed to it, with its own Insert Chain, feeding the Master or another Bus. It holds no Clips, so it is not a Track.
+_Avoid_: Return track, group track, aux channel
+
+**Output**:
+Where a Track or Bus sends its signal: the Master or a Bus. Each has exactly one, and Buses never feed each other in a loop, whether through Outputs or Sends.
+_Avoid_: Destination, route
+
+**Input**:
+Where an Audio Track records from: an audio input device, and one of its channels (mono, recorded on both sides) or a stereo pair. Kept with the Track in the Project. Every Track armed at once records from the same device.
+_Avoid_: Source, input channel (on its own; a channel is one of the device's)
+
+**Input Monitoring**:
+Hearing an armed Audio Track's live Input through its Insert Chain, Sends and the rest of the mix while it records. Kept with the Track, off by default. Never in an export, an Audio Analysis render or the take, which is always the dry Input.
+_Avoid_: Direct monitoring (that is the interface's own, before the app), input echo, software monitoring
+
+**Master**:
+The final mixer channel that every Track and Bus ends up feeding, with its own Insert Chain.
+_Avoid_: Main out, stereo out
+
+**Audition**:
+Playing a file from the sample browser once, straight to the audio output at a fixed preview level, past the mixer, so it is never in the mix, the meters or an export.
+_Avoid_: Preview (on its own), prelisten
+
+**Reference Track**:
+A finished song the musician adds to a Project to compare their mix against. It is kept in the Project but is never in the mix, the meters or an export.
+_Avoid_: Reference mix, target track
+
+### The Assistant
+
+**Assistant**:
+The LLM feature that edits the Project on the musician's behalf, and can listen to the Project's sound as well as read its data.
+_Avoid_: Claude, AI, the LLM, copilot
+
+**Provider**:
+Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, or a Local one (Ollama or llama.cpp). The musician picks one, then its model, version and effort; each Provider keeps its own key and settings in the platform's key store, never in a Project.
+_Avoid_: Backend, vendor
+
+**Capability**:
+What a Provider's model can do, as the Provider's catalogue declares it: tool use, image input, audio input, and several tool calls per turn. The Assistant uses a feature only where the model declares it, and a model without tool use can't be the Assistant. A Local model's image input, audio input and several calls per turn start off, and the musician turns on what their server gives it.
+_Avoid_: Feature, support
+
+**Audio Analysis**:
+Measurements the Audio Engine takes of rendered sound (the whole mix, one Track, or a time range) so the Assistant can "listen" to it. Each one a Request makes is kept for the rest of it by an id, so the Assistant can compare two of the same sound before and after its change. Where the model declares audio input and the musician allows it, the Assistant can also be sent the rendered sound itself, capped in length, beside the measurements.
+_Avoid_: Listening, audio understanding
+
+**Project Summary**:
+What the Assistant is sent of the Project at the start of each Request: its Tracks, Buses and Master, what each feeds, their Effects and Clips, the tempo map, and which settings are automated, without the values. Its read tools return the settings, Automation breakpoints and notes it leaves out.
+_Avoid_: Context, snapshot
+
+**Request**:
+One instruction the musician gives the Assistant. All the changes it produces are undone together as one step.
+_Avoid_: Prompt, command
+
+**Conversation**:
+The run of Requests since the musician last started a new one. Each follow-up is sent with the earlier ones, so the Assistant knows what was just done; each Request is still its own undo step. Not saved in the Project.
+_Avoid_: Chat, thread, session
+
+**Token Usage**:
+The tokens a Request, or a Conversation, cost with the Provider: what the model was sent (input, cached or not) and what it wrote back (output, its thinking included). Shown under the prompt, with what a running Request is doing, so the musician can see what the Assistant costs and that it hasn't stalled.
+_Avoid_: Credits, cost
+
+**Context Window**:
+How many tokens one turn of the model can hold, what it is sent and what it writes back together: the catalogue's for each model, or, for a Local model, what its server gives it. The box shows how much of it the latest turn used. **Refresh context** has the next Request sent none of the Conversation's earlier Requests, while they stay in the transcript and in its Token Usage.
+_Avoid_: Memory, context length
+
+**Skill**:
+A named set of instructions for one kind of Request, such as fixing clipping or programming a drum beat, which the musician starts a Request with by its slash command (`/fix-clipping`). Each is a folder of the repo's `skills/`; the Assistant is sent its instructions, followed by whatever the musician typed after the command.
+_Avoid_: Command, macro, prompt template, recipe
+
+**Suggestion**:
+A Request's changes offered to the musician without being applied: they are worked out against a copy of the Project and applied, as one undo step, only when the musician says so.
+_Avoid_: Preview, draft, proposal
+
+### The Editor
+
+**Widget**:
+One section of the Editor, such as the Tracks, the Timeline or the Mixer, that the musician can move, resize, pin or hide on the Grid. It is a way of arranging the screen, not part of the Project.
+_Avoid_: Panel (that is how a section looks), pane, card
+
+**Grid**:
+The columns and rows every Widget snaps to, and the menu that lists the Widgets to show or hide. Its layout is kept on the device, never in a Project.
+_Avoid_: Dashboard, layout (on its own)
+
+**Empty**:
+Said of a Widget with nothing to show just now, such as the Step Sequencer with no Pattern Clip selected. It is off the Grid until it has something, then comes back where it was.
+_Avoid_: Blank, inactive
+
+**Pinned**:
+Said of a Widget kept under the title bar or above the footer, so it stays on screen while the rest of the Editor scrolls.
+_Avoid_: Sticky, docked
+
+### Where it runs
+
+**Desktop App**:
+Soundcheck installed on Windows, macOS or Linux, with the Audio Engine on the machine's own audio driver. The low-latency version, and the only one that records audio or hosts VST3 Plugins.
+_Avoid_: Native app, Tauri app
+
+**Browser Version**:
+Soundcheck as a web page, with the Audio Engine's WASM build on the browser's audio path. The lighter version: the same song and Project format, heard later, and without the Desktop App's features that need the machine.
+_Avoid_: Web app, web build (that is how it is made), dev host (that is `pnpm dev`)
+
+**Release**:
+A version of the Desktop App published on GitHub, with its installers and the Updates to it. Made by pushing a tag, `v` and the version.
+_Avoid_: Build (every push makes one), deploy (that is the Browser Version's)
+
+**Update**:
+A newer Release, as the installed Desktop App finds and installs it. It installs only what is signed by the updater's key for that version.
+_Avoid_: Upgrade, patch
+
+### Working together
+
+**Shared Project**:
+A Project more than one person edits, each on their own copy, whose changes reach the others live or the next time its folder syncs. Each copy is still a complete folder with all its audio.
+_Avoid_: Shared song, cloud project, document
+
+**Collaborator**:
+Someone else editing the same Project, in a Shared Project or a Live Session. Undo only ever reaches your own steps, never a Collaborator's, and never overwrites what a Collaborator has changed since.
+_Avoid_: User, peer (that is the sync code's name for one copy), co-author
+
+**Live Session**:
+Copies of one Project connected through a Relay, so each one's changes reach the others within a second. It is started with any Project, and whoever opens its invite link joins it. The copies of a Shared Project can be in one too; without one, their changes travel when the Project folder syncs.
+_Avoid_: Room, call, jam, session (on its own)
+
+**Relay**:
+The server that passes a Live Session's changes, and new audio, between Collaborators. It stores nothing and can't read what it passes on.
+_Avoid_: Server (on its own), backend, cloud
+
+**Invite link**:
+The link that joins a Live Session: the Browser Version's address, with the Relay, the session and its key after the `#`. Anyone with it can join.
+_Avoid_: Share link (Share makes a Shared Project), room code

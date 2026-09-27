@@ -1,0 +1,18 @@
+packages:
+  - app
+
+# wasm-pack's npm package downloads its binary in a postinstall script.
+# esbuild's (tsx's, for `real-model-check`) only checks the platform binary
+# its optional dependency already installed, so it needn't run. @google/genai's
+# preinstall is a no-op echo, and protobufjs's postinstall (its dependency) only
+# warns about version schemes.
+allowBuilds:
+  '@google/genai': false
+  esbuild: false
+  protobufjs: false
+  wasm-pack: true
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.48.0
+  - '@tauri-apps/api@2.12.0'
+  - '@tauri-apps/plugin-http@2.7.0'
