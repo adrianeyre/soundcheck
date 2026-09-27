@@ -4,10 +4,10 @@ name: CI
 # a branch with a pull request open, since both fire for the same commit.
 # Once merged, `release.yml` runs these same checks on main, then releases.
 on:
-  # pull_request:
-  #   branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-  # workflow_call:
+  workflow_call:
 
 # A new push to a pull request makes the run for the previous one worthless.
 concurrency:

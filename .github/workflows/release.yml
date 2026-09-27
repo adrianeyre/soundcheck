@@ -9,8 +9,8 @@ name: Release
 # latest.json go on the Release, and the Release is published. The
 # Browser Version is built from the bumped main and deployed to Pages.
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # Never cancel a release in flight, and never run two at once: a cancelled
