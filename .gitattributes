@@ -1,0 +1,2 @@
+# Signed bytes: a Windows checkout's CRLF would break the signature.
+scripts/fixtures/updater/** -text

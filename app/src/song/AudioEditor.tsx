@@ -148,7 +148,12 @@ export function AudioEditor({ clip, trackId, trackName, samples, tempoMap, expor
     );
     return () => {
       live = false;
-      made?.free();
+      if (!made) return;
+      // Forget it as well as free it: coming back to these same bounds
+      // before the next one decodes would otherwise read the freed one.
+      const freed = made;
+      setDecoded((d) => (d?.waveform === freed ? null : d));
+      freed.free();
     };
   }, [sample, fileOffset, duration]);
   const current = decoded && decoded.sample === sample && decoded.fileOffset === clip.fileOffset && decoded.duration === duration;
