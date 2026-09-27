@@ -26,6 +26,12 @@ const OTHER: &str = include_str!("../../scripts/fixtures/updater/other-throwaway
 const STAND_IN: &str = include_str!("../../scripts/fixtures/updater/stand-in-installer.txt");
 const SIGNATURE: &str = include_str!("../../scripts/fixtures/updater/stand-in-installer.txt.sig");
 
+/// The app's context. `generate_context!` embeds the Mac app's Info.plist
+/// under one symbol, so a test binary may expand it only once.
+fn context() -> tauri::Context<tauri::test::MockRuntime> {
+    tauri::generate_context!()
+}
+
 /// Serves the `latest.json` made for its address, and the stand-in package
 /// at `/package`, until the test ends; the address.
 fn serve(manifest: impl FnOnce(&str) -> String) -> String {
@@ -95,7 +101,7 @@ fn check_and_download(
     let address = serve(|address| manifest(address, announced));
     let app = mock_builder()
         .plugin(tauri_plugin_updater::Builder::new().pubkey(pubkey).build())
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("the app builds");
     let updater = app
         .updater_builder()
@@ -161,7 +167,7 @@ fn a_package_signed_for_another_version_is_turned_away() {
 fn the_page_cant_call_the_updaters_own_commands() {
     let app = mock_builder()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("the app builds");
     let window = WebviewWindowBuilder::new(&app, "main", Default::default())
         .build()

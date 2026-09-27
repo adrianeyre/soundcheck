@@ -78,10 +78,12 @@
 #include <vector>
 
 #ifdef _WIN32
+// windows.h first: avrt.h uses its types and macros without including it.
+#include <windows.h>
+
 #include <avrt.h>
 #include <fcntl.h>
 #include <io.h>
-#include <windows.h>
 #else
 #include <fcntl.h>
 #include <pthread.h>
