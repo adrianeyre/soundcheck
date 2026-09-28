@@ -304,12 +304,14 @@ function LfoCurve({ label, rateHz, offset, depth }: { label: string; rateHz: num
   );
 }
 
+/** A sample value, -1 to 1, as a height in the Bitcrusher's picture. */
+const stepY = (value: number) => H / 2 - value * (H / 2 - 6);
+
 function BitcrusherSteps({ label, settings }: { label: string; settings: BitcrusherSettings }) {
   const samples = 240;
   const out = crushed(settings, samples);
-  const y = (value: number) => H / 2 - value * (H / 2 - 6);
-  const smooth = Array.from({ length: samples }, (_, index): [number, number] => [(index / samples) * W, y(Math.sin((2 * Math.PI * index) / samples))]);
-  const stepped = out.map((value, index): [number, number] => [(index / samples) * W, y(value)]);
+  const smooth = Array.from({ length: samples }, (_, index): [number, number] => [(index / samples) * W, stepY(Math.sin((2 * Math.PI * index) / samples))]);
+  const stepped = out.map((value, index): [number, number] => [(index / samples) * W, stepY(value)]);
   return (
     <Frame label={label}>
       <path d={path(smooth)} fill="none" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />

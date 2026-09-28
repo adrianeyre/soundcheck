@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { MiniPiano } from "../keyboard/MiniPiano";
 import { soundingInClip } from "../keyboard/sounding";
+import { DrumKit } from "./DrumKit";
 import type { Instrument, Note, PatternClip } from "../project/model";
 import { barTicks, type TimeSignature } from "../project/time";
 import { STEP_SIZES, gridRows, isStepOn, stepCount, toggleStep } from "./step-grid";
@@ -94,7 +95,9 @@ export function StepSequencer(props: StepSequencerProps) {
           Delete Clip
         </button>
       </div>
-      {instrument.type !== "drumSampler" && (
+      {instrument.type === "drumSampler" ? (
+        <DrumKit trackName={trackName} pads={instrument.pads} hitting={new Set([...sounding, ...(held ?? [])])} />
+      ) : (
         <MiniPiano
           label={`Keys of ${trackName}`}
           low={Math.min(...pitches)}
