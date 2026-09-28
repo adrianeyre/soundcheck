@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DjAnalysis } from "../audio/audio-output";
 import { beatSeconds, camelotName, formatBpm, formatTime, type HotCue, keyName, quantize, shiftKey } from "./dj-logic";
 import type { DeckReport } from "./dj-report";
+import { useSmoothPosition } from "./smooth-position";
 import { Overview, Zoom } from "./Waveform";
 
 /** Seconds either side of the playhead the lanes can show. */
@@ -79,6 +80,8 @@ function Lane({ lane, span, onDeck }: { lane: StackLane; span: number; onDeck?: 
   const scrub = useRef<Scrub | null>(null);
   const area = useRef<HTMLDivElement>(null);
   const size = useSize(area);
+  // Drawn every animation frame while the Deck moves, carried on between the engine's reports.
+  const smooth = useSmoothPosition(report);
   const key = analysis?.key ? shiftKey(analysis.key, report.keyShift) : null;
   const loaded = analysis !== null && report.loaded;
   const set = onDeck && ((name: string, value: number) => onDeck(deck, name, value));
@@ -169,7 +172,7 @@ function Lane({ lane, span, onDeck }: { lane: StackLane; span: number; onDeck?: 
             <Zoom
               deck={deck}
               analysis={analysis}
-              position={report.position}
+              position={smooth}
               span={span}
               bpm={report.bpm}
               firstBeat={report.firstBeat}
