@@ -24,7 +24,7 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = ["std", "d
 rtrb = "0.4.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-tauri = { version = "2.11.6", features = [] }
+tauri = { version = "2.12.0", features = [] }
 tauri-plugin-dialog = "2.7.3"
 # The Assistant's HTTP, so CORS doesn't apply. Native roots: rustls, trusting
 # the OS certificate store rather than webpki's bundle, so a gateway behind a
@@ -53,7 +53,7 @@ libc = "0.2.189"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Memory", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", features = [] }
+tauri-build = { version = "2.7.0", features = [] }
 
 [features]
 # Adds ASIO as an audio host on Windows, for drivers that can run smaller
@@ -61,7 +61,7 @@ tauri-build = { version = "2.6.3", features = [] }
 asio = ["cpal/asio"]
 
 [dev-dependencies]
-tauri = { version = "2.11.6", features = ["test"] }
+tauri = { version = "2.12.0", features = ["test"] }
 soundcheck-test-effect = { version = "0.1.0", path = "../sdk/test-effect" }
 soundcheck-test-instrument = { version = "0.1.0", path = "../sdk/test-instrument" }
 tempfile = "3.27.0"
