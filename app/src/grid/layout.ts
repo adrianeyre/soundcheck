@@ -50,7 +50,13 @@ export type WidgetId =
   | "instrument"
   | "recordAudio"
   | "samples"
-  | "mixer";
+  | "mixer"
+  | "keyboard"
+  | "chords"
+  | "noteTools"
+  | "meters"
+  | "overview"
+  | "eq";
 
 export interface WidgetSpec {
   id: WidgetId;
@@ -86,6 +92,15 @@ export const WIDGETS: readonly WidgetSpec[] = [
   { id: "recordAudio", title: "Record audio", initial: { x: 0, y: 78, w: 12, h: 6 }, min: MIN },
   { id: "samples", title: "Samples", initial: { x: 12, y: 78, w: 12, h: 6 }, min: MIN },
   { id: "mixer", title: "Mixer", initial: { x: 0, y: 84, w: 24, h: 14 }, min: MIN },
+  // The play-and-write Widgets side by side under the Mixer: an on-screen piano, then chord pads beside the
+  // Note Tools, which step aside until a Pattern Clip is selected.
+  { id: "keyboard", title: "Keyboard", initial: { x: 0, y: 98, w: 24, h: 8 }, min: { w: 8, h: 5 } },
+  { id: "chords", title: "Chords", initial: { x: 0, y: 106, w: 12, h: 14 }, min: { w: 6, h: 6 } },
+  { id: "noteTools", title: "Note Tools", initial: { x: 12, y: 106, w: 12, h: 14 }, min: { w: 6, h: 6 } },
+  { id: "meters", title: "Meters", initial: { x: 0, y: 120, w: 12, h: 9 }, min: { w: 6, h: 5 } },
+  { id: "overview", title: "Song Overview", initial: { x: 12, y: 120, w: 12, h: 6 }, min: { w: 6, h: 3 } },
+  // Wide, so the curve has room for the octaves at the top end, and tall enough for its band sliders.
+  { id: "eq", title: "EQ", initial: { x: 0, y: 129, w: 24, h: 18 }, min: { w: 10, h: 8 } },
 ];
 
 export type WidgetLayout = Record<WidgetId, WidgetPlacement>;

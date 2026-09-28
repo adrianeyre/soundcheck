@@ -2,7 +2,8 @@ import { Play, Repeat, SkipBack, Square, Timer } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { EngineCommand, EngineReport } from "../audio/audio-output";
-import { BEAT_UNITS, barsAt, formatPosition, type TempoMap, tickAtBars } from "../project/time";
+import { BEAT_UNITS, barBeatTick, barsAt, formatPosition, secondsAt, signatureAt, type TempoMap, tickAtBars } from "../project/time";
+import { addTap, tappedTempo } from "./tap-tempo";
 import { MAX_TEMPO, MIN_TEMPO, type TransportSettings } from "./transport-settings";
 
 const POSITION_MS = 50;
@@ -26,6 +27,7 @@ function shown(bars: number): number {
 export function TransportBar({ settings, tempoMap, onChange, send, readReport }: TransportBarProps) {
   const [report, setReport] = useState<EngineReport | null>(null);
   const [tempoText, setTempoText] = useState(String(settings.tempo));
+  const [taps, setTaps] = useState<number[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => setReport(readReport()), POSITION_MS);
@@ -36,6 +38,11 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
   const running = report !== null;
   const playing = report?.playing ?? false;
 
+  const position = report?.position ?? 0;
+  const { beat } = barBeatTick(tempoMap, position);
+  const beatsPerBar = signatureAt(tempoMap, position).beatsPerBar;
+  const seconds = secondsAt(tempoMap, Math.max(0, position));
+  const clock = `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
   const loopStartBar = barsAt(tempoMap, settings.loopStart);
   const loopBars = barsAt(tempoMap, settings.loopEnd) - loopStartBar;
 
@@ -55,9 +62,19 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
         {playing ? "Stop" : "Play"}
       </button>
       {/* Updated twenty times a second, so it is read on request rather than announced. */}
-      <output aria-label="Position" aria-live="off" className="position">
-        {formatPosition(report?.position ?? 0, tempoMap)}
-      </output>
+      <div className="transport-lcd">
+        <output aria-label="Position" aria-live="off" className="position">
+          {formatPosition(position, tempoMap)}
+        </output>
+        <output aria-label="Time" aria-live="off" className="transport-clock num">
+          {clock}
+        </output>
+        <span className="beat-lights" aria-hidden>
+          {Array.from({ length: Math.min(16, beatsPerBar) }, (_, index) => (
+            <span key={index} data-on={playing && index + 1 === beat} data-downbeat={index === 0} />
+          ))}
+        </span>
+      </div>
       <span className="divider" aria-hidden />
       <label className="field">
         Tempo
@@ -77,6 +94,22 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
           }}
         />
       </label>
+      <button
+        type="button"
+        className="btn-sm"
+        title="Tap along with the beat to set the tempo"
+        onClick={() => {
+          const next = addTap(taps, performance.now());
+          setTaps(next);
+          const tempo = tappedTempo(next);
+          if (tempo !== null && tempo >= MIN_TEMPO && tempo <= MAX_TEMPO) {
+            setTempoText(String(tempo));
+            update({ tempo });
+          }
+        }}
+      >
+        Tap
+      </button>
       <label className="field">
         Beats per bar
         <input

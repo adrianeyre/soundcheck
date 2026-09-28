@@ -1,7 +1,10 @@
 import { Piano } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { MiniPiano } from "../keyboard/MiniPiano";
+import { soundingInClip } from "../keyboard/sounding";
 import type { Instrument, Note, PatternClip } from "../project/model";
+import { isBlackKey } from "../theory/theory";
 import { barTicks, beatTicks, constantTempoMap, formatPosition, type TimeSignature } from "../project/time";
 import {
   type Clipboard,
@@ -68,6 +71,10 @@ export interface PianoRollProps {
   timeSignature: TimeSignature;
   /** Every edit is the Clip's new notes, applied as one undo step called `label`. */
   onNotes: (notes: Note[], label: string) => void;
+  /** Where the song is playing, in ticks, or null when it isn't: a line marks it and the keys it plays light. */
+  playhead?: number | null;
+  /** Notes held now, from the keys, the computer keyboard or MIDI. */
+  held?: ReadonlySet<number>;
 }
 
 /**
@@ -77,7 +84,7 @@ export interface PianoRollProps {
  * or Delete removes. A drag previews here and becomes one edit when the
  * mouse is let go.
  */
-export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes }: PianoRollProps) {
+export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes, playhead = null, held }: PianoRollProps) {
   const [snap, setSnap] = useState<PianoSnapId>(DEFAULT_PIANO_SNAP);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [clipboard, setClipboard] = useState<{ copied: Clipboard; at: number } | null>(null);
@@ -92,6 +99,9 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes 
   const pitches = rows.map((row) => row.pitch);
   const rowOf = new Map(rows.map((row, index) => [row.pitch, index]));
   const labelOf = (pitch: number) => rows[rowOf.get(pitch) ?? -1]?.label ?? String(pitch);
+  const inClip = playhead !== null && playhead >= clip.start && playhead < clip.start + clip.length;
+  const sounding = inClip ? soundingInClip(clip, playhead) : new Set<number>();
+  const drums = instrument.type === "drumSampler";
   const map = constantTempoMap(120, timeSignature);
   const width = Math.max(1, clip.length * PX_PER_TICK);
   const px = (ticks: number) => ticks * PX_PER_TICK;
@@ -358,12 +368,29 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes 
         {chosen.length} of {clip.notes.length} notes selected. Draw on an empty spot; drag a note or its right edge;
         Shift-click selects several; right-click or Delete removes; arrows move and Shift+arrows resize.
       </p>
+      {!drums && pitches.length > 0 && (
+        <MiniPiano
+          label={`Keys of ${trackName}`}
+          low={Math.min(...pitches)}
+          high={Math.max(...pitches)}
+          playing={sounding}
+          held={held}
+          used={new Set(clip.notes.map((note) => note.pitch))}
+        />
+      )}
       <div ref={scrollRef} className="pr-scroll">
         <div style={{ width: LABEL_WIDTH + width }}>
           <div style={{ display: "flex" }}>
             <div className="pr-keys" style={{ width: LABEL_WIDTH }} aria-hidden>
               {rows.map((row) => (
-                <div key={row.pitch} className="pr-key" data-shaded={row.shaded} style={{ height: ROW_HEIGHT }}>
+                <div
+                  key={row.pitch}
+                  className="pr-key"
+                  data-shaded={row.shaded}
+                  data-black={!drums && isBlackKey(row.pitch) ? "true" : undefined}
+                  data-sounding={sounding.has(row.pitch) || held?.has(row.pitch) ? "true" : undefined}
+                  style={{ height: ROW_HEIGHT }}
+                >
                   {row.label}
                 </div>
               ))}
@@ -395,6 +422,7 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes 
                   style={{ left: px(tick) }}
                 />
               ))}
+              {inClip && <span aria-hidden className="pr-playhead" style={{ left: px(playhead - clip.start) }} />}
               {shown.notes.map((note) => {
                 const key = noteKey(note);
                 const row = rowOf.get(note.pitch);
@@ -411,6 +439,11 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes 
                     aria-keyshortcuts="Enter ArrowLeft ArrowRight ArrowUp ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete"
                     title={name}
                     className="pr-note"
+                    data-sounding={
+                      inClip && note.start <= playhead - clip.start && playhead - clip.start < note.start + note.length
+                        ? "true"
+                        : undefined
+                    }
                     onMouseDown={(event) => {
                       if (event.button !== 0) return;
                       const box = gridRef.current!.getBoundingClientRect();
