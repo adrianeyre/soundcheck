@@ -258,7 +258,7 @@ pub enum EngineCommand {
     SetMetronome {
         on: bool,
     },
-    /// A control of the Mixing page's DJ Mixer (ADR 0013): `kind` is
+    /// A control of the Mixer page's DJ Mixer (ADR 0013): `kind` is
     /// "deck", "channel" or "mixer", and `index` the Deck's or channel's.
     DjSet {
         kind: String,
@@ -422,6 +422,9 @@ pub enum RtCommand {
         track: Option<DjTrack>,
     },
     DjSet(DjControl, f64),
+    /// Where the headphone cue goes for a second output device, or None
+    /// when there is none (`headphones.rs`).
+    SetHeadphones(Option<Box<rtrb::Producer<f32>>>),
 }
 
 /// The most settings any Effect has: a Plugin may declare this many.
@@ -494,6 +497,7 @@ pub enum Garbage {
     Monitor(Box<MonitorFeed>),
     DjTrack(DjTrack),
     DjMixer(Box<DjMixer>),
+    Headphones(Box<rtrb::Producer<f32>>),
 }
 
 #[cfg(test)]

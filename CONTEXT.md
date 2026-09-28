@@ -265,18 +265,18 @@ _Avoid_: Server (on its own), backend, cloud
 The link that joins a Live Session: the Browser Version's address, with the Relay, the session and its key after the `#`. Anyone with it can join.
 _Avoid_: Share link (Share makes a Shared Project), room code
 
-### The Mixing page
+### The Mixer page
 
-**Mixing page**:
+**Mixer page**:
 The page, beside the Editor and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees.
 _Avoid_: DJ mode, performance view, live page
 
 **Deck**:
-One of the Mixing page's two or four players: a file loaded onto it, played at a tempo of its own, with its own cues and loops, into one channel of the DJ mixer. A Deck is not a Track: it holds a file, not Clips.
+One of the Mixer page's two or four players: a file loaded onto it, played at a tempo of its own, with its own cues and loops, into one channel of the DJ mixer. A Deck is not a Track: it holds a file, not Clips.
 _Avoid_: Player, turntable, channel (that is its strip on the mixer)
 
 **Track browser**:
-The Mixing page's list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck.
+The Mixer page's list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck.
 _Avoid_: Library (that is the app's Preset and Kit library), crate, playlist
 
 **Beat Grid**:

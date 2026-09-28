@@ -19,6 +19,7 @@ import { browserMixExporter } from "./export/browser-mix-exporter";
 import { desktopMixExporter } from "./export/desktop-mix-exporter";
 import type { MixExporter } from "./export/mix-exporter";
 import { browserRecordingSaver, desktopRecordingSaver, type DjRecordingSaver } from "./dj/recording-saver";
+import { browserHeadphoneOutput, desktopHeadphoneOutput, type HeadphoneOutput } from "./dj/headphone-output";
 import { desktopMidiInput } from "./midi/desktop-midi-input";
 import { openWebMidiInput, type OpenMidiInput } from "./midi/midi-input";
 import { browserLibraryStorage } from "./preset/browser-library-storage";
@@ -77,8 +78,13 @@ export interface Platform {
   samples: SampleSource | null;
   /** Exports the mix as a WAV file. */
   exporter: MixExporter;
-  /** Saves a recording of the Mixing page's DJ mix (ADR 0013). */
+  /** Saves a recording of the Mixer page's DJ mix (ADR 0013). */
   djRecordings: DjRecordingSaver;
+  /**
+   * Plays the Mixer page's headphone cue out of a second output device
+   * (ADR 0013), or null where it can't: a browser without `setSinkId`.
+   */
+  headphones: HeadphoneOutput | null;
   /** Chooses and auditions the Reference Track, past the mixer. */
   reference: ReferencePlayer;
   /** Where the Assistant's Claude API key is kept on this machine. */
@@ -152,6 +158,8 @@ export function currentPlatform(): Platform {
       exporter: desktopMixExporter(invoke),
       // The system's save dialog; the shell writes the file.
       djRecordings: desktopRecordingSaver(invoke),
+      // A second cpal stream in the shell, fed from the engine through a lock-free ring.
+      headphones: desktopHeadphoneOutput(invoke),
       // The system's file dialog, and the native host's audition.
       reference: desktopReferencePlayer(invoke),
       keyStore: desktopKeyStore(invoke),
@@ -199,6 +207,8 @@ export function currentPlatform(): Platform {
     exporter: browserMixExporter(),
     // As an export saves: the save dialog where there is one, a download elsewhere.
     djRecordings: browserRecordingSaver(),
+    // The worklet's cue channels to an audio element sent to the device with setSinkId (Chromium).
+    headphones: browserHeadphoneOutput(),
     // A file input, and Web Audio in a context beside the worklet's.
     reference: browserReferencePlayer(),
     // Local storage is not a credential store, but a web page has nothing

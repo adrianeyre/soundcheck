@@ -10,6 +10,7 @@ pub mod audio;
 pub mod audio_input;
 pub mod command;
 pub mod export;
+pub mod headphones;
 pub mod host;
 pub mod library;
 pub mod midi;
@@ -58,6 +59,44 @@ struct App {
     /// The last separation's Stems as WAV files, in `stems::SOURCES`' order,
     /// until the UI takes them.
     stems: Mutex<Vec<Vec<u8>>>,
+    /// The Mixer page's headphone cue on a second device: the one chosen,
+    /// and its stream while the main output runs.
+    headphones: Mutex<Headphones>,
+}
+
+#[derive(Default)]
+struct Headphones {
+    device: Option<String>,
+    stream: Option<headphones::HeadphoneStream>,
+    /// Why the chosen device couldn't be opened, until it is chosen again.
+    error: Option<String>,
+}
+
+/// Open the chosen headphone device against the running output, if both
+/// are there, handing the output's engine a fresh ring; with no device,
+/// close it and stop feeding it.
+fn apply_headphones(audio: &mut Option<AudioOutput>, phones: &mut Headphones) {
+    phones.stream = None;
+    phones.error = None;
+    let Some(output) = audio.as_mut() else {
+        return;
+    };
+    let Some(device) = phones.device.clone() else {
+        output.controller.set_headphones(None);
+        return;
+    };
+    let rate = output.controller.sample_rate();
+    let (producer, consumer) = headphones::ring(rate);
+    match headphones::open(Some(output.info.host.as_str()), &device, rate, consumer) {
+        Ok(stream) => {
+            output.controller.set_headphones(Some(producer));
+            phones.stream = Some(stream);
+        }
+        Err(error) => {
+            output.controller.set_headphones(None);
+            phones.error = Some(error);
+        }
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -80,6 +119,8 @@ fn audio_open(app: State<'_, App>, options: OpenOptions) -> Result<OpenInfo, Str
     lock(&app.midi).route_to(Some(midi_queue));
     let info = output.info.clone();
     *running = Some(output);
+    // The headphones chosen before follow the new output.
+    apply_headphones(&mut running, &mut lock(&app.headphones));
     Ok(info)
 }
 
@@ -119,7 +160,7 @@ fn audio_audition_reference(app: State<'_, App>, bytes: Vec<u8>, gain: f32) -> R
     }
 }
 
-/// Put a file on a Deck of the Mixing page's DJ Mixer (ADR 0013). It is
+/// Put a file on a Deck of the Mixer page's DJ Mixer (ADR 0013). It is
 /// decoded and analysed here, outside the lock and off the audio thread;
 /// what is wrong with it comes back as the error. Answers its BPM, Beat
 /// Grid, key and waveform, as JSON.
@@ -239,7 +280,44 @@ fn audio_reset_counters(app: State<'_, App>) {
 #[tauri::command]
 fn audio_close(app: State<'_, App>) {
     lock(&app.midi).route_to(None);
+    lock(&app.headphones).stream = None;
     *lock(&app.audio) = None;
+}
+
+/// The output devices headphones can be on, on the running output's host.
+#[tauri::command]
+fn headphones_devices(app: State<'_, App>) -> Result<Vec<headphones::HeadphoneDevice>, String> {
+    let host = lock(&app.audio)
+        .as_ref()
+        .map(|output| output.info.host.clone());
+    headphones::devices(host.as_deref())
+}
+
+/// Play the headphone cue out of `device`, or out of no second device with
+/// None. Kept for the next time audio starts, too.
+#[tauri::command]
+fn headphones_choose(app: State<'_, App>, device: Option<String>) -> headphones::HeadphoneStatus {
+    let mut audio = lock(&app.audio);
+    let mut phones = lock(&app.headphones);
+    phones.device = device;
+    apply_headphones(&mut audio, &mut phones);
+    status(&phones)
+}
+
+#[tauri::command]
+fn headphones_status(app: State<'_, App>) -> headphones::HeadphoneStatus {
+    status(&lock(&app.headphones))
+}
+
+fn status(phones: &Headphones) -> headphones::HeadphoneStatus {
+    match &phones.stream {
+        Some(stream) => stream.status(),
+        None => headphones::HeadphoneStatus {
+            device: phones.device.clone(),
+            sample_rate: None,
+            failed: phones.error.clone(),
+        },
+    }
 }
 
 /// The audio inputs on the running output's host, the default first, with
@@ -838,6 +916,9 @@ pub fn run() {
             dj_unload,
             dj_recording_take,
             dj_save_recording,
+            headphones_devices,
+            headphones_choose,
+            headphones_status,
             audio_input_devices,
             audio_input_open,
             audio_input_levels,

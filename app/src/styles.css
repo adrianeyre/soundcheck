@@ -1468,6 +1468,12 @@ input.project-name:focus {
   max-height: 100%;
 }
 
+/* Made taller by the musician, a Widget fills the rows it was given, so the space it was made is inside
+   its frame, for its content to grow into, never blank page between it and the next. */
+.widget-grid > .widget[data-sized] {
+  align-self: stretch;
+}
+
 .widget[data-dragging] {
   z-index: 2;
   border-color: var(--primary);
@@ -1525,8 +1531,9 @@ input.project-name:focus {
   min-height: 100%;
 }
 
-.widget[data-sized] .widget-content > .panel {
-  flex: 1;
+/* Whatever the content is, a panel, a toolbar or the Mixer page's hardware, it stretches to the frame. */
+.widget[data-sized] .widget-content > * {
+  flex: 1 0 auto;
 }
 
 /* The Widget is the frame, so what sits in it drops its own. */
@@ -4249,7 +4256,7 @@ button[data-clipping="true"] {
   }
 }
 
-/* ---- The Mixing page (DJ Mixer, ADR 0013) ----
+/* ---- The Mixer page (DJ Mixer, ADR 0013) ----
    Decks drawn as club players and a four-channel club mixer, on panels that are always dark, as the
    hardware is, with tokens of their own (`.dj-hw`), so every label keeps AA contrast in every theme and
    palette. The look is the hardware's in general, never a maker's: no names or logos are printed. */
@@ -4265,6 +4272,7 @@ button[data-clipping="true"] {
 
 /* The hardware's own palette. Text is #eef0f6 or #b4bacb on panels no lighter than #2b303a: 9:1 and 6:1. */
 .dj-hw {
+  box-sizing: border-box;
   color-scheme: dark;
   --bg: #07080b;
   --surface: #1d2028;
@@ -4572,10 +4580,13 @@ button[data-clipping="true"] {
 
 /* ---- The waveforms across the top ---- */
 
+/* Made taller on the Grid, the lanes grow into the height and the waveforms scale with them. */
 .dj-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  box-sizing: border-box;
+  height: 100%;
   padding: 8px;
 }
 
@@ -4587,6 +4598,7 @@ button[data-clipping="true"] {
 }
 
 .dj-stack-lane {
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(96px, 170px) minmax(0, 1fr);
   gap: 6px;
@@ -4628,15 +4640,48 @@ button[data-clipping="true"] {
   color: var(--dj-screen-muted);
 }
 
+.dj-stack-wave {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dj-stack-scrub {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 60px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.dj-stack-scrub:active {
+  cursor: grabbing;
+}
+
+.dj-stack-scrub:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.dj-stack-lane .dj-overview {
+  height: 14px;
+  border-radius: 0 0 4px 0;
+}
+
 .dj-stack-lane .dj-zoom {
-  height: 64px;
-  border-radius: 0 4px 4px 0;
+  /* From nothing, so its drawing's own shape never sets its height: the lane's does. */
+  flex: 1 1 0;
+  height: 0;
+  min-height: 60px;
+  border-radius: 0 4px 0 0;
 }
 
 .dj-stack-empty {
   display: grid;
   place-items: center;
-  height: 64px;
+  height: 100%;
+  min-height: 64px;
   font-size: 0.72rem;
   color: var(--dj-screen-muted);
 }
@@ -4729,6 +4774,30 @@ button[data-clipping="true"] {
   gap: 10px;
   padding: 12px;
   min-width: 0;
+}
+
+/* Something loadable dragged over a Deck: the whole panel says it will take it. */
+.dj-deck[data-drop] {
+  outline: 3px dashed var(--deck);
+  outline-offset: -3px;
+}
+
+.dj-drop-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: start center;
+  /* The words near the top, where a tall Deck's drop is seen. */
+  padding-top: 88px;
+  border-radius: 14px;
+  background: rgb(5 7 12 / 0.72);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .dj-deck[data-playing="true"] {

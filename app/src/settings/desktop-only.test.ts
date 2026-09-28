@@ -9,6 +9,7 @@ const DESKTOP: HasPlatformParts = {
   samples: {} as HasPlatformParts["samples"],
   storage: {} as HasPlatformParts["storage"],
   vst3: {} as HasPlatformParts["vst3"],
+  headphones: {} as HasPlatformParts["headphones"],
 };
 
 const CHROME: HasPlatformParts = {
@@ -18,6 +19,7 @@ const CHROME: HasPlatformParts = {
   samples: null,
   storage: {} as HasPlatformParts["storage"],
   vst3: null,
+  headphones: {} as HasPlatformParts["headphones"],
 };
 
 test("the Desktop App lacks nothing", () => {
@@ -54,6 +56,8 @@ test("each lacking part is listed on its own, so a browser that gains one stops 
   expect(features({ samples: DESKTOP.samples })).not.toContain("The sample browser");
   expect(features({ listAudioHosts: DESKTOP.listAudioHosts })).not.toContain("Low latency");
   expect(features({ vst3: DESKTOP.vst3 })).not.toContain("VST3 Plugins");
+  expect(features({ headphones: null })).toContain("Headphones on a second audio device");
+  expect(features({})).not.toContain("Headphones on a second audio device");
 });
 
 test("VST3 Plugins says a Project keeps them in the browser, and names the trademark's owner", () => {

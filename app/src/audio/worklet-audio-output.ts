@@ -78,7 +78,9 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
     const node = new AudioWorkletNode(context, "engine", {
       numberOfInputs: 0,
       numberOfOutputs: 1,
-      outputChannelCount: [channels],
+      // Always four: the cue is on the third and fourth, for outputs 3 and 4
+      // or for a second device (`headphone-output.ts`).
+      outputChannelCount: [4],
       channelInterpretation: "discrete",
       processorOptions,
     });
@@ -114,7 +116,18 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
       node.port.start();
     });
 
-    node.connect(context.destination);
+    // The Master (and, on a four-channel device, the cue) to the output; the
+    // cue alone to a stream a second device can play.
+    const split = context.createChannelSplitter(4);
+    const main = context.createChannelMerger(channels);
+    const cue = context.createChannelMerger(2);
+    const cueStream = context.createMediaStreamDestination();
+    node.connect(split);
+    for (let channel = 0; channel < channels; channel++) split.connect(main, channel, channel);
+    split.connect(cue, 2, 0);
+    split.connect(cue, 3, 1);
+    main.connect(context.destination);
+    cue.connect(cueStream);
     await context.resume();
 
     const platformStats = () => context.playbackStats ?? context.playoutStats;
@@ -170,6 +183,9 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
 
       async close() {
         node.disconnect();
+        split.disconnect();
+        main.disconnect();
+        cue.disconnect();
         await context.close();
       },
 
@@ -214,6 +230,7 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
           return out;
         },
         headphones: channels >= 4,
+        headphoneStream: () => cueStream.stream,
       },
     };
   } catch (error) {
