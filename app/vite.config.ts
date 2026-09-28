@@ -89,5 +89,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // The Song page tests draw the whole Editor, every Widget on it, many times over. Alone each takes one
+    // or two seconds; on a busy CI runner, with every test file running at once, five was too tight.
+    testTimeout: 15_000,
   },
 });
