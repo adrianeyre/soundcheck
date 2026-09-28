@@ -39,7 +39,12 @@ interface EdgeDrag {
   toX: number;
   /** Made with the right button, by its body: it copies the Section, with everything in its bars, where it is dropped. */
   copy: boolean;
+  /** Whether it was already selected when pressed: a click on it, not a drag, then unselects it. */
+  wasSelected: boolean;
 }
+
+/** How far the pointer may move, in pixels, and still be a click rather than a drag. */
+const CLICK_SLOP = 3;
 
 /**
  * The song's Sections, on a lane above the ruler: each a named block of
@@ -107,6 +112,11 @@ export function SectionLane(props: SectionLaneProps) {
     const onUp = (event: MouseEvent) => {
       setDrag(null);
       if (!section) return;
+      // A click on the selected Section unselects it, so the whole song plays again.
+      if (drag.wasSelected && !drag.copy && drag.edge === "body" && Math.abs(event.clientX - drag.fromX) < CLICK_SLOP) {
+        setSelectedId(null);
+        return;
+      }
       const range = dragged(drag, section, event.clientX);
       if (drag.copy) copyTo(section, copyTarget(sections, section, range.startBar));
       else if (drag.edge === "body") move(section, moveTarget(sections, section, range.startBar));
@@ -152,7 +162,8 @@ export function SectionLane(props: SectionLaneProps) {
       onCommands([{ type: "deleteSection", sectionId: section.id }], "Delete Section");
       setSelectedId(null);
     } else if (event.key === "Enter" || event.key === " ") {
-      setSelectedId(section.id);
+      // As a click does: selecting it plays it, and again unselects it.
+      setSelectedId(section.id === selectedId ? null : section.id);
     } else {
       return;
     }
@@ -193,8 +204,9 @@ export function SectionLane(props: SectionLaneProps) {
               // The right button copies it by its body, wherever it is pressed; the middle one does nothing.
               const copy = event.button === 2;
               if (event.button !== 0 && !copy) return;
+              const wasSelected = section.id === selectedId;
               setSelectedId(section.id);
-              setDrag({ id: section.id, edge: copy ? "body" : edge, fromX: event.clientX, toX: event.clientX, copy });
+              setDrag({ id: section.id, edge: copy ? "body" : edge, fromX: event.clientX, toX: event.clientX, copy, wasSelected });
             };
             return (
               <div

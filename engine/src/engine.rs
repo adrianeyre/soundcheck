@@ -101,6 +101,10 @@ pub struct Engine {
     metronome_on: bool,
     /// Scheduled events at ticks before this have been played.
     scan_from: u64,
+    /// What Play plays when the loop is off: from its start, stopping at its
+    /// end and going back to its start, as a song stops where it ends. None
+    /// plays on for ever. An offline render ignores it, as it does the loop.
+    play_range: Option<LoopRegion>,
     pattern_loaded: bool,
     latency_test: bool,
     click_frames: usize,
@@ -156,6 +160,7 @@ impl Engine {
             metronome: Metronome::new(sample_rate),
             metronome_on: false,
             scan_from: 0,
+            play_range: None,
             pattern_loaded: false,
             latency_test: false,
             click_frames: (CLICK_SECONDS * sample_rate) as usize,
@@ -816,6 +821,26 @@ impl Engine {
             end: end.max(0.0) as u64,
         };
         self.transport.set_loop(enabled.then_some(region));
+    }
+
+    /// Stop at `end` ticks and go back to `start`, when the loop is off: the
+    /// song's end, or the stretch the musician chose to play. An `end` at or
+    /// before `start` plays on for ever.
+    pub fn set_play_range(&mut self, start: f64, end: f64) {
+        let region = LoopRegion {
+            start: start.max(0.0) as u64,
+            end: end.max(0.0) as u64,
+        };
+        self.play_range = (region.end > region.start).then_some(region);
+    }
+
+    /// The play range to stop at: only when the loop is off, and never in an
+    /// offline render.
+    fn stop_at(&self) -> Option<LoopRegion> {
+        if self.transport.loop_region().is_some() || self.offline.is_some() {
+            return None;
+        }
+        self.play_range
     }
 
     /// Click on every beat while playing, higher on the first of each bar.
@@ -1922,6 +1947,7 @@ impl Engine {
         let loop_end = self
             .transport
             .loop_region()
+            .or(self.stop_at())
             .map(|r| r.end)
             .filter(|&end| end >= from);
         // Nothing plays at a Tempo Change or a breakpoint, but a segment
@@ -1951,6 +1977,14 @@ impl Engine {
         {
             self.transport.seek(region.start);
             self.rewind_to(region.start);
+            return;
+        }
+        // At the end of what Play plays, it stops, ready to play it again.
+        if let Some(range) = self.stop_at()
+            && tick == range.end
+        {
+            self.stop();
+            self.seek(range.start as f64);
             return;
         }
 

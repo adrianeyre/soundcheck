@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { EngineCommand, EngineReport } from "../audio/audio-output";
 import { BEAT_UNITS, barBeatTick, barsAt, formatPosition, secondsAt, signatureAt, type TempoMap, tickAtBars } from "../project/time";
 import { addTap, tappedTempo } from "./tap-tempo";
-import { MAX_TEMPO, MIN_TEMPO, type TransportSettings } from "./transport-settings";
+import { MAX_TEMPO, MIN_TEMPO, type PlayRange, type TransportSettings } from "./transport-settings";
 
 const POSITION_MS = 50;
 
@@ -16,6 +16,8 @@ export interface TransportBarProps {
   send: (command: EngineCommand) => void;
   /** The engine's latest report, or null when no audio is running. */
   readReport: () => EngineReport | null;
+  /** What Play plays: looped with Loop on, stopped at its end with it off. Without one, the loop region. */
+  range?: PlayRange;
 }
 
 /** A number of bars as the loop fields show it: whole, or to two places. */
@@ -24,7 +26,8 @@ function shown(bars: number): number {
 }
 
 /** Play/stop, tempo, time signature, loop, metronome and the position. */
-export function TransportBar({ settings, tempoMap, onChange, send, readReport }: TransportBarProps) {
+export function TransportBar({ settings, tempoMap, onChange, send, readReport, range: given }: TransportBarProps) {
+  const range = given ?? { start: settings.loopStart, end: settings.loopEnd, label: "Loop region" };
   const [report, setReport] = useState<EngineReport | null>(null);
   const [tempoText, setTempoText] = useState(String(settings.tempo));
   const [taps, setTaps] = useState<number[]>([]);
@@ -43,8 +46,10 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
   const beatsInBar = signatureAt(tempoMap, position).beatsPerBar;
   const seconds = secondsAt(tempoMap, Math.max(0, position));
   const clock = `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
-  const loopStartBar = barsAt(tempoMap, settings.loopStart);
-  const loopBars = barsAt(tempoMap, settings.loopEnd) - loopStartBar;
+  const loopStartBar = barsAt(tempoMap, range.start);
+  const loopBars = barsAt(tempoMap, range.end) - loopStartBar;
+  // Typing in the loop fields makes a region of its own, in place of the whole song or a Section.
+  const setRegion = (loopStart: number, loopEnd: number) => update({ loopStart, loopEnd, loopRegionSet: true });
 
   return (
     <fieldset className="toolbar-group" aria-label="Transport">
@@ -163,7 +168,7 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
             if (event.target.value !== "" && bars >= 1) {
               // The loop keeps its length in bars, wherever the bars are.
               const start = Math.round(tickAtBars(tempoMap, bars));
-              update({ loopStart: start, loopEnd: Math.round(tickAtBars(tempoMap, bars + loopBars)) });
+              setRegion(start, Math.round(tickAtBars(tempoMap, bars + Math.max(loopBars, 1))));
             }
           }}
         />
@@ -179,15 +184,26 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
           onChange={(event) => {
             const bars = Number(event.target.value);
             if (event.target.value !== "" && bars > 0) {
-              update({ loopEnd: Math.round(tickAtBars(tempoMap, loopStartBar + bars)) });
+              setRegion(Math.round(tickAtBars(tempoMap, loopStartBar)), Math.round(tickAtBars(tempoMap, loopStartBar + bars)));
             }
           }}
         />
       </label>
-      <output aria-label="Loop region" className="hint num">
-        {formatPosition(settings.loopStart, tempoMap)}–
-        {formatPosition(settings.loopEnd, tempoMap)}
+      <output aria-label="Plays" className="hint num">
+        {range.label}
+        {range.end > range.start && `: ${formatPosition(range.start, tempoMap)}–${formatPosition(range.end, tempoMap)}`}
+        {` · ${settings.loop ? "loops" : "stops at the end"}`}
       </output>
+      {settings.loopRegionSet && (
+        <button
+          type="button"
+          className="btn-sm"
+          title="Play the whole song again, not the loop region"
+          onClick={() => update({ loopRegionSet: false })}
+        >
+          Whole song
+        </button>
+      )}
       <label className="field-inline">
         <input
           type="checkbox"

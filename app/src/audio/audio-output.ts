@@ -157,6 +157,12 @@ export type EngineCommand =
    */
   | { type: "setAutomation"; target: number; setting: string; points: number[] }
   | { type: "setLoop"; startTick: number; endTick: number; enabled: boolean }
+  /**
+   * Where Play stops, going back to `startTick`, while the loop is off: the
+   * song's end, or the Section or ruler region chosen. An `endTick` at or
+   * before `startTick` plays on for ever.
+   */
+  | { type: "setPlayRange"; startTick: number; endTick: number }
   | { type: "setMetronome"; on: boolean }
   /**
    * A control of the Mixing page's DJ Mixer (ADR 0013): `name` of a Deck or

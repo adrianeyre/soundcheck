@@ -1293,3 +1293,57 @@ fn prepared_effects_move_in_and_out_of_a_chain() {
     }
     assert!(!engine.insert_effect(-1, 0, "eq"), "the chain is full");
 }
+
+/// Half a second is a beat at the default 120.
+const BEAT_FRAMES: usize = 24_000;
+
+#[test]
+fn with_the_loop_off_playback_stops_at_the_end_of_the_play_range_and_goes_back_to_its_start() {
+    let mut engine = Engine::new(RATE);
+    engine.set_play_range(BEAT, 3.0 * BEAT);
+    engine.seek(BEAT);
+    engine.play();
+    run_frames(&mut engine, BEAT_FRAMES);
+    assert!(engine.is_playing(), "still inside the range");
+    run_frames(&mut engine, BEAT_FRAMES + 1_000);
+    assert!(!engine.is_playing(), "stopped at its end");
+    assert_eq!(
+        engine.position(),
+        BEAT,
+        "back at its start, to play it again"
+    );
+}
+
+#[test]
+fn with_the_loop_on_the_range_loops_instead() {
+    let mut engine = Engine::new(RATE);
+    engine.set_play_range(0.0, 2.0 * BEAT);
+    engine.set_loop(0.0, 2.0 * BEAT, true);
+    engine.play();
+    run_frames(&mut engine, 3 * BEAT_FRAMES);
+    assert!(engine.is_playing());
+    assert!(
+        (engine.position() - BEAT).abs() < 1.0,
+        "a beat into its second time round"
+    );
+}
+
+#[test]
+fn an_empty_play_range_plays_on() {
+    let mut engine = Engine::new(RATE);
+    engine.set_play_range(0.0, 0.0);
+    engine.play();
+    run_frames(&mut engine, 3 * BEAT_FRAMES);
+    assert!(engine.is_playing());
+    assert!(engine.position() > 2.5 * BEAT);
+}
+
+#[test]
+fn an_offline_render_ignores_the_play_range() {
+    let mut engine = Engine::new(RATE);
+    engine.set_play_range(0.0, BEAT);
+    let frames = engine.start_render(0.0, 4.0 * BEAT, 0.0);
+    assert_eq!(frames, 4 * BEAT_FRAMES);
+    run_frames(&mut engine, 2 * BEAT_FRAMES);
+    assert!(engine.is_playing(), "the render plays on past the range");
+}

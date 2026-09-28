@@ -309,7 +309,7 @@ test("Clips are arranged on the timeline, and the ruler sets the loop region", a
   fireEvent.mouseDown(screen.getByLabelText("Ruler"), { clientX: 0 });
   fireEvent.mouseUp(window, { clientX: 4 * 96 });
   expect(output.send).toHaveBeenCalledWith({ type: "setLoop", startTick: 0, endTick: 4 * 3840, enabled: true });
-  expect(screen.getByLabelText("Loop region")).toHaveTextContent("1.1.000–5.1.000");
+  expect(screen.getByLabelText("Plays")).toHaveTextContent("Loop region: 1.1.000–5.1.000 · loops");
 
   click(/^Undo/);
   expect(tracks()[0]!.clips[0]!.start).toBe(0);
@@ -503,6 +503,17 @@ test("the computer keyboard plays into the engine, so it records like a MIDI key
   // The engine stamps and logs whatever reaches it, so playing is recording.
   expect(output.send).toHaveBeenCalledWith({ type: "noteOn", note: 60, velocity: 0.8 });
   expect(output.send).toHaveBeenCalledWith({ type: "noteOff", note: 60 });
+});
+
+test("playback stops at the end of the song, or loops it with Loop ticked", async () => {
+  const { output } = await ready();
+  click("Add Pattern Clip");
+  // A four-bar Clip is a four-bar song: Play stops there and goes back to the start.
+  await waitFor(() => expect(output.send).toHaveBeenCalledWith({ type: "setPlayRange", startTick: 0, endTick: 4 * BAR }));
+  expect(output.send).toHaveBeenCalledWith({ type: "setLoop", startTick: 0, endTick: 4 * BAR, enabled: false });
+  fireEvent.click(screen.getByRole("checkbox", { name: /Loop/ }));
+  expect(output.send).toHaveBeenLastCalledWith(expect.objectContaining({ type: "setMetronome" }));
+  expect(output.send).toHaveBeenCalledWith({ type: "setLoop", startTick: 0, endTick: 4 * BAR, enabled: true });
 });
 
 test("clicking a key or a drum wherever one is drawn plays it through the engine", async () => {

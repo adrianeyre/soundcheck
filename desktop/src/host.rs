@@ -461,6 +461,13 @@ impl Controller {
                 end: end_tick,
                 enabled,
             }),
+            EngineCommand::SetPlayRange {
+                start_tick,
+                end_tick,
+            } => self.push(RtCommand::SetPlayRange {
+                start: start_tick,
+                end: end_tick,
+            }),
             EngineCommand::SetMetronome { on } => self.push(RtCommand::SetMetronome(on)),
             EngineCommand::DjSet {
                 kind,
@@ -977,6 +984,7 @@ impl Renderer {
                 end,
                 enabled,
             } => engine.set_loop(start, end, enabled),
+            RtCommand::SetPlayRange { start, end } => engine.set_play_range(start, end),
             RtCommand::SetMetronome(on) => engine.set_metronome(on),
             RtCommand::Audition(file, gain) => {
                 if let Some(old) = self.audition.play(file, gain) {

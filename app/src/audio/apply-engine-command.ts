@@ -136,6 +136,8 @@ export function applyEngineCommand(engine: Engine, command: EngineCommand, plugi
       return engine.set_automation(command.target, command.setting, new Float64Array(command.points));
     case "setLoop":
       return engine.set_loop(command.startTick, command.endTick, command.enabled);
+    case "setPlayRange":
+      return engine.set_play_range(command.startTick, command.endTick);
     case "setMetronome":
       return engine.set_metronome(command.on);
     case "djSet":

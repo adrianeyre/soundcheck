@@ -250,6 +250,11 @@ pub enum EngineCommand {
         end_tick: f64,
         enabled: bool,
     },
+    /// Where Play stops, and goes back to, while the loop is off.
+    SetPlayRange {
+        start_tick: f64,
+        end_tick: f64,
+    },
     SetMetronome {
         on: bool,
     },
@@ -398,6 +403,10 @@ pub enum RtCommand {
         start: f64,
         end: f64,
         enabled: bool,
+    },
+    SetPlayRange {
+        start: f64,
+        end: f64,
     },
     SetMetronome(bool),
     /// Audition a file from the sample browser or the Reference Track,

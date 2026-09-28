@@ -250,6 +250,7 @@ pub fn offline_renderer(sample_rate: u32, commands: &[EngineCommand]) -> Rendere
                 | EngineCommand::Stop
                 | EngineCommand::Seek { .. }
                 | EngineCommand::SetLoop { .. }
+                | EngineCommand::SetPlayRange { .. }
                 | EngineCommand::SetMetronome { .. }
                 // The DJ Mixer is never in an export of the song (ADR 0013).
                 | EngineCommand::DjSet { .. }
