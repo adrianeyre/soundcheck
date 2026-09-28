@@ -119,6 +119,56 @@ fn audio_audition_reference(app: State<'_, App>, bytes: Vec<u8>, gain: f32) -> R
     }
 }
 
+/// Put a file on a Deck of the Mixing page's DJ Mixer (ADR 0013). It is
+/// decoded and analysed here, outside the lock and off the audio thread;
+/// what is wrong with it comes back as the error. Answers its BPM, Beat
+/// Grid, key and waveform, as JSON.
+#[tauri::command]
+fn dj_load(app: State<'_, App>, deck: usize, bytes: Vec<u8>) -> Result<String, String> {
+    let rate = match lock(&app.audio).as_ref() {
+        Some(output) => output.controller.sample_rate(),
+        None => return Err("Start audio to load a Deck".into()),
+    };
+    let prepared = soundcheck_engine::PreparedDjTrack::decode(&bytes, rate)
+        .map_err(|error| format!("The file can't be loaded: {}", error.message()))?;
+    match lock(&app.audio).as_mut() {
+        Some(output) if output.controller.sample_rate() == rate => {
+            Ok(output.controller.dj_put(deck, prepared))
+        }
+        _ => Err("The audio stopped while the file was loading".into()),
+    }
+}
+
+#[tauri::command]
+fn dj_unload(app: State<'_, App>, deck: usize) {
+    if let Some(output) = lock(&app.audio).as_mut() {
+        output.controller.dj_unload(deck);
+    }
+}
+
+/// The DJ mix recorded since the last call: interleaved stereo 32-bit
+/// floats, little-endian, as raw bytes.
+#[tauri::command]
+fn dj_recording_take(app: State<'_, App>) -> tauri::ipc::Response {
+    let samples = lock(&app.audio)
+        .as_mut()
+        .map(|output| output.controller.take_dj_recording())
+        .unwrap_or_default();
+    tauri::ipc::Response::new(
+        samples
+            .iter()
+            .flat_map(|s| s.to_le_bytes())
+            .collect::<Vec<u8>>(),
+    )
+}
+
+/// Write a recording of the DJ mix, which the UI encoded, where the DJ
+/// chose with `export_choose_file`.
+#[tauri::command]
+fn dj_save_recording(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&path, bytes).map_err(|error| format!("{path} couldn't be written: {error}"))
+}
+
 #[tauri::command]
 fn audio_audition_stop(app: State<'_, App>) {
     if let Some(output) = lock(&app.audio).as_mut() {
@@ -784,6 +834,10 @@ pub fn run() {
             audio_audition,
             audio_audition_reference,
             audio_audition_stop,
+            dj_load,
+            dj_unload,
+            dj_recording_take,
+            dj_save_recording,
             audio_input_devices,
             audio_input_open,
             audio_input_levels,

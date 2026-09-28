@@ -138,5 +138,8 @@ export function applyEngineCommand(engine: Engine, command: EngineCommand, plugi
       return engine.set_loop(command.startTick, command.endTick, command.enabled);
     case "setMetronome":
       return engine.set_metronome(command.on);
+    case "djSet":
+      engine.dj_set(command.kind, command.index, command.name, command.value);
+      return;
   }
 }

@@ -1,4 +1,4 @@
-import { Award, Cookie, LayoutGrid, Music, PersonStanding, RotateCcw, Settings } from "lucide-react";
+import { Award, Cookie, Disc3, LayoutGrid, Music, PersonStanding, RotateCcw, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { renderOffline } from "./audio/offline-render";
@@ -23,11 +23,13 @@ import type { MenuItem } from "./ui/Menu";
 /** The dialogs about the app itself. */
 type Policy = "cookies" | "accessibility" | "credits";
 
-const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", settings: "Settings" };
+const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixing", settings: "Settings" };
 
 /** The page the address asks for, so Settings can be linked to directly. */
 function viewFromHash(): SongView {
-  return typeof location !== "undefined" && location.hash === "#settings" ? "settings" : "editor";
+  if (typeof location === "undefined") return "editor";
+  if (location.hash === "#settings") return "settings";
+  return location.hash === "#mixing" ? "mixing" : "editor";
 }
 
 export function App() {
@@ -90,6 +92,14 @@ export function App() {
       icon: <Music size={16} />,
       checked: view === "editor",
       onSelect: () => go("editor"),
+    },
+    {
+      kind: "choice",
+      id: "mixing",
+      label: "Mixing",
+      icon: <Disc3 size={16} />,
+      checked: view === "mixing",
+      onSelect: () => go("mixing"),
     },
     {
       kind: "choice",
@@ -180,7 +190,13 @@ export function App() {
               ariaLabel: `Menu, ${VIEW_NAMES[view]}`,
               label: (
                 <>
-                  {view === "editor" ? <Music size={16} aria-hidden /> : <Settings size={16} aria-hidden />}
+                  {view === "editor" ? (
+                    <Music size={16} aria-hidden />
+                  ) : view === "mixing" ? (
+                    <Disc3 size={16} aria-hidden />
+                  ) : (
+                    <Settings size={16} aria-hidden />
+                  )}
                   {VIEW_NAMES[view]}
                 </>
               ),
@@ -196,6 +212,7 @@ export function App() {
             openMidi={platform.openMidi}
             storage={platform.storage}
             exporter={platform.exporter}
+            djRecordings={platform.djRecordings}
             stems={platform.stems}
             updater={platform.updater}
             keyStore={platform.keyStore}

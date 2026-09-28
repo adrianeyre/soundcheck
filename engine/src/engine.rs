@@ -28,6 +28,7 @@ use crate::audio_clip::{AudioClip, AudioClips};
 use crate::audio_file::{AudioFile, AudioFileError};
 use crate::automation::{Automatable, Automation, Line};
 use crate::bus::{Bus, BusSend, MAX_BUSES, Output, add_following, add_scaled};
+use crate::dj::{DJ_REPORT_LEN, DjControl, DjMixer, DjTrack};
 use crate::effect::{Effect, EffectKind, InsertChain};
 use crate::instrument::{
     DrumSampler, Instrument, MAX_PADS, PadSettings, PluginInstrument, Sample, SynthSettings,
@@ -130,6 +131,10 @@ pub struct Engine {
     /// The audio files Audio Clips play, decoded, by the number the host
     /// gave each. A native host keeps its own and hands clips in ready-made.
     audio_files: HashMap<u32, Arc<AudioFile>>,
+    /// The Mixing page's DJ Mixer (ADR 0013), once it is first used: added
+    /// to the output after the song's Master is metered, so no meter,
+    /// analysis or export of the song hears it.
+    dj: Option<Box<DjMixer>>,
 }
 
 #[wasm_bindgen]
@@ -166,6 +171,7 @@ impl Engine {
             isolate: None,
             offline: None,
             audio_files: HashMap::new(),
+            dj: None,
         }
     }
 
@@ -217,7 +223,8 @@ impl Engine {
     /// Add an Effect, with its default settings, to an Insert Chain at
     /// `index`, or at the end when `index` is past it. `chain` is a Track's
     /// index, -1 for the Master, or -2 - b for Bus b (see `bus_chain`).
-    /// `kind` is "eq", "compressor", "reverb" or "delay". Answers whether it
+    /// `kind` is one of `EffectKind`'s names, such as "eq" or "limiter".
+    /// Answers whether it
     /// happened: an unknown kind, a Track that doesn't exist, or a full chain
     /// changes nothing.
     pub fn insert_effect(&mut self, chain: i32, index: usize, kind: &str) -> bool {
@@ -957,6 +964,79 @@ impl Engine {
             meter = meter.max(sample.abs());
         }
         self.master_meter = meter;
+        self.render_dj(frames);
+    }
+
+    /// Put a file on a Deck of the DJ Mixer from its samples, already at the
+    /// engine's rate and analysed (`dj_prepare`), so the audio thread only
+    /// copies them.
+    pub fn dj_load_samples(
+        &mut self,
+        deck: usize,
+        left: Vec<f32>,
+        right: Vec<f32>,
+        bpm: f64,
+        first_beat: f64,
+    ) {
+        let frames = left.len().min(right.len());
+        let (mut left, mut right) = (left, right);
+        left.truncate(frames);
+        right.truncate(frames);
+        let file = PreparedAudioFile::from_file(AudioFile::from_samples(left, right));
+        let track = DjTrack {
+            file,
+            bpm,
+            first_beat,
+        };
+        self.swap_dj_track(deck, Some(track));
+    }
+
+    /// Take the file off a Deck.
+    pub fn dj_unload(&mut self, deck: usize) {
+        self.swap_dj_track(deck, None);
+    }
+
+    /// Set the DJ Mixer's control `name` of a `kind` ("deck", "channel" or
+    /// "mixer"), numbered by `index`, to `value`. Answers whether there is
+    /// such a control.
+    pub fn dj_set(&mut self, kind: &str, index: usize, name: &str, value: f64) -> bool {
+        let Some(control) = DjControl::parse(kind, index, name) else {
+            return false;
+        };
+        self.dj_apply(control, value);
+        true
+    }
+
+    /// Where everything on the Mixing page is, as `app/src/dj/dj-report.ts`
+    /// reads it.
+    pub fn dj_report(&self) -> Vec<f64> {
+        let mut out = vec![0.0; DJ_REPORT_LEN];
+        self.dj_report_into(&mut out);
+        out
+    }
+
+    /// Where the last block's headphone cue starts in the engine's memory,
+    /// left side; null before the DJ Mixer is used.
+    pub fn dj_headphone_left_ptr(&self) -> *const f32 {
+        self.dj_headphones()
+            .map_or(std::ptr::null(), |(left, _)| left.as_ptr())
+    }
+
+    pub fn dj_headphone_right_ptr(&self) -> *const f32 {
+        self.dj_headphones()
+            .map_or(std::ptr::null(), |(_, right)| right.as_ptr())
+    }
+
+    /// The DJ mix recorded since the last call, interleaved stereo.
+    pub fn dj_take_recording(&mut self) -> Vec<f32> {
+        match &mut self.dj {
+            Some(dj) => {
+                let taken = dj.recorded().to_vec();
+                dj.clear_recorded();
+                taken
+            }
+            None => Vec::new(),
+        }
     }
 
     /// Render from `start` to `end` ticks without an audio device, as fast as
@@ -1025,8 +1105,8 @@ impl PreparedEffect {
         Self(Box::new(Effect::new(kind, sample_rate)))
     }
 
-    /// The Effect the UI names ("eq", "compressor", "reverb" or "delay"), or
-    /// `None` for a name there is no Effect for.
+    /// The Effect the UI names (one of `EffectKind`'s names, such as "eq"),
+    /// or `None` for a name there is no Effect for.
     pub fn named(kind: &str, sample_rate: f32) -> Option<Self> {
         EffectKind::named(kind).map(|kind| Self::new(kind, sample_rate))
     }
@@ -1142,6 +1222,11 @@ impl PreparedAudioFile {
         AudioFile::decode(bytes, sample_rate).map(|file| Self(Arc::new(file)))
     }
 
+    /// A file already decoded and at the engine's rate.
+    pub(crate) fn from_file(file: AudioFile) -> Self {
+        Self(Arc::new(file))
+    }
+
     /// The left side, at the engine's rate; a mono file has it on both.
     pub fn left(&self) -> &[f32] {
         self.0.left()
@@ -1227,6 +1312,92 @@ impl Engine {
     /// `MAX_TRACKS`, so that nothing after this allocates. Call it before
     /// the audio thread takes the Engine; afterwards, render at most
     /// `max_frames` at a time.
+    /// Give the Engine a DJ Mixer built off the audio thread, if it has
+    /// none; the one handed back, if any, is to be dropped there.
+    pub fn install_dj(&mut self, dj: Box<DjMixer>) -> Option<Box<DjMixer>> {
+        if self.dj.is_some() {
+            return Some(dj);
+        }
+        self.dj = Some(dj);
+        None
+    }
+
+    pub fn has_dj(&self) -> bool {
+        self.dj.is_some()
+    }
+
+    /// Put a prepared file on a Deck, or take it off with None, handing
+    /// back the one it replaces. Without a DJ Mixer the file comes back.
+    pub fn swap_dj_track(&mut self, deck: usize, track: Option<DjTrack>) -> Option<DjTrack> {
+        match &mut self.dj {
+            Some(dj) => dj.load(deck, track),
+            None if cfg!(target_arch = "wasm32") || track.is_none() => {
+                // The worklet builds its mixer on first use.
+                track.as_ref()?;
+                let mut dj = Box::new(DjMixer::new(self.sample_rate));
+                let back = dj.load(deck, track);
+                self.dj = Some(dj);
+                back
+            }
+            None => track,
+        }
+    }
+
+    /// Set a DJ Mixer control. Allocates nothing on a native host, which
+    /// installs the mixer first; the browser builds it on first use.
+    pub fn dj_apply(&mut self, control: DjControl, value: f64) {
+        if self.dj.is_none() {
+            if !cfg!(target_arch = "wasm32") {
+                return;
+            }
+            self.dj = Some(Box::new(DjMixer::new(self.sample_rate)));
+        }
+        if let Some(dj) = &mut self.dj {
+            dj.apply(control, value);
+        }
+    }
+
+    /// `dj_report` into `out`, which holds at least `DJ_REPORT_LEN`: all
+    /// zeros before the mixer is first used.
+    pub fn dj_report_into(&self, out: &mut [f64]) {
+        match &self.dj {
+            Some(dj) => dj.report(out),
+            None => out.iter_mut().for_each(|value| *value = 0.0),
+        }
+    }
+
+    /// The DJ mix recorded since the last `dj_clear_recorded`, interleaved.
+    pub fn dj_recorded(&self) -> &[f32] {
+        self.dj.as_ref().map_or(&[], |dj| dj.recorded())
+    }
+
+    pub fn dj_clear_recorded(&mut self) {
+        if let Some(dj) = &mut self.dj {
+            dj.clear_recorded();
+        }
+    }
+
+    /// The last block's headphone mix, or None before the mixer is used.
+    pub fn dj_headphones(&self) -> Option<(&[f32], &[f32])> {
+        self.dj.as_ref().map(|dj| dj.headphones())
+    }
+
+    /// Add the DJ Mixer's next block to the output, after the song's Master
+    /// has been metered.
+    fn render_dj(&mut self, frames: usize) {
+        let Some(dj) = &mut self.dj else {
+            return;
+        };
+        dj.render(frames);
+        let (left, right) = dj.output();
+        for (out, s) in self.left[..frames].iter_mut().zip(&left[..frames]) {
+            *out = (*out + s).clamp(-1.0, 1.0);
+        }
+        for (out, s) in self.right[..frames].iter_mut().zip(&right[..frames]) {
+            *out = (*out + s).clamp(-1.0, 1.0);
+        }
+    }
+
     pub fn prepare(&mut self, max_frames: usize) {
         self.tracks.reserve_exact(MAX_TRACKS - self.tracks.len());
         self.buses.reserve_exact(MAX_BUSES - self.buses.len());
@@ -1241,6 +1412,9 @@ impl Engine {
             self.ticks.resize(max_frames, 0.0);
             self.post_left.resize(max_frames, 0.0);
             self.post_right.resize(max_frames, 0.0);
+        }
+        if let Some(dj) = &mut self.dj {
+            dj.prepare(max_frames);
         }
         self.live.prepare(max_frames);
         self.master_chain.prepare(max_frames);

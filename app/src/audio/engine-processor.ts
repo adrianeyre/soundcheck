@@ -26,6 +26,20 @@ declare function registerProcessor(
   processor: new (options: { processorOptions: ProcessorOptions }) => AudioWorkletProcessor,
 ): void;
 
+/**
+ * A file for a Deck of the DJ Mixer, decoded and analysed on the page's
+ * thread (`dj_prepare`), so the audio thread only copies it in; or, with
+ * no samples, the Deck emptied.
+ */
+export interface DjLoadMessage {
+  type: "djLoad";
+  deck: number;
+  left: Float32Array | null;
+  right: Float32Array | null;
+  bpm: number;
+  firstBeat: number;
+}
+
 export interface ProcessorOptions {
   module: WebAssembly.Module;
   trackCount: number;
@@ -38,7 +52,14 @@ export interface ProcessorOptions {
  */
 export type ProcessorMessage =
   | { type: "ready" }
-  | ({ type: "report"; meters: Meters; recorded: Float64Array } & EngineReport);
+  | ({
+      type: "report";
+      meters: Meters;
+      recorded: Float64Array;
+      /** The DJ Mixer's report and recording, once it is in use. */
+      dj: Float64Array | null;
+      djRecording: Float32Array | null;
+    } & EngineReport);
 
 // Often enough for a position readout to move smoothly.
 const REPORT_SECONDS = 0.05;
@@ -47,6 +68,8 @@ class EngineProcessor extends AudioWorkletProcessor {
   #engine: Engine;
   #memory: WebAssembly.Memory;
   #framesSinceReport = 0;
+  /** Whether the DJ Mixer has been used, so there is something of it to report. */
+  #djInUse = false;
   // Views onto the engine's output buffers. Rebuilt only when WASM memory
   // grows or the block size changes, so a normal block allocates nothing.
   #views: { buffer: ArrayBuffer; frames: number; left: Float32Array; right: Float32Array } | null =
@@ -60,9 +83,20 @@ class EngineProcessor extends AudioWorkletProcessor {
     // Plugins are compiled here, synchronously, as `loadPlugin` brings them:
     // the worklet scope can't wait for a promise mid-stream.
     const plugins = new WasmPluginHost(sampleRate);
-    this.port.addEventListener("message", (event: MessageEvent<EngineCommand>) =>
-      applyEngineCommand(this.#engine, event.data, plugins),
-    );
+    this.port.addEventListener("message", (event: MessageEvent<EngineCommand | DjLoadMessage>) => {
+      const message = event.data;
+      if (message.type === "djLoad") {
+        this.#djInUse = true;
+        if (message.left && message.right) {
+          this.#engine.dj_load_samples(message.deck, message.left, message.right, message.bpm, message.firstBeat);
+        } else {
+          this.#engine.dj_unload(message.deck);
+        }
+        return;
+      }
+      if (message.type === "djSet") this.#djInUse = true;
+      applyEngineCommand(this.#engine, message, plugins);
+    });
     this.port.start();
     this.#post({ type: "ready" });
   }
@@ -76,6 +110,17 @@ class EngineProcessor extends AudioWorkletProcessor {
     const views = this.#outputViews(frames);
     left.set(views.left);
     right.set(views.right);
+    // The DJ Mixer's headphone cue goes out of outputs 3 and 4, where the
+    // device has them, as on the desktop (ADR 0013).
+    const [, , cueLeft, cueRight] = outputs[0] ?? [];
+    if (cueLeft && cueRight && this.#djInUse) {
+      const at = this.#engine.dj_headphone_left_ptr();
+      if (at !== 0) {
+        const buffer = this.#memory.buffer;
+        cueLeft.set(new Float32Array(buffer, at, frames));
+        cueRight.set(new Float32Array(buffer, this.#engine.dj_headphone_right_ptr(), frames));
+      }
+    }
 
     this.#framesSinceReport += frames;
     if (this.#framesSinceReport >= REPORT_SECONDS * sampleRate) {
@@ -94,6 +139,8 @@ class EngineProcessor extends AudioWorkletProcessor {
           gainReduction: readGainReduction(this.#engine),
         },
         recorded: this.#engine.take_recorded_notes(),
+        dj: this.#djInUse ? this.#engine.dj_report() : null,
+        djRecording: this.#djInUse ? this.#engine.dj_take_recording() : null,
       });
     }
     return true;

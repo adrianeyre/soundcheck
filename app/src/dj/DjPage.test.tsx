@@ -1,0 +1,184 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+
+import { initSync } from "@engine";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
+
+import type { AudioOutput, DjAnalysis, EngineCommand } from "../audio/audio-output";
+import { DjPage } from "./DjPage";
+import { DECK_FIELDS, DJ_REPORT_LEN, GLOBAL_FIELDS } from "./dj-report";
+import type { DjRecordingSaver } from "./recording-saver";
+
+beforeAll(() => {
+  // The page encodes a recording with the engine's own writer.
+  initSync({ module: readFileSync(resolvePath(import.meta.dirname, "../../../engine/pkg/soundcheck_engine_bg.wasm")) });
+});
+
+afterEach(cleanup);
+
+const ANALYSIS: DjAnalysis = {
+  seconds: 180,
+  bpm: 124,
+  firstBeat: 0.1,
+  key: { tonic: 9, minor: true },
+  waveformRate: 100,
+  waveform: Array.from({ length: 18_000 * 4 }, (_, i) => (i % 4) / 8),
+};
+
+function fakeOutput() {
+  const sent: EngineCommand[] = [];
+  const report: number[] = Array.from({ length: DJ_REPORT_LEN }, () => 0);
+  const load = vi.fn<(deck: number, bytes: Uint8Array) => Promise<DjAnalysis>>(async (deck) => {
+    const at = GLOBAL_FIELDS + deck * DECK_FIELDS;
+    report[at] = 1;
+    report[at + 3] = ANALYSIS.seconds;
+    report[at + 4] = ANALYSIS.bpm;
+    report[at + 5] = ANALYSIS.bpm;
+    report[at + 6] = 1;
+    report[at + 21] = 1;
+    return ANALYSIS;
+  });
+  const takeRecording = vi.fn<() => Promise<Float32Array>>(async () => new Float32Array([0.1, 0.1, 0.2, 0.2]));
+  const output: AudioOutput = {
+    send: (command) => sent.push(command),
+    stats: () => ({
+      host: "Fake",
+      sampleRate: 48_000,
+      blockFrames: 128,
+      requestedBufferFrames: null,
+      baseLatency: 0,
+      outputLatency: null,
+      underruns: null,
+      callbacks: null,
+      engine: null,
+      meters: null,
+      dj: report,
+    }),
+    currentTime: () => 0,
+    takeRecordedNotes: () => [],
+    resetCounters: () => {},
+    close: async () => {},
+    dj: { load, unload: () => {}, takeRecording, headphones: false },
+  };
+  const dj = (name: string) => sent.filter((c) => c.type === "djSet" && c.name === name);
+  return { output, sent, report, load, takeRecording, dj };
+}
+
+function saver() {
+  const save = vi.fn<DjRecordingSaver["save"]>(async (name, kind) => `${name}.${kind}`);
+  return { save };
+}
+
+async function loadDeckOne(fake: ReturnType<typeof fakeOutput>) {
+  const input = screen.getByLabelText("Load a file onto Deck 1");
+  const file = new File([new Uint8Array([1, 2, 3])], "Night Drive.mp3", { type: "audio/mpeg" });
+  fireEvent.change(input, { target: { files: [file] } });
+  await waitFor(() => expect(fake.load).toHaveBeenCalled());
+  await screen.findAllByText("Night Drive");
+}
+
+test("a new output is told every knob, and a file loads onto a Deck with its BPM and key", async () => {
+  const fake = fakeOutput();
+  render(<DjPage output={fake.output} active saver={saver()} />);
+  expect(fake.dj("crossfader")).toHaveLength(1);
+  expect(fake.dj("assign")).toHaveLength(4);
+
+  await loadDeckOne(fake);
+  expect(fake.load.mock.calls[0]![0]).toBe(0);
+  const deck = screen.getByRole("region", { name: "Deck 1" });
+  await waitFor(() => expect(within(deck).getByText("124.00", { selector: ".dj-bpm" })).toBeInTheDocument());
+  expect(within(deck).getByText("Am · 8A")).toBeInTheDocument();
+  expect(within(deck).getByRole("slider", { name: "Deck 1 needle search" })).toBeInTheDocument();
+  // And the Track browser has it, analysed.
+  const browser = screen.getByRole("region", { name: "Track browser" });
+  expect(within(browser).getByText("124.00")).toBeInTheDocument();
+});
+
+test("the Deck's controls and the keyboard reach the engine", async () => {
+  const fake = fakeOutput();
+  render(<DjPage output={fake.output} active saver={saver()} />);
+  await loadDeckOne(fake);
+  const deck = screen.getByRole("region", { name: "Deck 1" });
+
+  fireEvent.click(await within(deck).findByRole("button", { name: "Play Deck 1" }));
+  expect(fake.dj("play").at(-1)).toMatchObject({ index: 0, value: 1 });
+
+  const cue = within(deck).getByRole("button", { name: "Deck 1 cue" });
+  fireEvent.pointerDown(cue);
+  fireEvent.pointerUp(cue);
+  expect(fake.dj("cueDown")).toHaveLength(1);
+  expect(fake.dj("cueUp")).toHaveLength(1);
+
+  fireEvent.click(within(deck).getByRole("button", { name: "Loop" }));
+  expect(fake.dj("autoLoop").at(-1)).toMatchObject({ value: 4 });
+  fireEvent.click(within(deck).getByRole("button", { name: "Deck 1 jump forward 4 beats" }));
+  expect(fake.dj("beatJump").at(-1)).toMatchObject({ value: 4 });
+  fireEvent.click(within(deck).getByRole("button", { name: /^BEAT SYNC/ }));
+  expect(fake.dj("sync").at(-1)).toMatchObject({ value: 1 });
+
+  fireEvent.click(within(deck).getByRole("button", { name: "Set Hot Cue A" }));
+  expect(within(deck).getByRole("button", { name: /Jump to Hot Cue A/ })).toBeInTheDocument();
+
+  const jog = within(deck).getByRole("group", { name: /Deck 1 jog wheel/ });
+  fireEvent.keyDown(jog, { key: "ArrowRight" });
+  fireEvent.keyUp(jog, { key: "ArrowRight" });
+  expect(fake.dj("bend").map((c) => (c as { value: number }).value)).toEqual([0.04, 0]);
+
+  // W plays Deck 1 from the keyboard, and Q is its Cue.
+  fireEvent.keyDown(window, { code: "KeyW" });
+  expect(fake.dj("play")).toHaveLength(2);
+  fireEvent.keyDown(window, { code: "KeyQ" });
+  fireEvent.keyUp(window, { code: "KeyQ" });
+  expect(fake.dj("cueDown")).toHaveLength(2);
+});
+
+test("the mixer's knobs and faders reach the engine, by mouse or keys", () => {
+  const fake = fakeOutput();
+  render(<DjPage output={fake.output} active saver={saver()} />);
+  const mixer = screen.getByRole("region", { name: "Mixer" });
+  const high = within(mixer).getByRole("slider", { name: "Channel 1 high EQ" });
+  fireEvent.keyDown(high, { key: "ArrowDown" });
+  expect(fake.dj("eqHigh").at(-1)).toMatchObject({ index: 0, value: -0.5 });
+  fireEvent.click(within(mixer).getByRole("button", { name: "Kill Channel 2 low" }));
+  expect(fake.dj("eqLow").at(-1)).toMatchObject({ index: 1, value: -26 });
+  fireEvent.change(within(mixer).getByRole("slider", { name: "Crossfader" }), { target: { value: "-0.5" } });
+  expect(fake.dj("crossfader").at(-1)).toMatchObject({ value: -0.5 });
+  fireEvent.click(within(mixer).getByRole("radio", { name: "Dub Echo" }));
+  expect(fake.dj("colourType").at(-1)).toMatchObject({ value: 1 });
+  fireEvent.change(within(mixer).getByRole("combobox", { name: "Beat FX" }), { target: { value: "5" } });
+  fireEvent.click(within(mixer).getByRole("button", { name: "ON" }));
+  expect(fake.dj("beatFxType").at(-1)).toMatchObject({ value: 5 });
+  expect(fake.dj("beatFxOn").at(-1)).toMatchObject({ value: 1 });
+  expect(within(mixer).getByRole("meter", { name: "Channel 1 level" })).toBeInTheDocument();
+  // Only the knob that moved was sent.
+  expect(fake.dj("eqHigh")).toHaveLength(4 + 1);
+});
+
+test("a recording of the mix is encoded and saved", async () => {
+  const fake = fakeOutput();
+  const { save } = saver();
+  render(<DjPage output={fake.output} active saver={{ save }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Record the mix" }));
+  expect(fake.dj("record").at(-1)).toMatchObject({ value: 1 });
+  // The engine says it is recording.
+  fake.report[5] = 1;
+  await act(() => new Promise((resolve) => setTimeout(resolve, 60)));
+  fireEvent.click(screen.getByRole("button", { name: "Stop and save" }));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  const [name, kind, bytes] = save.mock.calls[0]!;
+  expect(name).toMatch(/^Mix /);
+  expect(kind).toBe("wav");
+  expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF");
+  expect(await screen.findByText(/Recording saved/)).toBeInTheDocument();
+});
+
+test("without audio the page offers to start it", () => {
+  const onStart = vi.fn<() => void>();
+  render(<DjPage output={null} onStart={onStart} active saver={saver()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Start audio for mixing" }));
+  expect(onStart).toHaveBeenCalled();
+  expect(screen.getAllByText("Start audio to load a Deck.")).toHaveLength(2);
+});

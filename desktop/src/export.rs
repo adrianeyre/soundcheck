@@ -251,6 +251,8 @@ pub fn offline_renderer(sample_rate: u32, commands: &[EngineCommand]) -> Rendere
                 | EngineCommand::Seek { .. }
                 | EngineCommand::SetLoop { .. }
                 | EngineCommand::SetMetronome { .. }
+                // The DJ Mixer is never in an export of the song (ADR 0013).
+                | EngineCommand::DjSet { .. }
         )
     });
     offline(sample_rate as f32, about_the_project.cloned())

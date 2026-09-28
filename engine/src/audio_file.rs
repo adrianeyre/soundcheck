@@ -152,6 +152,12 @@ impl AudioFile {
         }
     }
 
+    /// Samples already at the engine's rate, both sides the same length.
+    pub fn from_samples(left: Vec<f32>, right: Vec<f32>) -> Self {
+        debug_assert_eq!(left.len(), right.len());
+        Self { left, right }
+    }
+
     /// Frames at the engine's rate.
     pub fn frames(&self) -> usize {
         self.left.len()

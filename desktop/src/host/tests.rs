@@ -1182,3 +1182,80 @@ fn a_missing_plugin_instrument_is_silent_and_sounds_right_once_installed() {
     assert_eq!(installed, play(&mut offline(RATE, loaded), 24_576, 256));
     assert!(peak(&installed) > 0.05);
 }
+
+fn dj(kind: &str, index: usize, name: &str, value: f64) -> EngineCommand {
+    EngineCommand::DjSet {
+        kind: kind.into(),
+        index,
+        name: name.into(),
+        value,
+    }
+}
+
+#[test]
+fn a_deck_plays_through_the_queues_its_headphone_cue_goes_to_outputs_3_and_4_and_it_records() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let wav = soundcheck_engine_test_wav();
+    let prepared = PreparedDjTrack::decode(&wav, RATE).unwrap();
+    let analysis = controller.dj_put(0, prepared);
+    assert!(analysis.starts_with(r#"{"seconds":"#));
+    controller.send(dj("deck", 0, "play", 1.0));
+    controller.send(dj("channel", 0, "cue", 1.0));
+    controller.send(dj("mixer", 0, "record", 1.0));
+    let mut buffer = vec![0.0; 256 * 4];
+    renderer.process(&mut buffer, 4);
+    renderer.process(&mut buffer, 4);
+    let main: Vec<f32> = buffer.iter().step_by(4).copied().collect();
+    let cue: Vec<f32> = buffer.iter().skip(2).step_by(4).copied().collect();
+    assert!(peak(&main) > 0.1, "the mix is heard");
+    assert!(peak(&cue) > 0.1, "and cued in the headphones");
+    let measured = controller.stats().snapshot();
+    let report = measured.dj.expect("the DJ Mixer reports once in use");
+    assert_eq!(
+        report[soundcheck_engine::GLOBAL_FIELDS + 1],
+        1.0,
+        "Deck 1 is playing"
+    );
+    assert_eq!(controller.take_dj_recording().len(), 2 * 512);
+    // The song's own meter never hears it.
+    assert_eq!(measured.meters.master, 0.0);
+}
+
+#[test]
+fn an_unknown_dj_control_is_nothing_to_send() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    controller.send(dj("deck", 9, "play", 1.0));
+    controller.send(dj("mixer", 0, "volume", 1.0));
+    play(&mut renderer, 256, 256);
+    assert!(
+        controller.stats().snapshot().dj.is_none(),
+        "no mixer was built"
+    );
+}
+
+/// Half a second of a loud 220 Hz tone, as a 16-bit WAV.
+fn soundcheck_engine_test_wav() -> Vec<u8> {
+    let tone: Vec<i16> = (0..24_000)
+        .map(|i| ((i as f32 * 220.0 * std::f32::consts::TAU / RATE).sin() * 16_000.0) as i16)
+        .collect();
+    let data: Vec<u8> = tone
+        .iter()
+        .flat_map(|s| [*s, *s])
+        .flat_map(i16::to_le_bytes)
+        .collect();
+    let mut out = Vec::new();
+    out.extend(b"RIFF");
+    out.extend((36 + data.len() as u32).to_le_bytes());
+    out.extend(b"WAVEfmt ");
+    out.extend(16u32.to_le_bytes());
+    out.extend(1u16.to_le_bytes());
+    out.extend(2u16.to_le_bytes());
+    out.extend((RATE as u32).to_le_bytes());
+    out.extend((RATE as u32 * 4).to_le_bytes());
+    out.extend(4u16.to_le_bytes());
+    out.extend(16u16.to_le_bytes());
+    out.extend(b"data");
+    out.extend((data.len() as u32).to_le_bytes());
+    out.extend(data);
+    out
+}
