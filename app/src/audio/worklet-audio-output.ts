@@ -5,17 +5,20 @@
 // The raw module: compiled here and handed to the worklet, which can't fetch.
 import wasmUrl from "../../../engine/pkg/soundcheck_engine_bg.wasm?url";
 
+import init, { dj_prepare } from "@engine";
+
 import type {
   AudioOutput,
   AudioOutputOptions,
   AudioOutputStats,
+  DjAnalysis,
   EngineCommand,
   EngineReport,
   Meters,
   RecordedNoteEvent,
   UnderrunStats,
 } from "./audio-output";
-import type { ProcessorMessage, ProcessorOptions } from "./engine-processor";
+import type { DjLoadMessage, ProcessorMessage, ProcessorOptions } from "./engine-processor";
 // Vite bundles the processor and gives back its URL; oxlint can't see that.
 // oxlint-disable-next-line import/default
 import processorUrl from "./engine-processor.ts?worker&url";
@@ -64,16 +67,27 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
     ]);
 
     const processorOptions: ProcessorOptions = { module, trackCount: options.trackCount };
+    // Four channels where the device has them, so the DJ Mixer's headphone
+    // cue can go out of outputs 3 and 4 (ADR 0013); two otherwise.
+    const channels = context.destination.maxChannelCount >= 4 ? 4 : 2;
+    if (channels === 4) {
+      context.destination.channelCount = 4;
+      context.destination.channelCountMode = "explicit";
+      context.destination.channelInterpretation = "discrete";
+    }
     const node = new AudioWorkletNode(context, "engine", {
       numberOfInputs: 0,
       numberOfOutputs: 1,
-      outputChannelCount: [2],
+      outputChannelCount: [channels],
+      channelInterpretation: "discrete",
       processorOptions,
     });
 
     let engine: EngineReport | null = null;
     let meters: Meters | null = null;
     let recorded: RecordedNoteEvent[] = [];
+    let dj: number[] | null = null;
+    let djRecording: Float32Array[] = [];
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(
         () => reject(new Error("The Audio Engine didn't start in the AudioWorklet")),
@@ -89,9 +103,11 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
           clearTimeout(timeout);
           resolve();
         } else {
-          const { type: _, meters: latest, recorded: played, ...report } = message;
+          const { type: _, meters: latest, recorded: played, dj: mixer, djRecording: mix, ...report } = message;
           engine = report;
           meters = latest;
+          if (mixer) dj = Array.from(mixer);
+          if (mix && mix.length > 0) djRecording.push(mix);
           if (played.length > 0) recorded = recorded.concat(recordedNotes(played));
         }
       });
@@ -133,6 +149,7 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
           callbacks: null,
           engine,
           meters,
+          dj,
         };
       },
 
@@ -154,6 +171,49 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
       async close() {
         node.disconnect();
         await context.close();
+      },
+
+      dj: {
+        async load(deck: number, bytes: Uint8Array): Promise<DjAnalysis> {
+          // Decoding and analysing a whole track would stall the audio
+          // thread, so the page's own copy of the engine does it (ADR 0013).
+          await init({ module_or_path: module });
+          const prepared = dj_prepare(bytes, context.sampleRate);
+          try {
+            const message: DjLoadMessage = {
+              type: "djLoad",
+              deck,
+              left: prepared.left(),
+              right: prepared.right(),
+              bpm: prepared.bpm(),
+              firstBeat: prepared.first_beat(),
+            };
+            const analysis = JSON.parse(prepared.analysis()) as DjAnalysis;
+            // A MessagePort, not a window: there is no target origin to give.
+            // oxlint-disable-next-line unicorn/require-post-message-target-origin
+            node.port.postMessage(message, [message.left!.buffer, message.right!.buffer]);
+            return analysis;
+          } finally {
+            prepared.free();
+          }
+        },
+        unload(deck: number) {
+          const message: DjLoadMessage = { type: "djLoad", deck, left: null, right: null, bpm: 0, firstBeat: 0 };
+          // oxlint-disable-next-line unicorn/require-post-message-target-origin
+          node.port.postMessage(message);
+        },
+        async takeRecording(): Promise<Float32Array> {
+          const chunks = djRecording;
+          djRecording = [];
+          const out = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+          let at = 0;
+          for (const chunk of chunks) {
+            out.set(chunk, at);
+            at += chunk.length;
+          }
+          return out;
+        },
+        headphones: channels >= 4,
       },
     };
   } catch (error) {

@@ -7,19 +7,41 @@
  * ticks (`time.ts`) unless a name says otherwise.
  */
 import {
+  type BitcrusherSettings,
+  type ChorusSettings,
   type CompressorSettings,
   type DelaySettings,
   defaultEffectSettings,
   type EqSettings,
+  type FilterSettings,
+  type GateSettings,
+  type LimiterSettings,
+  type PhaserSettings,
   type ReverbSettings,
+  type SaturatorSettings,
+  type UtilitySettings,
 } from "../effect/effect-params";
 import { defaultSynthSettings, type SynthSettings } from "../instrument/synth-params";
 import { type TempoMap, type TimeSignature, tickAfter } from "./time";
 
-export type { CompressorSettings, DelaySettings, EqSettings, ReverbSettings, SynthSettings };
+export type {
+  BitcrusherSettings,
+  ChorusSettings,
+  CompressorSettings,
+  DelaySettings,
+  EqSettings,
+  FilterSettings,
+  GateSettings,
+  LimiterSettings,
+  PhaserSettings,
+  ReverbSettings,
+  SaturatorSettings,
+  SynthSettings,
+  UtilitySettings,
+};
 
 /** Bumped whenever the shape below changes; `serialise.ts` migrates old ones. */
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export interface Project {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -334,7 +356,15 @@ export type BuiltInEffect =
   | (EffectBase & { type: "eq"; settings: EqSettings })
   | (EffectBase & { type: "compressor"; settings: CompressorSettings })
   | (EffectBase & { type: "reverb"; settings: ReverbSettings })
-  | (EffectBase & { type: "delay"; settings: DelaySettings });
+  | (EffectBase & { type: "delay"; settings: DelaySettings })
+  | (EffectBase & { type: "saturator"; settings: SaturatorSettings })
+  | (EffectBase & { type: "chorus"; settings: ChorusSettings })
+  | (EffectBase & { type: "phaser"; settings: PhaserSettings })
+  | (EffectBase & { type: "filter"; settings: FilterSettings })
+  | (EffectBase & { type: "gate"; settings: GateSettings })
+  | (EffectBase & { type: "limiter"; settings: LimiterSettings })
+  | (EffectBase & { type: "bitcrusher"; settings: BitcrusherSettings })
+  | (EffectBase & { type: "utility"; settings: UtilitySettings });
 
 export type EffectType = BuiltInEffect["type"];
 
@@ -387,6 +417,14 @@ export const DEFAULT_EFFECT_SETTINGS = {
   compressor: defaultEffectSettings("compressor"),
   reverb: defaultEffectSettings("reverb"),
   delay: defaultEffectSettings("delay"),
+  saturator: defaultEffectSettings("saturator"),
+  chorus: defaultEffectSettings("chorus"),
+  phaser: defaultEffectSettings("phaser"),
+  filter: defaultEffectSettings("filter"),
+  gate: defaultEffectSettings("gate"),
+  limiter: defaultEffectSettings("limiter"),
+  bitcrusher: defaultEffectSettings("bitcrusher"),
+  utility: defaultEffectSettings("utility"),
 } satisfies { [T in EffectType]: Extract<Effect, { type: T }>["settings"] };
 
 /** The preset name a Track loaded with the bundled kit carries. */
@@ -514,5 +552,21 @@ export function createEffect(type: EffectType, id = newId()): BuiltInEffect {
       return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.reverb } };
     case "delay":
       return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.delay } };
+    case "saturator":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.saturator } };
+    case "chorus":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.chorus } };
+    case "phaser":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.phaser } };
+    case "filter":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.filter } };
+    case "gate":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.gate } };
+    case "limiter":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.limiter } };
+    case "bitcrusher":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.bitcrusher } };
+    case "utility":
+      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.utility } };
   }
 }

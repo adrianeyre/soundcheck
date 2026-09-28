@@ -4,6 +4,7 @@ import { type ReactNode, useState } from "react";
 import type { DrumPad } from "../project/model";
 import { isSampleDrag } from "../samples/sample-drag";
 import { LIMITS } from "../project/validate";
+import { DrumKit } from "./DrumKit";
 
 export interface DrumPadsProps {
   trackName: string;
@@ -17,13 +18,19 @@ export interface DrumPadsProps {
   onDropSample?: (pad: number, transfer: DataTransfer) => void;
   /** Controls for the whole Kit, beside the heading: loading and saving one. */
   kitControls?: ReactNode;
+  /** The notes being hit now, by the song or a player, for the kit to light. */
+  hitting?: ReadonlySet<number>;
+  /** Hit a Pad from the kit; absent when there is no audio to hear it. */
+  onHit?: (note: number, on: boolean) => void;
 }
 
 /**
- * The Drum Sampler's pads: what each one plays and how. A pad starts on the
- * bundled kit's own sample and keeps it until a WAV is loaded over it.
+ * The Drum Sampler's pads: what each one plays and how, under a drum kit
+ * that lights up as each is hit. A pad starts on the bundled kit's own
+ * sample and keeps it until a WAV is loaded over it.
  */
-export function DrumPads({ trackName, pads, sampleNames, onPad, onLoad, onDropSample, kitControls }: DrumPadsProps) {
+export function DrumPads(props: DrumPadsProps) {
+  const { trackName, pads, sampleNames, onPad, onLoad, onDropSample, kitControls, hitting = new Set(), onHit } = props;
   // The pad a sample is being dragged over, to show it will land there.
   const [sampleOver, setSampleOver] = useState<number | null>(null);
   return (
@@ -35,6 +42,7 @@ export function DrumPads({ trackName, pads, sampleNames, onPad, onLoad, onDropSa
         </h2>
         {kitControls}
       </div>
+      <DrumKit trackName={trackName} pads={pads} hitting={hitting} onHit={onHit} />
       <div className="grid-scroll">
       <table className="pad-table">
         <thead>

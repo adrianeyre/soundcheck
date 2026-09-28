@@ -14,6 +14,7 @@ mod automation;
 mod bus;
 mod clip_render;
 mod clip_waveform;
+mod dj;
 mod dsp;
 mod effect;
 mod engine;
@@ -43,6 +44,10 @@ pub use automation::{Automatable, MAX_BREAKPOINTS};
 pub use bus::{MAX_BUSES, MAX_SEND_LEVEL};
 pub use clip_render::ClipRender;
 pub use clip_waveform::ClipWaveform;
+pub use dj::{
+    BEAT_FX, COLOUR_FX, DECK_FIELDS, DECKS, DJ_REPORT_LEN, DjControl, DjMixer, DjTrack,
+    GLOBAL_FIELDS, PreparedDjTrack, TrackAnalysis, WAVEFORM_RATE,
+};
 pub use effect::{EffectKind, MAX_EFFECTS};
 pub use engine::{
     Attached, Attachments, Engine, Listening, MAX_TRACKS, PreparedAudioClips, PreparedAudioFile,
@@ -79,8 +84,9 @@ pub fn synth_parameters() -> String {
 }
 
 /// Every Effect's settings as JSON, keyed by the Effect's name ("eq",
-/// "compressor", "reverb", "delay"): name, label, unit, range, default and choices
-/// for each, in the order the flat form lists them.
+/// "compressor", "reverb", "delay", "saturator", "chorus", "phaser",
+/// "filter", "gate", "limiter", "bitcrusher", "utility"): name, label, unit,
+/// range, default and choices for each, in the order the flat form lists them.
 #[wasm_bindgen]
 pub fn effect_parameters() -> String {
     effect::effect_parameters_json()
@@ -188,4 +194,59 @@ mod tests {
     fn the_starter_kit_is_published_as_json() {
         assert!(starter_kit().contains("\"name\":\"Kick\""));
     }
+}
+
+/// A file decoded, converted to `sample_rate` and analysed for a Deck of
+/// the DJ Mixer, off the audio thread: the browser does this on the page's
+/// thread and hands the samples to the AudioWorklet.
+#[wasm_bindgen]
+pub struct DjPrepared(PreparedDjTrack);
+
+#[wasm_bindgen]
+impl DjPrepared {
+    pub fn left(&self) -> Vec<f32> {
+        self.0.track.file.left().to_vec()
+    }
+
+    pub fn right(&self) -> Vec<f32> {
+        self.0.track.file.right().to_vec()
+    }
+
+    pub fn bpm(&self) -> f64 {
+        self.0.track.bpm
+    }
+
+    pub fn first_beat(&self) -> f64 {
+        self.0.track.first_beat
+    }
+
+    /// Its BPM, Beat Grid, key and waveform, as JSON.
+    pub fn analysis(&self) -> String {
+        self.0.analysis.to_json()
+    }
+}
+
+/// Decode and analyse a WAV, FLAC or MP3 file for a Deck at `sample_rate`.
+#[wasm_bindgen]
+pub fn dj_prepare(bytes: &[u8], sample_rate: f32) -> Result<DjPrepared, String> {
+    PreparedDjTrack::decode(bytes, sample_rate)
+        .map(DjPrepared)
+        .map_err(|error| error.message().to_string())
+}
+
+/// The Beat FX and Colour FX, by name, in the order the mixer selects them.
+#[wasm_bindgen]
+pub fn dj_effects() -> String {
+    let list = |names: &[&str]| {
+        names
+            .iter()
+            .map(|n| format!(r#""{n}""#))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    format!(
+        r#"{{"beatFx":[{}],"colourFx":[{}],"reportLength":{DJ_REPORT_LEN}}}"#,
+        list(BEAT_FX),
+        list(COLOUR_FX)
+    )
 }

@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 
 use serde::Serialize;
-use soundcheck_engine::{MAX_BUSES, MAX_EFFECTS, MAX_TRACKS};
+use soundcheck_engine::{DJ_REPORT_LEN, MAX_BUSES, MAX_EFFECTS, MAX_TRACKS};
 
 /// An `f32` in an `AtomicU32`.
 #[derive(Default)]
@@ -66,6 +66,9 @@ pub struct SharedStats {
     /// `MAX_EFFECTS` gain-reduction meters per Insert Chain, in the same
     /// order.
     gain_reductions: Box<[AtomicF32]>,
+    /// The DJ Mixer's report (`DjMixer::report`), once it is in use.
+    dj: Box<[AtomicF64]>,
+    dj_in_use: AtomicBool,
 }
 
 /// How many Insert Chains' figures are kept: every Track's, the Master's and
@@ -107,6 +110,8 @@ impl Default for SharedStats {
             gain_reductions: (0..CHAINS * MAX_EFFECTS)
                 .map(|_| AtomicF32::default())
                 .collect(),
+            dj: (0..DJ_REPORT_LEN).map(|_| AtomicF64::default()).collect(),
+            dj_in_use: AtomicBool::new(false),
         }
     }
 }
@@ -168,6 +173,8 @@ pub struct Measured {
     pub output_latency: Option<f64>,
     pub engine: EngineReport,
     pub meters: Meters,
+    /// The DJ Mixer's report, or none before the Mixing page is used.
+    pub dj: Option<Vec<f64>>,
 }
 
 impl SharedStats {
@@ -209,6 +216,14 @@ impl SharedStats {
         if let Some(meter) = self.bus_peaks.get(bus) {
             meter.store(peak);
         }
+    }
+
+    /// The DJ Mixer's report, `DJ_REPORT_LEN` numbers.
+    pub fn record_dj(&self, report: &[f64]) {
+        for (slot, &value) in self.dj.iter().zip(report) {
+            slot.store(value);
+        }
+        self.dj_in_use.store(true, Relaxed);
     }
 
     pub fn record_master_peak(&self, peak: f32) {
@@ -265,6 +280,10 @@ impl SharedStats {
             callback_frames: self.last_callback_frames.load(Relaxed),
             frames_played: self.frames_played.load(Relaxed),
             output_latency: latency.is_finite().then_some(latency),
+            dj: self
+                .dj_in_use
+                .load(Relaxed)
+                .then(|| self.dj.iter().map(AtomicF64::load).collect()),
             engine: EngineReport {
                 track_count: track_count as u32,
                 active_voices: self.active_voices.load(Relaxed),

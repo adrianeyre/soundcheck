@@ -39,7 +39,7 @@ export type EngineCommand =
   /**
    * The Insert Chains. `chain` is a Track's index, or below zero for the
    * Master; `index` is a place in the chain, `from` and `to` too. `effect` is
-   * "eq", "compressor", "reverb" or "delay", and `settings` one number per
+   * one of `EFFECT_TYPES` ("eq", "compressor", … "utility"), and `settings` one number per
    * setting, in the order its settings table declares them
    * (`effectSettingsToFlat`).
    */
@@ -157,7 +157,56 @@ export type EngineCommand =
    */
   | { type: "setAutomation"; target: number; setting: string; points: number[] }
   | { type: "setLoop"; startTick: number; endTick: number; enabled: boolean }
-  | { type: "setMetronome"; on: boolean };
+  /**
+   * Where Play stops, going back to `startTick`, while the loop is off: the
+   * song's end, or the Section or ruler region chosen. An `endTick` at or
+   * before `startTick` plays on for ever.
+   */
+  | { type: "setPlayRange"; startTick: number; endTick: number }
+  | { type: "setMetronome"; on: boolean }
+  /**
+   * A control of the Mixing page's DJ Mixer (ADR 0013): `name` of a Deck or
+   * a mixer channel (both by `index`, from 0) or of the mixer. Mirrors
+   * `DjControl::parse` in `engine/src/dj/mod.rs`; switches are 1 or 0.
+   */
+  | { type: "djSet"; kind: DjControlKind; index: number; name: string; value: number };
+
+export type DjControlKind = "deck" | "channel" | "mixer";
+
+/**
+ * What the engine found in a file loaded onto a Deck: `TrackAnalysis` in
+ * `engine/src/dj/analysis.rs`. The waveform is flat, four numbers a point
+ * (the lows', mids' and highs' peaks, and the whole signal's), `waveformRate`
+ * points a second.
+ */
+export interface DjAnalysis {
+  seconds: number;
+  /** 0 when no steady beat was found. */
+  bpm: number;
+  /** Seconds into the file of the first beat of its Beat Grid. */
+  firstBeat: number;
+  /** The tonic's pitch class (0 is C), and whether the key is minor. */
+  key: { tonic: number; minor: boolean } | null;
+  waveformRate: number;
+  waveform: number[];
+}
+
+/**
+ * The DJ Mixer's side of an audio output (ADR 0013): what isn't a plain
+ * command, because it carries a file or brings audio back.
+ */
+export interface DjHost {
+  /** Decode and analyse `bytes` off the audio thread and put the file on Deck `deck`. */
+  load(deck: number, bytes: Uint8Array): Promise<DjAnalysis>;
+  unload(deck: number): void;
+  /** The mix recorded since the last call, interleaved stereo at the output's rate. */
+  takeRecording(): Promise<Float32Array>;
+  /**
+   * Whether the headphone cue can be heard: only the Desktop App, on an
+   * interface with outputs 3 and 4, which it plays the cue out of.
+   */
+  headphones: boolean;
+}
 
 /**
  * A live note the Audio Engine recorded, stamped where it arrived: the
@@ -253,6 +302,11 @@ export interface AudioOutputStats {
   engine: EngineReport | null;
   /** The latest meters from the engine, or null before the first report. */
   meters: Meters | null;
+  /**
+   * The DJ Mixer's latest report (`DjMixer::report`), flat, or null before
+   * the Mixing page is first used; absent from a host that has none.
+   */
+  dj?: number[] | null;
 }
 
 export type LatencyHint = "interactive" | "balanced" | "playback" | number;
@@ -281,6 +335,8 @@ export interface AudioOutput {
   /** Zero the dropout counters, e.g. once start-up is over. */
   resetCounters(): void;
   close(): Promise<void>;
+  /** The Mixing page's DJ Mixer; absent from a host that has none, such as a test's. */
+  dj?: DjHost;
 }
 
 export type OpenAudioOutput = (options: AudioOutputOptions) => Promise<AudioOutput>;

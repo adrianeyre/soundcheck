@@ -88,7 +88,10 @@ const LIVE_ONLY: ReadonlySet<EngineCommand["type"]> = new Set([
   "stop",
   "seek",
   "setLoop",
+  "setPlayRange",
   "setMetronome",
+  // The DJ Mixer is never in an export of the song (ADR 0013).
+  "djSet",
 ]);
 
 /**

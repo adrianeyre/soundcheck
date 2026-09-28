@@ -17,7 +17,8 @@ import {
 } from "../project/model";
 import { type Channel as ChannelId, DEFAULT_SEND_LEVEL, routingProblem, sendProblem, silencedChannels } from "../project/routing";
 import { LIMITS } from "../project/validate";
-import { CLIP_GAIN, formatDb, levelFraction } from "./level";
+import { CLIP_GAIN, formatDb, gainToDb, levelFraction } from "./level";
+import { holdPeak, type PeakHold } from "./MeterBridge";
 
 const METER_HEIGHT = 120;
 
@@ -386,7 +387,8 @@ function Channel(props: ChannelProps) {
       {!master && (
         <>
           <label className="param">
-            <span>
+            <span className="pan-label">
+              <PanDial pan={mixer.pan} />
               Pan <span className="num">{panText(mixer.pan)}</span> {note("pan")}
             </span>
             <input
@@ -488,27 +490,67 @@ function BusName({ name, onRename }: { name: string; onRename: (name: string) =>
   );
 }
 
-/** A peak meter, showing exactly what the engine measured. */
+const METER_TICKS_DB = [0, -12, -24, -48];
+
+/**
+ * A peak meter, showing exactly what the engine measured, green to amber to
+ * red up its scale, with the loudest recent peak held as a line and the
+ * decibels marked beside it.
+ */
 function Meter({ name, level }: { name: string; level: number }) {
   const clipping = level >= CLIP_GAIN;
+  const [peak, setPeak] = useState<PeakHold>({ db: -Infinity, age: 0 });
+  const [seen, setSeen] = useState(level);
+  if (seen !== level) {
+    setSeen(level);
+    setPeak((held) => holdPeak(held, gainToDb(level)));
+  }
+  const peakFraction = Number.isFinite(peak.db) ? levelFraction(10 ** (peak.db / 20)) : 0;
   return (
-    <div
-      role="meter"
-      aria-label={`${name} level`}
-      aria-valuemin={0}
-      aria-valuemax={1}
-      aria-valuenow={Number(levelFraction(level).toFixed(3))}
-      aria-valuetext={clipping ? `${formatDb(level)}, clipping` : formatDb(level)}
-      className="meter"
-      data-clipping={clipping}
-      style={{ width: 12, height: METER_HEIGHT }}
-    >
+    <div className="meter-with-scale">
       <div
-        aria-hidden
-        className="meter-fill"
-        style={{ bottom: 0, width: "100%", height: `${levelFraction(level) * 100}%` }}
-      />
+        role="meter"
+        aria-label={`${name} level`}
+        aria-valuemin={0}
+        aria-valuemax={1}
+        aria-valuenow={Number(levelFraction(level).toFixed(3))}
+        aria-valuetext={clipping ? `${formatDb(level)}, clipping` : formatDb(level)}
+        className="meter"
+        data-clipping={clipping}
+        style={{ width: 12, height: METER_HEIGHT }}
+      >
+        <div
+          aria-hidden
+          className="meter-fill meter-gradient"
+          style={{ bottom: 0, width: "100%", height: `${levelFraction(level) * 100}%`, backgroundSize: `100% ${METER_HEIGHT}px` }}
+        />
+        {peakFraction > 0 && <div aria-hidden className="meter-peak" style={{ bottom: `${peakFraction * 100}%` }} />}
+      </div>
+      <div className="meter-ticks" aria-hidden style={{ height: METER_HEIGHT }}>
+        {METER_TICKS_DB.map((db) => (
+          <span key={db} style={{ bottom: `${levelFraction(10 ** (db / 20)) * 100}%` }}>
+            {db}
+          </span>
+        ))}
+      </div>
     </div>
+  );
+}
+
+/** Where the pan sits, as a knob's pointer on an arc from hard left to hard right. */
+function PanDial({ pan }: { pan: number }) {
+  const angle = (pan * 135 * Math.PI) / 180;
+  const [cx, cy, r] = [14, 14, 11];
+  const arc = (from: number, to: number) => {
+    const point = (a: number) => `${(cx + r * Math.sin(a)).toFixed(2)},${(cy - r * Math.cos(a)).toFixed(2)}`;
+    return `M${point(from)} A${r},${r} 0 ${Math.abs(to - from) > Math.PI ? 1 : 0} ${to > from ? 1 : 0} ${point(to)}`;
+  };
+  return (
+    <svg aria-hidden className="pan-dial" width={28} height={28} viewBox="0 0 28 28">
+      <path d={arc((-135 * Math.PI) / 180, (135 * Math.PI) / 180)} fill="none" stroke="var(--lane-line)" strokeWidth={3} />
+      {pan !== 0 && <path d={arc(0, angle)} fill="none" stroke="var(--primary)" strokeWidth={3} />}
+      <line x1={cx} y1={cy} x2={cx + r * Math.sin(angle)} y2={cy - r * Math.cos(angle)} stroke="var(--text)" strokeWidth={2} strokeLinecap="round" />
+    </svg>
   );
 }
 

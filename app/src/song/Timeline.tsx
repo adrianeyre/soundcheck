@@ -117,6 +117,8 @@ export interface TimelineProps {
   /** Every edit is commands, applied as one undo step called `label`. */
   onCommands: (commands: Command[], label: string) => void;
   onLoopRegion: (start: number, end: number) => void;
+  /** The Section selected on the Section Lane, which is what Play plays, or null for the whole song. */
+  onSelectSection?: (sectionId: string | null) => void;
   /** The waveform of each audio file, by the path Audio Clips name it with. */
   waveforms?: ReadonlyMap<string, Waveform>;
   /**
@@ -196,7 +198,11 @@ export function Timeline(props: TimelineProps) {
   const [automationOpen, setAutomationOpen] = useState<Record<string, AutomatedSetting>>({});
   // The Clip whose context menu is open, and where.
   const [clipMenu, setClipMenu] = useState<{ clipId: string; anchor: ContextMenuAnchor } | null>(null);
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [selectedSectionId, setSectionId] = useState<string | null>(null);
+  const setSelectedSectionId = (sectionId: string | null) => {
+    setSectionId(sectionId);
+    props.onSelectSection?.(sectionId);
+  };
   const [clipboard, setClipboard] = useState<TimelineClipboard | null>(null);
   // When the last right-button press on a Clip ended, so the browser's own
   // contextmenu event, which comes on the press on macOS and on the release
@@ -286,6 +292,8 @@ export function Timeline(props: TimelineProps) {
       setLoopDrag(null);
       const to = ticksAt(event.clientX, loopDrag.left);
       const region = loopRegion(loopDrag.fromTicks, to, event.altKey || loopDrag.free ? free : grid);
+      // A region dragged on the ruler is what plays, in place of a selected Section.
+      setSelectedSectionId(null);
       onLoopRegion(region.start, region.end);
     };
     window.addEventListener("mousemove", move);

@@ -7,9 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 use soundcheck_engine::{
-    NoteList, PreparedAudioClips, PreparedAudioFile, PreparedAutomation, PreparedBus,
-    PreparedEffect, PreparedInstrument, PreparedSample, PreparedSends, PreparedTempoChanges,
-    PreparedTrack, RecordedNote, SynthSettings,
+    DjControl, DjMixer, DjTrack, NoteList, PreparedAudioClips, PreparedAudioFile,
+    PreparedAutomation, PreparedBus, PreparedEffect, PreparedInstrument, PreparedSample,
+    PreparedSends, PreparedTempoChanges, PreparedTrack, RecordedNote, SynthSettings,
 };
 
 use crate::monitor::MonitorFeed;
@@ -250,8 +250,21 @@ pub enum EngineCommand {
         end_tick: f64,
         enabled: bool,
     },
+    /// Where Play stops, and goes back to, while the loop is off.
+    SetPlayRange {
+        start_tick: f64,
+        end_tick: f64,
+    },
     SetMetronome {
         on: bool,
+    },
+    /// A control of the Mixing page's DJ Mixer (ADR 0013): `kind` is
+    /// "deck", "channel" or "mixer", and `index` the Deck's or channel's.
+    DjSet {
+        kind: String,
+        index: usize,
+        name: String,
+        value: f64,
     },
 }
 
@@ -391,11 +404,24 @@ pub enum RtCommand {
         end: f64,
         enabled: bool,
     },
+    SetPlayRange {
+        start: f64,
+        end: f64,
+    },
     SetMetronome(bool),
     /// Audition a file from the sample browser or the Reference Track,
     /// straight to the output, at a linear gain.
     Audition(PreparedAudioFile, f32),
     StopAudition,
+    /// The DJ Mixer, built off the audio thread the first time the Mixing
+    /// page is used.
+    DjInstall(Box<DjMixer>),
+    /// A file for a Deck, decoded and analysed, or None to take it off.
+    DjLoad {
+        deck: usize,
+        track: Option<DjTrack>,
+    },
+    DjSet(DjControl, f64),
 }
 
 /// The most settings any Effect has: a Plugin may declare this many.
@@ -466,6 +492,8 @@ pub enum Garbage {
     Sends(PreparedSends),
     AudioFile(PreparedAudioFile),
     Monitor(Box<MonitorFeed>),
+    DjTrack(DjTrack),
+    DjMixer(Box<DjMixer>),
 }
 
 #[cfg(test)]
@@ -474,6 +502,19 @@ mod tests {
 
     fn parse(json: &str) -> EngineCommand {
         serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn a_dj_control_arrives_under_the_names_the_typescript_uses() {
+        assert_eq!(
+            parse(r#"{"type":"djSet","kind":"deck","index":1,"name":"tempo","value":0.04}"#),
+            EngineCommand::DjSet {
+                kind: "deck".into(),
+                index: 1,
+                name: "tempo".into(),
+                value: 0.04,
+            }
+        );
     }
 
     #[test]

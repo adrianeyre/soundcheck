@@ -20,11 +20,18 @@ import { readInvite } from "../collab/live-wire";
 import { LiveSessionDialog } from "../collab/LiveSessionDialog";
 import { useLiveSession } from "../collab/useLiveSession";
 import { DEFAULT_OCTAVE, listenToComputerKeyboard } from "../keyboard/computer-keyboard";
+import { PianoKeyboard } from "../keyboard/PianoKeyboard";
+import { soundingOnTrack } from "../keyboard/sounding";
+import type { NoteEvent } from "../midi/midi-input";
 import type { OpenMidiInput } from "../midi/midi-input";
 import { createPluginInstrument } from "../instrument/instrument-table";
 import { PluginInstrumentPanel } from "../instrument/PluginInstrumentPanel";
 import { SynthPanel } from "../instrument/SynthPanel";
+import { MeterBridge } from "../mixer/MeterBridge";
 import { Mixer } from "../mixer/Mixer";
+import { EqEditor } from "../effect/EqEditor";
+import { ChordPads } from "../theory/ChordPads";
+import { DEFAULT_KEY, type MusicalKey } from "../theory/theory";
 import { KitControls } from "../kit/KitControls";
 import { KitLibrary, loadKitCommand, type SavedKit } from "../kit/kit-library";
 import { memoryLibraryStorage, type LibraryStorage } from "../preset/library-storage";
@@ -52,7 +59,7 @@ import {
   type InstrumentTrack,
   type PatternClip,
 } from "../project/model";
-import { barTicks, signatureAt, tempoMapOf } from "../project/time";
+import { barStart, barTicks, beatTicks, signatureAt, tempoMapOf } from "../project/time";
 import { ClipExportPanel } from "../export/ClipExportPanel";
 import { ExportPanel } from "../export/ExportPanel";
 import { defaultLayout, setWidgetHidden, type WidgetId, type WidgetLayout } from "../grid/layout";
@@ -77,17 +84,22 @@ import type { StemSeparator } from "../stems/stem-separator";
 import { StemSeparationPanel } from "../stems/StemSeparationPanel";
 import { useStemSeparation } from "../stems/useStemSeparation";
 import { Dialog } from "../ui/Dialog";
+import { memoWidget } from "../ui/memo";
 import { Menu, type MenuItem } from "../ui/Menu";
 import { useMenuShortcuts } from "../ui/menu-shortcuts";
 import { AudioSettings } from "../settings/AudioSettings";
 import { type AudioPreferences, readAudioPreferences, writeAudioPreferences } from "../settings/audio-preferences";
 import { TransportBar } from "../transport/TransportBar";
-import { DEFAULT_TRANSPORT, type TransportSettings, transportCommands } from "../transport/transport-settings";
+import { DEFAULT_TRANSPORT, playRange, type TransportSettings, transportCommands } from "../transport/transport-settings";
 import { UpdateNotice } from "../update/UpdateNotice";
 import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
 import { useUpdates } from "../update/useUpdates";
+import { DjPage } from "../dj/DjPage";
+import { browserRecordingSaver, type DjRecordingSaver } from "../dj/recording-saver";
 import { AudioEditor } from "./AudioEditor";
+import { NoteTools } from "./NoteTools";
+import { SongOverview } from "./SongOverview";
 import { AudioRecordPanel } from "./AudioRecordPanel";
 import { DrumPads } from "./DrumPads";
 import { AUDIO_FILE_TYPES, readAudioFile, summariseAudio, type Waveform } from "./import-audio";
@@ -125,6 +137,8 @@ export interface SongPageProps {
   storage?: FileStorage | null;
   /** Exports the mix as a WAV file; null where it can't. */
   exporter?: MixExporter | null;
+  /** Saves a recording of the Mixing page's DJ mix; the browser's way without one. */
+  djRecordings?: DjRecordingSaver;
   /** Where the Assistant's API key lives; no key store, no Assistant. */
   keyStore?: KeyStore;
   /** How the Assistant's requests go out; the global fetch unless the platform says otherwise. */
@@ -198,7 +212,7 @@ export interface SongPageProps {
   };
 }
 
-export type SongView = "editor" | "settings";
+export type SongView = "editor" | "settings" | "mixing";
 
 /** The id of each page's panel, for the menu to point at. */
 export const viewPanelId = (view: SongView) => `page-${view}`;
@@ -229,6 +243,7 @@ export function SongPage({
   openMidi,
   storage = null,
   exporter = null,
+  djRecordings = browserRecordingSaver(),
   stems: stemSeparator = null,
   updater = null,
   keyStore,
@@ -275,6 +290,8 @@ export function SongPage({
   const [position, setPosition] = useState<number | null>(null);
   const [meters, setMeters] = useState<Meters | null>(null);
   const [transport, setTransport] = useState<TransportSettings>(DEFAULT_TRANSPORT);
+  // The Section selected on the timeline's Section Lane, which is what Play plays; none plays the whole song.
+  const [playSectionId, setPlaySectionId] = useState<string | null>(null);
   const [stepTicks, setStepTicks] = useState(DEFAULT_STEP_TICKS);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -288,6 +305,10 @@ export function SongPage({
   const [quantise, setQuantise] = useState(false);
   const [octave, setOctave] = useState(DEFAULT_OCTAVE);
   const [midiStatus, setMidiStatus] = useState<string | null>(null);
+  // The song's key, which the Keyboard, Chords and Note Tools share; the musician's view, not the Project's.
+  const [songKey, setSongKey] = useState<MusicalKey>(DEFAULT_KEY);
+  // The notes held right now, from the on-screen keys, the computer keyboard or MIDI, for the pianos to light.
+  const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
   const [samples, setSamples] = useState<LoadedSamples>(new Map());
   const [ownLibrary] = useState(memoryLibraryStorage);
   const library = givenLibrary ?? ownLibrary;
@@ -352,6 +373,20 @@ export function SongPage({
   const [waveforms, setWaveforms] = useState<ReadonlyMap<LoadedSample, Waveform>>(new Map());
   const measuringRef = useRef(new Set<LoadedSample>());
   const outputRef = useRef<AudioOutput | null>(null);
+  const playNote = useCallback((event: NoteEvent) => {
+    outputRef.current?.send(event);
+    setHeld((notes) => {
+      if ((event.type === "noteOn") === notes.has(event.note)) return notes;
+      const next = new Set(notes);
+      if (event.type === "noteOn") next.add(event.note);
+      else next.delete(event.note);
+      return next;
+    });
+  }, []);
+  const noteOn = useCallback((note: number, velocity: number) => playNote({ type: "noteOn", note, velocity }), [playNote]);
+  const noteOff = useCallback((note: number) => playNote({ type: "noteOff", note }), [playNote]);
+  // A key or drum clicked in a picture of the kit or the keys, at the on-screen Keyboard's middle velocity.
+  const playOrStop = useCallback((note: number, on: boolean) => (on ? noteOn(note, 0.8) : noteOff(note)), [noteOn, noteOff]);
   const syncRef = useRef(new EngineSync());
   const recordedRef = useRef<RecordedNoteEvent[]>([]);
   const recordingFromRef = useRef<RecordingFrom | null>(null);
@@ -372,12 +407,28 @@ export function SongPage({
   const instrumentType = selected?.track.instrument.type;
   const empty: WidgetId[] = [
     ...(selectedAudio ? [] : (["audioEditor"] as const)),
-    ...(selected ? [] : (["stepSequencer", "pianoRoll"] as const)),
+    ...(selected ? [] : (["stepSequencer", "pianoRoll", "noteTools"] as const)),
     ...(instrumentType === "synth" || instrumentType === "drumSampler" || instrumentType === "plugin" ? [] : (["instrument"] as const)),
     ...(audioInputs && audioTrackCount > 0 ? [] : (["recordAudio"] as const)),
     ...(sampleSource ? [] : (["samples"] as const)),
   ];
   const emptyKey = empty.join(" ");
+  // Clicking a key or a drum wherever one is drawn plays it, while there is audio to hear it.
+  const playFromPicture = output ? playOrStop : undefined;
+  // What the Keyboard lights and the Chords write into. Each is a fresh object on every render, but the
+  // memoised Widgets compare them by what they hold (`ui/memo.ts`), so a meter reading doesn't redraw them.
+  const keyboardPlaying = recordTrack && position !== null ? soundingOnTrack(recordTrack, position) : new Set<number>();
+  const clipSignature = signatureAt(tempoMapOf(project), selected?.clip.start ?? 0);
+  const clipBar = barTicks(clipSignature);
+  const chordTarget = selected
+    ? {
+        trackName: selected.track.name,
+        clipLength: selected.clip.length,
+        notes: selected.clip.notes,
+        beatTicks: beatTicks(clipSignature),
+        barTicks: clipBar,
+      }
+    : null;
   const onEmpty = grid?.onEmpty;
   useEffect(() => {
     onEmpty?.(emptyKey ? (emptyKey.split(" ") as WidgetId[]) : []);
@@ -427,14 +478,33 @@ export function SongPage({
     }
   }, [project, samples, waveforms]);
 
+  // What Play plays: the selected Section, the ruler's region, or the whole song. With Loop on it loops;
+  // with Loop off, playback stops at its end.
+  const songMap = tempoMapOf(project);
+  const playSection = project.sections.find((section) => section.id === playSectionId) ?? null;
+  const range = playRange(
+    transport,
+    songMap,
+    songEndTick(project),
+    playSection && {
+      name: playSection.name,
+      start: barStart(songMap, playSection.startBar),
+      end: barStart(songMap, playSection.startBar + playSection.bars),
+    },
+  );
+
   // Loop and metronome are the transport bar's own; tempo and time signature
   // are the Project's.
   useEffect(() => {
     if (!output) return;
-    for (const command of transportCommands({ ...transport, timeSignature: project.timeSignature })) {
+    const commands = transportCommands(
+      { ...transport, timeSignature: project.timeSignature },
+      { start: range.start, end: range.end },
+    );
+    for (const command of commands) {
       if (command.type !== "setTempo" && command.type !== "setTimeSignature") output.send(command);
     }
-  }, [output, transport, project.timeSignature]);
+  }, [output, transport, project.timeSignature, range.start, range.end]);
 
   // Live notes play through the Track being recorded onto.
   useEffect(() => {
@@ -456,21 +526,31 @@ export function SongPage({
 
   // The computer keyboard plays, and records, like a MIDI keyboard.
   useEffect(
-    () => listenToComputerKeyboard(window, (event) => outputRef.current?.send(event), setOctave),
-    [],
+    () => listenToComputerKeyboard(window, playNote, setOctave),
+    [playNote],
   );
 
   useEffect(() => {
     if (!openMidi || showLatency) return;
     const opening = openMidi(
-      (event) => outputRef.current?.send(event),
+      playNote,
       (names) => setMidiStatus(names.length ? `MIDI: ${names.join(", ")}` : null),
     );
     opening.catch(() => setMidiStatus(null));
     return () => void opening.then((midi) => midi.close()).catch(() => {});
-  }, [openMidi, showLatency]);
+  }, [openMidi, showLatency, playNote]);
 
   useEffect(() => () => void outputRef.current?.close(), []);
+
+  // The Editor's song stops while the Mixing page is open, so only the DJ
+  // mix is heard (ADR 0013).
+  useEffect(() => {
+    if (view === "mixing") output?.send({ type: "stop" });
+  }, [view, output]);
+  // The Mixing page is drawn once it is first opened, and kept, so its
+  // Decks stay as the DJ left them.
+  const [mixingOpened, setMixingOpened] = useState(view === "mixing");
+  if (view === "mixing" && !mixingOpened) setMixingOpened(true);
 
   const projectTiming = () => ({ tempo: project.tempo, timeSignature: project.timeSignature });
 
@@ -1102,7 +1182,7 @@ export function SongPage({
           exporter={exporter}
           project={project}
           samples={samples}
-          loop={{ start: transport.loopStart, end: transport.loopEnd }}
+          loop={{ start: range.start, end: range.end }}
         />
       </Dialog>
       <Dialog
@@ -1206,6 +1286,7 @@ export function SongPage({
                   <span className="divider" aria-hidden />
                   <TransportBar
                     settings={{ ...transport, ...projectTiming() }}
+                    range={range}
                     tempoMap={tempoMapOf(project)}
                     onChange={changeTransport}
                     send={send}
@@ -1333,7 +1414,7 @@ export function SongPage({
                   project={project}
                   selectedClipId={selectedClipId}
                   position={position}
-                  loop={{ start: transport.loopStart, end: transport.loopEnd, enabled: transport.loop }}
+                  loop={{ start: range.start, end: range.end, enabled: transport.loop }}
                   clipBars={CLIP_BARS}
                   onSelectClip={(clipId) => {
                     const track = tracks.find((candidate) => candidate.clips.some((clip) => clip.id === clipId));
@@ -1343,7 +1424,12 @@ export function SongPage({
                     else setSelectedClipId(clipId);
                   }}
                   onCommands={execute}
-                  onLoopRegion={(loopStart, loopEnd) => setTransport({ ...transport, loop: true, loopStart, loopEnd })}
+                  onLoopRegion={(loopStart, loopEnd) => {
+                    // A region dragged on the ruler is what plays, in place of a Section.
+                    setPlaySectionId(null);
+                    setTransport({ ...transport, loop: true, loopStart, loopEnd, loopRegionSet: true });
+                  }}
+                  onSelectSection={setPlaySectionId}
                   waveforms={waveformsByPath}
                   absentAudio={absentAudio}
                   clipMenuItems={clipMenuItems}
@@ -1385,6 +1471,9 @@ export function SongPage({
                   stepTicks={stepTicks}
                   onStepTicks={setStepTicks}
                   onNotes={(notes) => execute({ type: "setPatternNotes", clipId: selected.clip.id, notes })}
+                  playhead={position}
+                  held={held}
+                  onPlay={playFromPicture}
                   onLength={(length) =>
                     execute({ type: "trimClip", clipId: selected.clip.id, start: selected.clip.start, length })
                   }
@@ -1403,6 +1492,9 @@ export function SongPage({
                   instrument={selected.track.instrument}
                   timeSignature={signatureAt(tempoMapOf(project), selected.clip.start)}
                   onNotes={(notes, label) => execute({ type: "setPatternNotes", clipId: selected.clip.id, notes }, label)}
+                  playhead={position}
+                  held={held}
+                  onPlay={playFromPicture}
                 />
               ) : null,
               instrument:
@@ -1421,6 +1513,10 @@ export function SongPage({
                       pad.sample ? (samples.get(pad.sample)?.name ?? fileName(pad.sample)) : undefined,
                     )}
                     onPad={(pad, settings) => setPad(selected.track.id, pad, settings)}
+                    hitting={
+                      new Set([...(position !== null ? soundingOnTrack(selected.track, position) : []), ...held])
+                    }
+                    onHit={playFromPicture}
                     onLoad={(pad, file) => void loadSample(selected.track.id, pad, file)}
                     onDropSample={
                       sampleSource && !requesting
@@ -1484,9 +1580,75 @@ export function SongPage({
                   onCommand={execute}
                 />
               ),
+              keyboard: (
+                <KeyboardWidget
+                  trackName={recordTrack?.name ?? null}
+                  canPlay={output !== null}
+                  songKey={songKey}
+                  onSongKey={setSongKey}
+                  held={held}
+                  playing={keyboardPlaying}
+                  noteOn={noteOn}
+                  noteOff={noteOff}
+                />
+              ),
+              chords: (
+                <ChordsWidget
+                  songKey={songKey}
+                  onSongKey={setSongKey}
+                  canPlay={output !== null}
+                  noteOn={noteOn}
+                  noteOff={noteOff}
+                  target={chordTarget}
+                  onNotes={(notes, label) => selected && execute({ type: "setPatternNotes", clipId: selected.clip.id, notes }, label)}
+                />
+              ),
+              noteTools: selected ? (
+                <NoteToolsWidget
+                  key={`note-tools:${selected.clip.id}`}
+                  clip={selected.clip}
+                  trackName={selected.track.name}
+                  songKey={songKey}
+                  onSongKey={setSongKey}
+                  barTicks={clipBar}
+                  onNotes={(notes, label) => execute({ type: "setPatternNotes", clipId: selected.clip.id, notes }, label)}
+                />
+              ) : null,
+              meters: <MetersWidget project={project} meters={meters} />,
+              overview: (
+                <OverviewWidget
+                  project={project}
+                  position={position}
+                  onSeek={output ? (tick) => send({ type: "seek", tick }) : undefined}
+                />
+              ),
+              eq: (
+                <EqWidget
+                  project={project}
+                  preferTrackId={selected?.track.id ?? selectedAudio?.track.id ?? null}
+                  onCommand={(command, label) => execute(command, label)}
+                />
+              ),
             }}
           />
         </section>
+      </div>
+
+      <div id={viewPanelId("mixing")} className="page dj-page-wrap" hidden={view !== "mixing"} aria-labelledby="mixing-title">
+        <h1 id="mixing-title" className="page-title">
+          Mixing
+        </h1>
+        {mixingOpened && (
+          <DjPage
+            output={output}
+            onStart={() => void start()}
+            starting={starting}
+            active={view === "mixing"}
+            saver={djRecordings}
+            samples={sampleSource}
+            library={library}
+          />
+        )}
       </div>
 
       <div id={viewPanelId("settings")} className="page" hidden={view !== "settings"} aria-labelledby="settings-title">
@@ -1550,6 +1712,14 @@ export function SongPage({
     </Vst3Provider>
   );
 }
+
+// The new Widgets are drawn again only when their data changes, not on every meter reading (`ui/memo.ts`).
+const KeyboardWidget = memoWidget(PianoKeyboard);
+const ChordsWidget = memoWidget(ChordPads);
+const NoteToolsWidget = memoWidget(NoteTools);
+const MetersWidget = memoWidget(MeterBridge);
+const OverviewWidget = memoWidget(SongOverview);
+const EqWidget = memoWidget(EqEditor);
 
 /** Where there is no MIDI to open, the latency test gets none. */
 const noMidi: OpenMidiInput = () => Promise.resolve({ close: () => {} });

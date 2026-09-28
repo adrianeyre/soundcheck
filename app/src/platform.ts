@@ -18,6 +18,7 @@ import { openWorkletAudioOutput } from "./audio/worklet-audio-output";
 import { browserMixExporter } from "./export/browser-mix-exporter";
 import { desktopMixExporter } from "./export/desktop-mix-exporter";
 import type { MixExporter } from "./export/mix-exporter";
+import { browserRecordingSaver, desktopRecordingSaver, type DjRecordingSaver } from "./dj/recording-saver";
 import { desktopMidiInput } from "./midi/desktop-midi-input";
 import { openWebMidiInput, type OpenMidiInput } from "./midi/midi-input";
 import { browserLibraryStorage } from "./preset/browser-library-storage";
@@ -76,6 +77,8 @@ export interface Platform {
   samples: SampleSource | null;
   /** Exports the mix as a WAV file. */
   exporter: MixExporter;
+  /** Saves a recording of the Mixing page's DJ mix (ADR 0013). */
+  djRecordings: DjRecordingSaver;
   /** Chooses and auditions the Reference Track, past the mixer. */
   reference: ReferencePlayer;
   /** Where the Assistant's Claude API key is kept on this machine. */
@@ -147,6 +150,8 @@ export function currentPlatform(): Platform {
       vst3Unavailable: mac ? NO_VST3_ON_MACOS : null,
       samples: desktopSampleSource(invoke),
       exporter: desktopMixExporter(invoke),
+      // The system's save dialog; the shell writes the file.
+      djRecordings: desktopRecordingSaver(invoke),
       // The system's file dialog, and the native host's audition.
       reference: desktopReferencePlayer(invoke),
       keyStore: desktopKeyStore(invoke),
@@ -192,6 +197,8 @@ export function currentPlatform(): Platform {
     // Renders with the WASM engine on the main thread; saves through the
     // File System Access API where there is one, and downloads elsewhere.
     exporter: browserMixExporter(),
+    // As an export saves: the save dialog where there is one, a download elsewhere.
+    djRecordings: browserRecordingSaver(),
     // A file input, and Web Audio in a context beside the worklet's.
     reference: browserReferencePlayer(),
     // Local storage is not a credential store, but a web page has nothing

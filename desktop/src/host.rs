@@ -14,10 +14,11 @@ use std::time::Instant;
 
 use rtrb::{Consumer, Producer, RingBuffer};
 use soundcheck_engine::{
-    AUDITION_GAIN, Audition, Engine, MAX_BUSES, MAX_TRACKS, NoteList, PluginKind, PluginRuntime,
-    PreparedAudioClips, PreparedAudioFile, PreparedAutomation, PreparedBus, PreparedEffect,
-    PreparedInstrument, PreparedSample, PreparedSends, PreparedTempoChanges, PreparedTrack,
-    RECORDING_CAPACITY, SynthSettings, TICKS_PER_BEAT, bus_chain,
+    AUDITION_GAIN, Audition, DJ_REPORT_LEN, DjControl, DjMixer, Engine, MAX_BUSES, MAX_TRACKS,
+    NoteList, PluginKind, PluginRuntime, PreparedAudioClips, PreparedAudioFile, PreparedAutomation,
+    PreparedBus, PreparedDjTrack, PreparedEffect, PreparedInstrument, PreparedSample,
+    PreparedSends, PreparedTempoChanges, PreparedTrack, RECORDING_CAPACITY, SynthSettings,
+    TICKS_PER_BEAT, bus_chain,
 };
 
 use crate::command::{EffectSettings, EngineCommand, Garbage, RecordedNoteEvent, RtCommand};
@@ -32,6 +33,9 @@ pub const MAX_BLOCK: usize = 1_024;
 /// Room for a burst of commands, e.g. setting every Track's notes at once.
 const QUEUE: usize = 4_096;
 const MIDI_QUEUE: usize = 1_024;
+/// Seconds of the DJ mix's recording the audio thread can hand over before
+/// the UI next takes it.
+const DJ_RECORDING_SECONDS: f32 = 10.0;
 
 /// Build a Renderer for the audio thread, the Controller that drives it, and
 /// the producer end of the MIDI queue.
@@ -44,6 +48,8 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
     // The engine's log holds a whole burst between callbacks, and the UI
     // drains this queue far less often, so give it several bursts' room.
     let (recorded_out, recorded) = RingBuffer::new(RECORDING_CAPACITY);
+    let (dj_recording_out, dj_recording) =
+        RingBuffer::new((DJ_RECORDING_SECONDS * sample_rate) as usize * 2);
     let stats = Arc::new(SharedStats::default());
 
     let mut engine = Engine::new(sample_rate);
@@ -60,6 +66,8 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
         played_at: None,
         audition: Audition::default(),
         monitor: None,
+        dj_recording: dj_recording_out,
+        dj_report: [0.0; DJ_REPORT_LEN],
     };
     let mut controller = Controller {
         sample_rate,
@@ -74,6 +82,8 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
         audio_files: HashMap::new(),
         plugins: HashMap::new(),
         offline: false,
+        dj_installed: false,
+        dj_recording,
     };
     controller.send(EngineCommand::SetTrackCount { count: track_count });
     (controller, renderer, midi)
@@ -115,6 +125,10 @@ pub struct Controller {
     /// Whether this is an offline render's, whose VST3 Plugins are copies of
     /// the live ones in helpers of their own (ADR 0008).
     offline: bool,
+    /// Whether the audio thread has been given its DJ Mixer yet.
+    dj_installed: bool,
+    /// The DJ mix's recording, as the audio thread hands it over.
+    dj_recording: Consumer<f32>,
 }
 
 impl Controller {
@@ -447,8 +461,69 @@ impl Controller {
                 end: end_tick,
                 enabled,
             }),
+            EngineCommand::SetPlayRange {
+                start_tick,
+                end_tick,
+            } => self.push(RtCommand::SetPlayRange {
+                start: start_tick,
+                end: end_tick,
+            }),
             EngineCommand::SetMetronome { on } => self.push(RtCommand::SetMetronome(on)),
+            EngineCommand::DjSet {
+                kind,
+                index,
+                name,
+                value,
+            } => {
+                // Parsed here, so the audio thread only matches an enum.
+                if let Some(control) = DjControl::parse(&kind, index, &name) {
+                    self.install_dj();
+                    self.push(RtCommand::DjSet(control, value));
+                }
+            }
         }
+    }
+
+    /// Build the DJ Mixer the first time the Mixing page needs it: it
+    /// allocates, so it happens here.
+    fn install_dj(&mut self) {
+        if !self.dj_installed {
+            let mut dj = Box::new(DjMixer::new(self.sample_rate));
+            dj.prepare(MAX_BLOCK);
+            self.push(RtCommand::DjInstall(dj));
+            self.dj_installed = true;
+        }
+    }
+
+    /// Put a file decoded and analysed for Deck `deck` (at this
+    /// Controller's sample rate, off the audio thread) there. Answers its
+    /// BPM, Beat Grid, key and waveform, as JSON.
+    pub fn dj_put(&mut self, deck: usize, prepared: PreparedDjTrack) -> String {
+        self.collect_garbage();
+        self.install_dj();
+        let analysis = prepared.analysis.to_json();
+        self.push(RtCommand::DjLoad {
+            deck,
+            track: Some(prepared.track),
+        });
+        analysis
+    }
+
+    /// Take the file off Deck `deck`.
+    pub fn dj_unload(&mut self, deck: usize) {
+        self.collect_garbage();
+        if self.dj_installed {
+            self.push(RtCommand::DjLoad { deck, track: None });
+        }
+    }
+
+    /// The DJ mix recorded since the last call, interleaved stereo.
+    pub fn take_dj_recording(&mut self) -> Vec<f32> {
+        let mut taken = Vec::with_capacity(self.dj_recording.slots());
+        while let Ok(sample) = self.dj_recording.pop() {
+            taken.push(sample);
+        }
+        taken
     }
 
     /// Audition a file from the sample browser (#52): it plays once at the
@@ -592,6 +667,10 @@ pub struct Renderer {
     audition: Audition,
     /// The live input armed Tracks monitor, while an input is open.
     monitor: Option<Box<MonitorFeed>>,
+    /// Where the DJ mix's recording goes, for the Controller to take.
+    dj_recording: Producer<f32>,
+    /// The DJ Mixer's report, filled each callback without allocating.
+    dj_report: [f64; DJ_REPORT_LEN],
 }
 
 impl Renderer {
@@ -634,7 +713,18 @@ impl Renderer {
             self.engine.render(block);
             let left = &self.engine.left()[..block];
             let right = &self.engine.right()[..block];
-            for (frame, (l, r)) in chunk.chunks_exact_mut(channels).zip(left.iter().zip(right)) {
+            // The DJ Mixer's headphone cue goes out of outputs 3 and 4 of an
+            // interface that has them, as a DJ interface does (ADR 0013).
+            let headphones = self
+                .engine
+                .dj_headphones()
+                .filter(|_| channels >= 4)
+                .map(|(l, r)| (&l[..block], &r[..block]));
+            for (index, (frame, (l, r))) in chunk
+                .chunks_exact_mut(channels)
+                .zip(left.iter().zip(right))
+                .enumerate()
+            {
                 let (audition_l, audition_r) = self.audition.next_frame();
                 let (l, r) = (l + audition_l, r + audition_r);
                 if channels == 1 {
@@ -643,8 +733,24 @@ impl Renderer {
                     frame[0] = convert(l);
                     frame[1] = convert(r);
                     frame[2..].fill(convert(0.0));
+                    if let Some((cue_l, cue_r)) = headphones {
+                        frame[2] = convert(cue_l[index]);
+                        frame[3] = convert(cue_r[index]);
+                    }
                 }
             }
+            for &sample in self.engine.dj_recorded() {
+                // If the UI stops taking it, the rest is dropped rather than
+                // waited for.
+                if self.dj_recording.push(sample).is_err() {
+                    break;
+                }
+            }
+            self.engine.dj_clear_recorded();
+        }
+        if self.engine.has_dj() {
+            self.engine.dj_report_into(&mut self.dj_report);
+            self.stats.record_dj(&self.dj_report);
         }
 
         self.take_recorded_notes();
@@ -878,6 +984,7 @@ impl Renderer {
                 end,
                 enabled,
             } => engine.set_loop(start, end, enabled),
+            RtCommand::SetPlayRange { start, end } => engine.set_play_range(start, end),
             RtCommand::SetMetronome(on) => engine.set_metronome(on),
             RtCommand::Audition(file, gain) => {
                 if let Some(old) = self.audition.play(file, gain) {
@@ -889,6 +996,17 @@ impl Renderer {
                     self.discard(Garbage::AudioFile(old));
                 }
             }
+            RtCommand::DjInstall(dj) => {
+                if let Some(back) = engine.install_dj(dj) {
+                    self.discard(Garbage::DjMixer(back));
+                }
+            }
+            RtCommand::DjLoad { deck, track } => {
+                if let Some(old) = engine.swap_dj_track(deck, track) {
+                    self.discard(Garbage::DjTrack(old));
+                }
+            }
+            RtCommand::DjSet(control, value) => engine.dj_apply(control, value),
         }
     }
 

@@ -31,3 +31,12 @@ test("every preset is a whole set of settings, each already in range", () => {
     }
   }
 });
+
+test("every built-in Effect ships factory presets, each named once", () => {
+  for (const type of EFFECT_TYPES) {
+    const names = effectPresets(type).map((preset) => preset.name);
+    expect(names.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(names).size).toBe(names.length);
+    for (const preset of effectPresets(type)) expect(preset.description.length).toBeGreaterThan(0);
+  }
+});

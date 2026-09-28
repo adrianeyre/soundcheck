@@ -65,8 +65,8 @@ test("a Widget dropped onto others pushes them down, and the rest stay put", () 
 
 test("no Zone keeps a row with nothing in it, though a gap beside a Widget stays", () => {
   const layout = defaultLayout();
-  // Moved down past the end, the Mixer stays under the last row.
-  expect(moveWidget(layout, "mixer", 0, 90).mixer.y).toBe(layout.mixer.y);
+  // Moved down past the end, the last Widget stays under the last row.
+  expect(moveWidget(layout, "eq", 0, 200).eq.y).toBe(layout.eq.y);
   // Shorter, the Transport's rows close up under it.
   const short = resizeWidget(layout, "transport", 24, 4);
   expect(short.assistant.y).toBe(4);
@@ -175,7 +175,20 @@ test("Widgets that were away come back where they were kept, pushing down what m
   const back = withoutWidgets(saved, []);
   expectNoOverlaps(back);
   // Down the page they are in the order they were in, above what moved into their rows.
-  expect(widgetsIn(back, "main").slice(5)).toEqual(["stepSequencer", "pianoRoll", "instrument", "mixer", "recordAudio", "samples"]);
+  expect(widgetsIn(back, "main").slice(5)).toEqual([
+    "stepSequencer",
+    "pianoRoll",
+    "instrument",
+    "mixer",
+    "recordAudio",
+    "samples",
+    "keyboard",
+    "chords",
+    "noteTools",
+    "meters",
+    "overview",
+    "eq",
+  ]);
   // A layout with nothing away and nothing overlapping is left as it is.
   expect(withoutWidgets(back, [])).toBe(back);
 });

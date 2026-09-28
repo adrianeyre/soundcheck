@@ -2,6 +2,7 @@ import { KeyboardMusic } from "lucide-react";
 import { PresetActions, PresetSelect } from "../preset/PresetControls";
 import type { ListedPreset } from "../preset/preset-library";
 import { SYNTH_PARAMS, type SynthParam, type SynthSettings } from "./synth-params";
+import { SynthVisuals } from "./SynthVisuals";
 
 export interface SynthPanelProps {
   trackName: string;
@@ -14,8 +15,9 @@ export interface SynthPanelProps {
 /**
  * A control for every setting the Synth declares, drawn from its table: a
  * list to pick from where the setting has choices, a slider where it is a
- * number. Nothing here knows what any particular setting means, so a setting
- * added to the engine's table appears here as soon as the table is mirrored.
+ * number. The controls know nothing of what a setting means, so a setting
+ * added to the engine's table appears here as soon as the table is mirrored;
+ * above them, the oscillators, envelopes, filter and LFO are drawn.
  */
 export function SynthPanel({ trackName, preset, settings, onChange }: SynthPanelProps) {
   return (
@@ -30,6 +32,7 @@ export function SynthPanel({ trackName, preset, settings, onChange }: SynthPanel
           <PresetActions target="synth" label={`${trackName} Synth`} settings={settings} />
         </div>
       </div>
+      <SynthVisuals settings={settings} onChange={onChange} />
       <div className="param-grid">
         {SYNTH_PARAMS.map((param) => (
           <Control key={param.name} param={param} settings={settings} onChange={onChange} />

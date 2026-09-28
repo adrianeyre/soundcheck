@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 
 import { sampleProject } from "./fixtures";
-import { DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
+import { EFFECT_TYPES } from "../effect/effect-params";
+import { createEffect, DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
 import { EngineSync } from "./engine-sync";
 import { parseProject, serialiseProject } from "./serialise";
 
@@ -438,6 +439,26 @@ test("a schema 16 Project opens as it was: Shared Projects are new in schema 17"
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.project).toEqual({ ...project, schemaVersion: SCHEMA_VERSION });
+});
+
+test("a schema 17 Project opens as it was: the Saturator and seven more Effects are new in schema 18", () => {
+  const project = sampleProject();
+  const result = parseProject(JSON.stringify({ ...project, schemaVersion: 17 }));
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.project).toEqual({ ...project, schemaVersion: SCHEMA_VERSION });
+});
+
+test("every built-in Effect saves and opens with its settings", () => {
+  const project = sampleProject();
+  const index = project.tracks.findIndex((track) => track.kind === "instrument");
+  project.tracks[index]!.insertChain = EFFECT_TYPES.map((type) => createEffect(type, `fx-${type}`));
+  const result = parseProject(serialiseProject(project));
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.project).toEqual(project);
 });
 
 test("a VST3 Plugin keeps its name, vendor and state exactly, and is refused if they break their rules", () => {

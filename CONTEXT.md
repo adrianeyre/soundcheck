@@ -213,6 +213,18 @@ _Avoid_: Blank, inactive
 Said of a Widget kept under the title bar or above the footer, so it stays on screen while the rest of the Editor scrolls.
 _Avoid_: Sticky, docked
 
+**Song Key**:
+The key the musician is writing in, a root and a scale, which the Keyboard marks, the Chords are built from and Note Tools fit notes to. It is the musician's view while they work, not part of the Project, and changes nothing heard.
+_Avoid_: Scale (on its own; that is only half of it), tonality
+
+**Chord Pad**:
+One chord of the Song Key, or one borrowed from its parallel key, in the Chords Widget: held, it plays; clicked with a Pattern Clip selected, it joins the progression to write into the Clip.
+_Avoid_: Chord trigger, chord button
+
+**Note Tools**:
+Changes to every note of the selected Pattern Clip at once, such as transpose, humanise, strum or arpeggiate, each one undo step. Like the Piano Roll, it is a way of editing, not a separate kind of data.
+_Avoid_: MIDI effects (those would run while the song plays), MIDI functions, macros
+
 ### Where it runs
 
 **Desktop App**:
@@ -252,3 +264,57 @@ _Avoid_: Server (on its own), backend, cloud
 **Invite link**:
 The link that joins a Live Session: the Browser Version's address, with the Relay, the session and its key after the `#`. Anyone with it can join.
 _Avoid_: Share link (Share makes a Shared Project), room code
+
+### The Mixing page
+
+**Mixing page**:
+The page, beside the Editor and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees.
+_Avoid_: DJ mode, performance view, live page
+
+**Deck**:
+One of the Mixing page's two or four players: a file loaded onto it, played at a tempo of its own, with its own cues and loops, into one channel of the DJ mixer. A Deck is not a Track: it holds a file, not Clips.
+_Avoid_: Player, turntable, channel (that is its strip on the mixer)
+
+**Track browser**:
+The Mixing page's list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck.
+_Avoid_: Library (that is the app's Preset and Kit library), crate, playlist
+
+**Beat Grid**:
+Where a Deck's file has its beats: a BPM and the time of its first beat, found by the engine when the file is loaded and put right by hand with Tap and the grid nudges. Sync, Quantize, loops and Beat Jump all go by it.
+_Avoid_: Tempo map (that is the song's), grid (on its own; the Editor has a Grid)
+
+**Hot Cue**:
+One of eight points of a Deck's file, each with a colour and a name, that one press jumps the Deck to. Unlike the cue point, it is set and cleared at will and stays until then.
+_Avoid_: Marker, Section, memory cue (that only moves the cue point)
+
+**Quantize**:
+A Deck's setting that snaps its cue point, Hot Cues, loops and Beat Jumps to the nearest beat of its Beat Grid.
+_Avoid_: Quantise (that is the Piano Roll's note tool), snap
+
+**Slip**:
+A Deck's setting under which a loop, a scratch, Reverse or a held Hot Cue plays over the track while it runs on silently underneath, and the Deck goes back to where the track would have been when they end.
+_Avoid_: Censor, shadow play
+
+**Master Tempo**:
+A Deck's key lock: its tempo changes and its pitch doesn't, by time-stretching in the engine.
+_Avoid_: Key lock, keylock, pitch lock
+
+**Sync**:
+Matching a Deck's tempo to the Sync Master's and keeping its beats on the Master's, by their Beat Grids. Turned off, the Deck keeps the tempo it had.
+_Avoid_: Beat-match (that is what a DJ does by ear), auto-sync
+
+**Sync Master**:
+The one Deck the others Sync to, marked MASTER; its tempo also times the Beat FX.
+_Avoid_: Leader, clock
+
+**Key Shift**:
+Moving a Deck's pitch by whole semitones without changing its tempo.
+_Avoid_: Transpose (that is the Note Tools'), pitch (that is the tempo fader's)
+
+**Key Sync**:
+The Key Shift that brings a Deck to the nearest key that mixes with the Sync Master's: the same key, a fifth either way, or its relative major or minor, round the Camelot wheel.
+_Avoid_: Harmonic mixing (that is the practice), auto-key
+
+**Crossfader**:
+The DJ mixer's horizontal fader, which blends the channels assigned to its side A with those assigned to side B, on a curve the DJ picks. A channel assigned THRU is past it.
+_Avoid_: Fader (on its own; each channel has one), balance

@@ -10,8 +10,12 @@
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, table_json};
 use super::{
-    COMPRESSOR_PARAMS, Compressor, CompressorSettings, DELAY_PARAMS, Delay, DelaySettings,
-    EQ_PARAMS, Eq, EqSettings, REVERB_PARAMS, Reverb, ReverbSettings,
+    BITCRUSHER_PARAMS, Bitcrusher, BitcrusherSettings, CHORUS_PARAMS, COMPRESSOR_PARAMS, Chorus,
+    ChorusSettings, Compressor, CompressorSettings, DELAY_PARAMS, Delay, DelaySettings, EQ_PARAMS,
+    Eq, EqSettings, FILTER_PARAMS, Filter, FilterSettings, GATE_PARAMS, Gate, GateSettings,
+    LIMITER_PARAMS, Limiter, LimiterSettings, PHASER_PARAMS, Phaser, PhaserSettings, REVERB_PARAMS,
+    Reverb, ReverbSettings, SATURATOR_PARAMS, Saturator, SaturatorSettings, UTILITY_PARAMS,
+    Utility, UtilitySettings,
 };
 use crate::automation::{Automation, TableAutomation};
 use crate::plugin::HostedPlugin;
@@ -26,10 +30,31 @@ pub enum EffectKind {
     Compressor,
     Reverb,
     Delay,
+    Saturator,
+    Chorus,
+    Phaser,
+    Filter,
+    Gate,
+    Limiter,
+    Bitcrusher,
+    Utility,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 4] = [Self::Eq, Self::Compressor, Self::Reverb, Self::Delay];
+    pub const ALL: [EffectKind; 12] = [
+        Self::Eq,
+        Self::Compressor,
+        Self::Reverb,
+        Self::Delay,
+        Self::Saturator,
+        Self::Chorus,
+        Self::Phaser,
+        Self::Filter,
+        Self::Gate,
+        Self::Limiter,
+        Self::Bitcrusher,
+        Self::Utility,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +62,14 @@ impl EffectKind {
             Self::Compressor => "compressor",
             Self::Reverb => "reverb",
             Self::Delay => "delay",
+            Self::Saturator => "saturator",
+            Self::Chorus => "chorus",
+            Self::Phaser => "phaser",
+            Self::Filter => "filter",
+            Self::Gate => "gate",
+            Self::Limiter => "limiter",
+            Self::Bitcrusher => "bitcrusher",
+            Self::Utility => "utility",
         }
     }
 
@@ -51,6 +84,14 @@ impl EffectKind {
             Self::Compressor => table_json(COMPRESSOR_PARAMS),
             Self::Reverb => table_json(REVERB_PARAMS),
             Self::Delay => table_json(DELAY_PARAMS),
+            Self::Saturator => table_json(SATURATOR_PARAMS),
+            Self::Chorus => table_json(CHORUS_PARAMS),
+            Self::Phaser => table_json(PHASER_PARAMS),
+            Self::Filter => table_json(FILTER_PARAMS),
+            Self::Gate => table_json(GATE_PARAMS),
+            Self::Limiter => table_json(LIMITER_PARAMS),
+            Self::Bitcrusher => table_json(BITCRUSHER_PARAMS),
+            Self::Utility => table_json(UTILITY_PARAMS),
         }
     }
 
@@ -67,6 +108,14 @@ impl EffectKind {
             Self::Compressor => find(COMPRESSOR_PARAMS, name),
             Self::Reverb => find(REVERB_PARAMS, name),
             Self::Delay => find(DELAY_PARAMS, name),
+            Self::Saturator => find(SATURATOR_PARAMS, name),
+            Self::Chorus => find(CHORUS_PARAMS, name),
+            Self::Phaser => find(PHASER_PARAMS, name),
+            Self::Filter => find(FILTER_PARAMS, name),
+            Self::Gate => find(GATE_PARAMS, name),
+            Self::Limiter => find(LIMITER_PARAMS, name),
+            Self::Bitcrusher => find(BITCRUSHER_PARAMS, name),
+            Self::Utility => find(UTILITY_PARAMS, name),
         }
     }
 
@@ -77,6 +126,14 @@ impl EffectKind {
             Self::Compressor => COMPRESSOR_PARAMS.len(),
             Self::Reverb => REVERB_PARAMS.len(),
             Self::Delay => DELAY_PARAMS.len(),
+            Self::Saturator => SATURATOR_PARAMS.len(),
+            Self::Chorus => CHORUS_PARAMS.len(),
+            Self::Phaser => PHASER_PARAMS.len(),
+            Self::Filter => FILTER_PARAMS.len(),
+            Self::Gate => GATE_PARAMS.len(),
+            Self::Limiter => LIMITER_PARAMS.len(),
+            Self::Bitcrusher => BITCRUSHER_PARAMS.len(),
+            Self::Utility => UTILITY_PARAMS.len(),
         }
     }
 }
@@ -100,6 +157,14 @@ enum Processor {
     Compressor(Compressor),
     Reverb(Reverb),
     Delay(Delay),
+    Saturator(Saturator),
+    Chorus(Chorus),
+    Phaser(Phaser),
+    Filter(Filter),
+    Gate(Gate),
+    Limiter(Limiter),
+    Bitcrusher(Bitcrusher),
+    Utility(Utility),
     Plugin(HostedPlugin),
     /// A Plugin this host doesn't have, by its id: the signal passes it
     /// untouched and it has no settings, so the Project keeps them.
@@ -113,6 +178,14 @@ impl Processor {
             Processor::Compressor(c) => COMPRESSOR_PARAMS[index].get(&c.settings()),
             Processor::Reverb(reverb) => REVERB_PARAMS[index].get(&reverb.settings()),
             Processor::Delay(delay) => DELAY_PARAMS[index].get(&delay.settings()),
+            Processor::Saturator(effect) => SATURATOR_PARAMS[index].get(&effect.settings()),
+            Processor::Chorus(effect) => CHORUS_PARAMS[index].get(&effect.settings()),
+            Processor::Phaser(effect) => PHASER_PARAMS[index].get(&effect.settings()),
+            Processor::Filter(effect) => FILTER_PARAMS[index].get(&effect.settings()),
+            Processor::Gate(effect) => GATE_PARAMS[index].get(&effect.settings()),
+            Processor::Limiter(effect) => LIMITER_PARAMS[index].get(&effect.settings()),
+            Processor::Bitcrusher(effect) => BITCRUSHER_PARAMS[index].get(&effect.settings()),
+            Processor::Utility(effect) => UTILITY_PARAMS[index].get(&effect.settings()),
             Processor::Plugin(plugin) => plugin.get(index),
             Processor::Missing(_) => 0.0,
         }
@@ -154,6 +227,46 @@ impl Processor {
                     delay.set_settings(next);
                 }
             }
+            Processor::Saturator(effect) => {
+                if let Some(next) = changed(SATURATOR_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Chorus(effect) => {
+                if let Some(next) = changed(CHORUS_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Phaser(effect) => {
+                if let Some(next) = changed(PHASER_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Filter(effect) => {
+                if let Some(next) = changed(FILTER_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Gate(effect) => {
+                if let Some(next) = changed(GATE_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Limiter(effect) => {
+                if let Some(next) = changed(LIMITER_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Bitcrusher(effect) => {
+                if let Some(next) = changed(BITCRUSHER_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
+            Processor::Utility(effect) => {
+                if let Some(next) = changed(UTILITY_PARAMS, effect.settings(), index, value) {
+                    effect.set_settings(next);
+                }
+            }
             Processor::Plugin(plugin) => plugin.set(index, value),
             Processor::Missing(_) => {}
         }
@@ -188,6 +301,26 @@ impl Effect {
             EffectKind::Delay => {
                 Processor::Delay(Delay::new(sample_rate, DelaySettings::defaults()))
             }
+            EffectKind::Saturator => {
+                Processor::Saturator(Saturator::new(sample_rate, SaturatorSettings::defaults()))
+            }
+            EffectKind::Chorus => {
+                Processor::Chorus(Chorus::new(sample_rate, ChorusSettings::defaults()))
+            }
+            EffectKind::Phaser => {
+                Processor::Phaser(Phaser::new(sample_rate, PhaserSettings::defaults()))
+            }
+            EffectKind::Filter => {
+                Processor::Filter(Filter::new(sample_rate, FilterSettings::defaults()))
+            }
+            EffectKind::Gate => Processor::Gate(Gate::new(sample_rate, GateSettings::defaults())),
+            EffectKind::Limiter => {
+                Processor::Limiter(Limiter::new(sample_rate, LimiterSettings::defaults()))
+            }
+            EffectKind::Bitcrusher => {
+                Processor::Bitcrusher(Bitcrusher::new(BitcrusherSettings::defaults()))
+            }
+            EffectKind::Utility => Processor::Utility(Utility::new(UtilitySettings::defaults())),
         };
         Self::hosting(processor, kind.param_count())
     }
@@ -256,6 +389,14 @@ impl Effect {
             Processor::Compressor(_) => Some(EffectKind::Compressor),
             Processor::Reverb(_) => Some(EffectKind::Reverb),
             Processor::Delay(_) => Some(EffectKind::Delay),
+            Processor::Saturator(_) => Some(EffectKind::Saturator),
+            Processor::Chorus(_) => Some(EffectKind::Chorus),
+            Processor::Phaser(_) => Some(EffectKind::Phaser),
+            Processor::Filter(_) => Some(EffectKind::Filter),
+            Processor::Gate(_) => Some(EffectKind::Gate),
+            Processor::Limiter(_) => Some(EffectKind::Limiter),
+            Processor::Bitcrusher(_) => Some(EffectKind::Bitcrusher),
+            Processor::Utility(_) => Some(EffectKind::Utility),
             Processor::Plugin(_) | Processor::Missing(_) => None,
         }
     }
@@ -294,6 +435,18 @@ impl Effect {
             }
             Processor::Reverb(reverb) => reverb.set_settings(ReverbSettings::from_flat(values)),
             Processor::Delay(delay) => delay.set_settings(DelaySettings::from_flat(values)),
+            Processor::Saturator(effect) => {
+                effect.set_settings(SaturatorSettings::from_flat(values))
+            }
+            Processor::Chorus(effect) => effect.set_settings(ChorusSettings::from_flat(values)),
+            Processor::Phaser(effect) => effect.set_settings(PhaserSettings::from_flat(values)),
+            Processor::Filter(effect) => effect.set_settings(FilterSettings::from_flat(values)),
+            Processor::Gate(effect) => effect.set_settings(GateSettings::from_flat(values)),
+            Processor::Limiter(effect) => effect.set_settings(LimiterSettings::from_flat(values)),
+            Processor::Bitcrusher(effect) => {
+                effect.set_settings(BitcrusherSettings::from_flat(values))
+            }
+            Processor::Utility(effect) => effect.set_settings(UtilitySettings::from_flat(values)),
             Processor::Plugin(plugin) => {
                 let count = plugin.manifest().settings.len();
                 for index in 0..count {
@@ -329,6 +482,8 @@ impl Effect {
     pub fn gain_reduction_db(&self) -> f32 {
         match &self.processor {
             Processor::Compressor(compressor) if !self.bypassed => compressor.meter_db(),
+            Processor::Gate(gate) if !self.bypassed => gate.meter_db(),
+            Processor::Limiter(limiter) if !self.bypassed => limiter.meter_db(),
             _ => 0.0,
         }
     }
@@ -386,6 +541,14 @@ impl Processor {
                 reverb.process_stereo_into(input_left, input_right, left, right, 1.0);
             }
             Processor::Delay(delay) => delay.process_stereo(left, right),
+            Processor::Saturator(effect) => effect.process_stereo(left, right),
+            Processor::Chorus(effect) => effect.process_stereo(left, right),
+            Processor::Phaser(effect) => effect.process_stereo(left, right),
+            Processor::Filter(effect) => effect.process_stereo(left, right),
+            Processor::Gate(effect) => effect.process_stereo(left, right),
+            Processor::Limiter(effect) => effect.process_stereo(left, right),
+            Processor::Bitcrusher(effect) => effect.process_stereo(left, right),
+            Processor::Utility(effect) => effect.process_stereo(left, right),
             Processor::Plugin(plugin) => plugin.process(left, right, (scratch_left, scratch_right)),
             Processor::Missing(_) => {}
         }
@@ -531,6 +694,14 @@ mod tests {
             EffectKind::Compressor => COMPRESSOR_PARAMS.iter().map(|p| p.name).collect(),
             EffectKind::Reverb => REVERB_PARAMS.iter().map(|p| p.name).collect(),
             EffectKind::Delay => DELAY_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Saturator => SATURATOR_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Chorus => CHORUS_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Phaser => PHASER_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Filter => FILTER_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Gate => GATE_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Limiter => LIMITER_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Bitcrusher => BITCRUSHER_PARAMS.iter().map(|p| p.name).collect(),
+            EffectKind::Utility => UTILITY_PARAMS.iter().map(|p| p.name).collect(),
         };
         for (name, value) in settings {
             flat[params.iter().position(|p| p == name).unwrap()] = *value;
@@ -748,5 +919,50 @@ mod tests {
         );
         assert_eq!(ReverbSettings::defaults(), ReverbSettings::default());
         assert_eq!(DelaySettings::defaults(), DelaySettings::default());
+    }
+
+    #[test]
+    fn every_built_in_runs_at_its_defaults_and_is_named_as_the_ui_names_it() {
+        for kind in EffectKind::ALL {
+            assert_eq!(EffectKind::named(kind.name()), Some(kind));
+            let effect = Effect::new(kind, RATE);
+            assert_eq!(effect.kind(), Some(kind));
+            assert_eq!(effect.to_flat().len(), kind.param_count());
+            let mut chain = InsertChain::default();
+            chain.insert(0, Box::new(effect)).unwrap();
+            let (left, right) = run(&mut chain);
+            assert!(
+                left.iter()
+                    .chain(&right)
+                    .all(|s| s.is_finite() && s.abs() < 4.0),
+                "{}",
+                kind.name()
+            );
+        }
+    }
+
+    #[test]
+    fn a_gate_and_a_limiter_meter_their_gain_reduction() {
+        let mut chain = InsertChain::default();
+        chain
+            .insert(
+                0,
+                effect(
+                    EffectKind::Gate,
+                    &[("thresholdDb", -3.0), ("rangeDb", -20.0)],
+                ),
+            )
+            .unwrap();
+        run(&mut chain);
+        let gate = chain.effect(0).unwrap().gain_reduction_db();
+        assert!((gate - 20.0).abs() < 0.5, "{gate} dB");
+
+        let mut chain = InsertChain::default();
+        chain
+            .insert(0, effect(EffectKind::Limiter, &[("inputGainDb", 12.0)]))
+            .unwrap();
+        run(&mut chain);
+        let limiter = chain.effect(0).unwrap().gain_reduction_db();
+        assert!(limiter > 6.0, "{limiter} dB");
     }
 }

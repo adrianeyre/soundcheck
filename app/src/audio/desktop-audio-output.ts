@@ -6,6 +6,7 @@
 import type {
   AudioOutput,
   AudioOutputStats,
+  DjAnalysis,
   EngineCommand,
   EngineReport,
   Meters,
@@ -39,6 +40,8 @@ export interface Measured {
   outputLatency: number | null;
   engine: EngineReport;
   meters: Meters;
+  /** The DJ Mixer's report, or null before the Mixing page is used. */
+  dj?: number[] | null;
 }
 
 const STATS_MS = 50;
@@ -97,6 +100,7 @@ export function desktopAudioOutput(invoke: Invoke): OpenAudioOutput {
             : null,
           engine: measured?.engine ?? null,
           meters: measured?.meters ?? null,
+          dj: measured?.dj ?? null,
         };
       },
 
@@ -118,6 +122,21 @@ export function desktopAudioOutput(invoke: Invoke): OpenAudioOutput {
       async close() {
         clearInterval(timer);
         await invoke("audio_close");
+      },
+
+      dj: {
+        async load(deck: number, bytes: Uint8Array): Promise<DjAnalysis> {
+          return JSON.parse(await invoke<string>("dj_load", { deck, bytes: [...bytes] })) as DjAnalysis;
+        },
+        unload(deck: number) {
+          void invoke("dj_unload", { deck }).catch(() => {});
+        },
+        async takeRecording(): Promise<Float32Array> {
+          const bytes = await invoke<ArrayBuffer>("dj_recording_take");
+          return new Float32Array(bytes);
+        },
+        // The cue goes out of outputs 3 and 4, which only a DJ interface has.
+        headphones: info.channels >= 4,
       },
     } satisfies AudioOutput;
   };

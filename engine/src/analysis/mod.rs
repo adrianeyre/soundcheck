@@ -6,15 +6,15 @@
 //! `Analysis::to_json` writes the result compactly, for an LLM to read.
 
 mod bands;
-mod fft;
+pub(crate) mod fft;
 mod glyphs;
 mod json;
-mod key;
+pub(crate) mod key;
 mod loudness;
-mod onsets;
+pub(crate) mod onsets;
 mod peaks;
 mod picture;
-mod tempo;
+pub(crate) mod tempo;
 
 use crate::audio_file::{AudioFile, AudioFileError};
 use crate::tempo_map::TempoMap;

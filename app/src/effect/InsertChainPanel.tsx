@@ -12,6 +12,7 @@ import { createEffect, type Effect, type EffectType, type EqSettings, isVst3Id }
 import { LIMITS } from "../project/validate";
 import { EFFECT_NAMES, EFFECT_TYPES, eqResponseDb } from "./effect-params";
 import { createPluginEffect, effectName, effectTable, isMissingPlugin, type TableParam } from "./effect-table";
+import { EffectVisual } from "./effect-visuals";
 
 export interface InsertChainPanelProps {
   /** The Track's name, or "Master". */
@@ -30,10 +31,12 @@ export interface InsertChainPanelProps {
 /**
  * One Insert Chain: its Effects in the order the signal meets them, each
  * with buttons to move, bypass and remove it and a control for every setting
- * its table declares, and a way to add another. The EQ also draws its
- * frequency response, the Compressor shows how far the engine is pulling the
- * level down, and every Effect offers its Presets, Factory and User, and
- * saves its settings as a User Preset.
+ * its table declares, and a way to add another. Every built-in Effect draws
+ * a picture of its settings (the EQ its frequency response, the dynamics
+ * their level curves, the Reverb its tail and so on), the Compressor, Gate
+ * and Limiter show how far the engine is pulling the level down, and every
+ * Effect offers its Presets, Factory and User, and saves its settings as a
+ * User Preset.
  */
 export function InsertChainPanel({ name, target, chain, onCommand, gainReduction }: InsertChainPanelProps) {
   // A built-in by its type, an installed Plugin Effect as `plugin:<id>`, or
@@ -130,7 +133,8 @@ export function InsertChainPanel({ name, target, chain, onCommand, gainReduction
                 </button>
               </div>
               {effect.type === "eq" && <EqCurve label={label} settings={effect.settings} />}
-              {effect.type === "compressor" && (
+              <EffectVisual effect={effect} label={label} />
+              {(effect.type === "compressor" || effect.type === "gate" || effect.type === "limiter") && (
                 <GainReductionMeter label={label} db={effect.bypassed ? 0 : (gainReduction?.[index] ?? 0)} />
               )}
               {effect.type === "plugin" && effect.vst3 && (

@@ -41,6 +41,7 @@ function project(): Project {
 function setUp(start: Project = project(), waveforms?: ReadonlyMap<string, Waveform>, absentAudio?: ReadonlyMap<string, AbsentAudio>) {
   const history = new ProjectHistory(start);
   const onLoopRegion = vi.fn<(start: number, end: number) => void>();
+  const onSelectSection = vi.fn<(sectionId: string | null) => void>();
   const errors: string[] = [];
   let selected: string | null = null;
 
@@ -62,6 +63,7 @@ function setUp(start: Project = project(), waveforms?: ReadonlyMap<string, Wavef
         view.rerender(<Timeline {...timelineProps()} />);
       },
       onLoopRegion,
+      onSelectSection,
       waveforms,
       absentAudio,
     };
@@ -73,7 +75,7 @@ function setUp(start: Project = project(), waveforms?: ReadonlyMap<string, Wavef
     history.undo();
     view.rerender(<Timeline {...timelineProps()} />);
   };
-  return { history, clips, errors, onLoopRegion, selectedId: () => selected, undo };
+  return { history, clips, errors, onLoopRegion, onSelectSection, selectedId: () => selected, undo };
 }
 
 const clip = (name: string) => screen.queryByLabelText(name) ?? screen.getByTitle(name);
@@ -885,6 +887,31 @@ test("a copied Clip pastes after the Clip selected on another Track, where that 
   expect(errors).toEqual([]);
   expect(clips("vocals")).toHaveLength(1);
   expect(clips("keys").map((c) => c.start / BAR)).toEqual([0, 2]);
+});
+
+test("clicking a Section plays it, and clicking it again unselects it so the whole song plays", () => {
+  const { onSelectSection } = setUp(arranged());
+  const click = (name: string) => {
+    fireEvent.mouseDown(section(name), { clientX: 10 });
+    fireEvent.mouseUp(window, { clientX: 10 });
+  };
+  click("Chorus");
+  expect(section("Chorus")).toHaveAttribute("aria-pressed", "true");
+  const chorusId = onSelectSection.mock.calls.at(-1)![0];
+  expect(chorusId).toEqual(expect.any(String));
+  click("Chorus");
+  expect(section("Chorus")).toHaveAttribute("aria-pressed", "false");
+  expect(onSelectSection).toHaveBeenLastCalledWith(null);
+  // The keyboard does the same with Enter.
+  fireEvent.keyDown(section("Chorus"), { key: "Enter" });
+  expect(onSelectSection).toHaveBeenLastCalledWith(chorusId);
+  fireEvent.keyDown(section("Chorus"), { key: "Enter" });
+  expect(onSelectSection).toHaveBeenLastCalledWith(null);
+  // A drag is a move, not a click, and leaves it selected.
+  click("Chorus");
+  fireEvent.mouseDown(section("Chorus"), { clientX: 10 });
+  fireEvent.mouseUp(window, { clientX: 10 + 20 });
+  expect(section("Chorus")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Ctrl+C copies the selected Section and Ctrl+V pastes it, with everything in its bars, after the one selected", () => {

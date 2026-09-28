@@ -136,6 +136,7 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
   expect(items.map((item) => item.textContent)).toEqual([
     "File",
     "Editor",
+    "Mixing",
     "Settings",
     "Grid",
     "Cookie Policy",
@@ -148,8 +149,8 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
   fireEvent.keyDown(items[0]!, { key: "ArrowDown" });
   expect(items[1]).toHaveFocus();
   fireEvent.keyDown(items[1]!, { key: "End" });
-  expect(items[6]).toHaveFocus();
-  fireEvent.keyDown(items[6]!, { key: "ArrowDown" });
+  expect(items[7]).toHaveFocus();
+  fireEvent.keyDown(items[7]!, { key: "ArrowDown" });
   expect(items[0]).toHaveFocus();
 
   fireEvent.keyDown(items[0]!, { key: "Escape" });
@@ -285,6 +286,12 @@ test("the Grid menu lists every Widget, hides and shows them, and remembers the 
     "Record audio (empty)",
     "Samples",
     "Mixer",
+    "Keyboard",
+    "Chords",
+    "Note Tools (empty)",
+    "Meters",
+    "Song Overview",
+    "EQ",
   ]);
   expect(boxes[0]).toHaveFocus();
   expect(boxes.every((box) => box.getAttribute("aria-checked") === "true")).toBe(true);

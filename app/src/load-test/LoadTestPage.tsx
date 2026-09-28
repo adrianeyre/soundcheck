@@ -166,7 +166,7 @@ export function LoadTestPage({
   // The engine's transport follows the transport bar's settings.
   useEffect(() => {
     if (!output) return;
-    for (const command of transportCommands(transport)) output.send(command);
+    for (const command of transportCommands(transport, { start: transport.loopStart, end: transport.loopEnd })) output.send(command);
   }, [output, transport]);
 
   const readReport = useCallback(() => outputRef.current?.stats().engine ?? null, []);
@@ -195,7 +195,7 @@ export function LoadTestPage({
         : { latencyHint: LATENCY_HINTS[hint]?.value ?? "interactive", trackCount: trackCount() };
       const opened = await openOutput(options);
       outputRef.current = opened;
-      for (const command of transportCommands(transport)) opened.send(command);
+      for (const command of transportCommands(transport, { start: transport.loopStart, end: transport.loopEnd })) opened.send(command);
       for (const command of loadTestChains(0, trackCount())) opened.send(command);
       chainedRef.current = trackCount();
       opened.send({ type: "setPatternPlaying", playing: patternPlaying });
