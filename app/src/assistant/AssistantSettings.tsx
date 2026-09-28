@@ -106,7 +106,7 @@ interface Draft {
   /** What the musician set of how Requests run, where it isn't the provider's default. */
   smallCore?: boolean;
   suggestion?: boolean;
-  /** Whether a model that takes audio hears `analyse_audio`'s render: off unless ticked. */
+  /** Whether a model that takes audio hears `analyse_audio`'s render: on unless unticked. */
   hearAudio: boolean;
   /** The server's context window, as typed, where the server decides it; blank for Ollama's default. */
   contextWindow: string;
@@ -130,7 +130,7 @@ function draft(provider: ProviderId, saved: Connection | undefined): Draft {
     capabilities: saved?.capabilities ?? {},
     ...(saved?.smallCore !== undefined && { smallCore: saved.smallCore }),
     ...(saved?.suggestion !== undefined && { suggestion: saved.suggestion }),
-    hearAudio: saved?.hearAudio ?? false,
+    hearAudio: saved?.hearAudio ?? true,
     contextWindow: saved?.contextWindow === undefined ? "" : String(saved.contextWindow),
   };
 }
@@ -194,8 +194,8 @@ function ConnectionForm({
           ...(Object.keys(adjusted).length > 0 && { capabilities: adjusted }),
           ...(mode.smallCore !== byDefault.smallCore && { smallCore: mode.smallCore }),
           ...(mode.suggestion !== byDefault.suggestion && { suggestion: mode.suggestion }),
-          // Off is the default, and only a model that takes audio can have it on.
-          ...(capabilities.audioInput && hearAudio && { hearAudio: true }),
+          // On is the default, so only turning it off, for a model that takes audio, is kept.
+          ...(capabilities.audioInput && !hearAudio && { hearAudio: false }),
           ...(serverWindow !== undefined && { contextWindow: serverWindow }),
         });
       }}
@@ -392,8 +392,8 @@ function ModelCapabilities({
 
 /**
  * Whether a model that takes audio hears the render itself when it listens,
- * as well as reading its measurements: off by default, since audio costs
- * more, and offered only for such a model.
+ * as well as reading its measurements: on by default, so the Assistant
+ * listens as a musician does, and offered only for such a model.
  */
 function HearAudioField({ hearAudio, onChange }: { hearAudio: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -403,8 +403,8 @@ function HearAudioField({ hearAudio, onChange }: { hearAudio: boolean; onChange:
         Let the Assistant hear the audio when it listens
       </label>
       <p className="hint">
-        It hears up to {LISTENING.maxSeconds} seconds at a time, in mono, as well as reading the measurements. Audio costs more than
-        the numbers alone.
+        It hears up to {LISTENING.maxSeconds} seconds at a time, in mono, as well as reading the measurements, so it can tell how the song
+        sounds and not only how loud it is. Audio costs more than the numbers alone: untick this to save tokens.
       </p>
     </div>
   );

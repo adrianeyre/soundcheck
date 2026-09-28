@@ -1347,3 +1347,75 @@ fn an_offline_render_ignores_the_play_range() {
     run_frames(&mut engine, 2 * BEAT_FRAMES);
     assert!(engine.is_playing(), "the render plays on past the range");
 }
+
+#[test]
+fn a_track_plays_the_keys_and_takes_their_settings() {
+    let mut engine = Engine::new(RATE);
+    engine.set_track_count(1);
+    assert!(engine.set_track_instrument(0, "keys", None));
+    assert_eq!(engine.track_instrument(0), "keys");
+    let honky = crate::instrument::keys_factory_presets()
+        .into_iter()
+        .find(|preset| preset.name == "Honky-Tonk")
+        .unwrap();
+    engine.set_track_keys(0, &honky.settings.to_flat());
+    assert_eq!(engine.track_keys(0), honky.settings.to_flat());
+    engine.set_track_notes(0, &[0.0, BEAT, 60.0, 0.9]);
+    engine.play();
+    assert!(peak(&run(&mut engine, 100)) > 0.05);
+    // Another Instrument has no Keys settings.
+    engine.set_track_instrument(0, "synth", None);
+    assert!(engine.track_keys(0).is_empty());
+}
+
+#[test]
+fn the_keys_play_a_loaded_sample_across_the_keyboard_and_are_silent_without_one() {
+    use crate::audio_file::tests::stereo_wav;
+    let mut engine = Engine::new(RATE);
+    engine.set_track_count(1);
+    engine.set_track_instrument(0, "keys", None);
+    let mut settings = crate::instrument::KeysSettings::default().to_flat();
+    settings[0] = 1.0; // the sample source
+    engine.set_track_keys(0, &settings);
+    engine.set_track_notes(0, &[0.0, BEAT, 64.0, 1.0]);
+    engine.play();
+    assert_eq!(peak(&run(&mut engine, 50)), 0.0, "no sample yet");
+
+    let tone = sine(220.0, 0.5, RATE, 24_000);
+    assert_eq!(
+        engine.load_track_keys_sample(0, &stereo_wav(&tone, &tone, RATE as u32)),
+        None
+    );
+    assert!(engine.load_track_keys_sample(0, b"nope").is_some());
+    engine.stop();
+    engine.seek(0.0);
+    engine.play();
+    assert!(peak(&run(&mut engine, 50)) > 0.1);
+    engine.clear_track_keys_sample(0);
+    // A Track that isn't playing the Keys says so.
+    engine.set_track_instrument(0, "synth", None);
+    assert!(
+        engine
+            .load_track_keys_sample(0, &stereo_wav(&tone, &tone, RATE as u32))
+            .is_some()
+    );
+}
+
+#[test]
+fn a_keys_setting_follows_its_automation() {
+    let mut engine = Engine::new(RATE);
+    engine.set_track_count(1);
+    engine.set_track_instrument(0, "keys", None);
+    engine.set_track_notes(0, &[0.0, 4.0 * BEAT, 60.0, 1.0]);
+    // The level held at nothing: the Keys are silent however they are played.
+    engine.set_automation(0, "instrument:level", &[0.0, 0.0, 0.0]);
+    engine.play();
+    assert_eq!(peak(&run(&mut engine, 100)), 0.0);
+    // A count, such as the voices, is not automated.
+    engine.set_automation(0, "instrument:level", &[]);
+    assert_eq!(
+        engine.track_keys(0)[24],
+        0.8,
+        "the fixed level is the host's"
+    );
+}

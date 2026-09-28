@@ -3,12 +3,17 @@
 //! Every Instrument renders stereo, because the Drum Sampler pans each pad
 //! for itself. The Synth is the same on both sides.
 
+mod keys;
 mod kit;
 mod plugin;
 mod sampler;
 mod synth;
 mod wav;
 
+pub use keys::{
+    KEYS_PARAM_COUNT, KEYS_PARAMS, Keys, KeysPreset, KeysSettings, keys_factory_presets,
+    keys_parameters_json, keys_presets_json,
+};
 pub use kit::starter_kit_json;
 pub use plugin::PluginInstrument;
 pub use sampler::{DrumSampler, MAX_PADS, PadParam, PadSettings};
@@ -32,6 +37,8 @@ pub fn kit_sample(pad: usize) -> Option<Sample> {
 pub enum Instrument {
     Synth(Synth),
     Drums(DrumSampler),
+    /// Pianos, electric pianos, or a sample played across the keyboard.
+    Keys(Keys),
     /// An Instrument Plugin's instance (ADR 0003).
     Plugin(PluginInstrument),
     /// The place of an Instrument Plugin with this id that this host
@@ -42,6 +49,11 @@ pub enum Instrument {
 impl Instrument {
     pub fn synth(sample_rate: f32) -> Self {
         Self::Synth(Synth::new(sample_rate, SynthSettings::default()))
+    }
+
+    /// The Keys, with the default piano.
+    pub fn keys(sample_rate: f32) -> Self {
+        Self::Keys(Keys::new(sample_rate, KeysSettings::default()))
     }
 
     /// The Drum Sampler with `pads` pads, the bundled starter kit on as many
@@ -56,6 +68,7 @@ impl Instrument {
         match self {
             Self::Synth(_) => "synth",
             Self::Drums(_) => "drumSampler",
+            Self::Keys(_) => "keys",
             Self::Plugin(_) => "plugin",
             Self::Missing(_) => "missing",
         }
@@ -93,6 +106,7 @@ impl Instrument {
         match kind {
             "synth" => Some(Self::synth(sample_rate)),
             "drumSampler" => Some(Self::drum_sampler(sample_rate, pads)),
+            "keys" => Some(Self::keys(sample_rate)),
             _ => None,
         }
     }
@@ -109,6 +123,7 @@ impl Instrument {
         match self {
             Self::Synth(synth) => synth.note_on(note, velocity),
             Self::Drums(drums) => drums.note_on(note, velocity),
+            Self::Keys(keys) => keys.note_on(note, velocity),
             Self::Plugin(plugin) => plugin.note_on(note, velocity),
             Self::Missing(_) => {}
         }
@@ -118,6 +133,7 @@ impl Instrument {
         match self {
             Self::Synth(synth) => synth.note_off(note),
             Self::Drums(drums) => drums.note_off(note),
+            Self::Keys(keys) => keys.note_off(note),
             Self::Plugin(plugin) => plugin.note_off(note),
             Self::Missing(_) => {}
         }
@@ -128,6 +144,7 @@ impl Instrument {
         match self {
             Self::Synth(synth) => synth.active_voices(),
             Self::Drums(drums) => drums.active_voices(),
+            Self::Keys(keys) => keys.active_voices(),
             Self::Plugin(_) | Self::Missing(_) => 0,
         }
     }
@@ -137,6 +154,22 @@ impl Instrument {
     pub fn drums_mut(&mut self) -> Option<&mut DrumSampler> {
         match self {
             Self::Drums(drums) => Some(drums),
+            _ => None,
+        }
+    }
+
+    /// The Keys, when that is what this is, to change their settings or sample.
+    pub fn keys_mut(&mut self) -> Option<&mut Keys> {
+        match self {
+            Self::Keys(keys) => Some(keys),
+            _ => None,
+        }
+    }
+
+    /// The Keys' settings, when the Keys are what this is.
+    pub fn keys_settings(&self) -> Option<KeysSettings> {
+        match self {
+            Self::Keys(keys) => Some(keys.settings()),
             _ => None,
         }
     }
@@ -168,6 +201,7 @@ impl Instrument {
                 right.copy_from_slice(left);
             }
             Self::Drums(drums) => drums.render(left, right),
+            Self::Keys(keys) => keys.render(left, right),
             Self::Plugin(plugin) => plugin.render(left, right, ticks),
             Self::Missing(_) => {
                 left.fill(0.0);

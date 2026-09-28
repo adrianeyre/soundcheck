@@ -5,6 +5,7 @@
  * its schema, nothing more.
  */
 import { EFFECT_NAMES, EFFECT_TYPES, type EffectType, effectParams } from "../effect/effect-params";
+import { KEYS_PARAMS } from "../instrument/keys-params";
 import { SYNTH_PARAMS } from "../instrument/synth-params";
 import type { PluginManifest } from "../plugin/plugins";
 import {
@@ -123,6 +124,11 @@ export function validateSynthSettings(settings: unknown): string | null {
  */
 export function validateInstrument(instrument: unknown): string | null {
   return problem(() => checkInstrument(instrument, "The Kit"));
+}
+
+/** What is wrong with the Keys' settings, or null, as a User Preset's are checked. */
+export function validateKeysSettings(settings: unknown): string | null {
+  return problem(() => checkTableSettings(KEYS_PARAMS, "Keys", settings, "The Keys settings"));
 }
 
 /** What is wrong with an Effect's settings, or null. */
@@ -427,8 +433,12 @@ function checkInstrument(instrument: unknown, what: string): asserts instrument 
         `A pad's choke group must be a whole number from 0 to ${maxGroup}`,
       );
     }
+  } else if (instrument.type === "keys") {
+    exactKeys(instrument, ["type", "preset", "settings", "sample"], `${what}'s Keys`);
+    checkTableSettings(KEYS_PARAMS, "Keys", instrument.settings, `${what}'s Keys settings`);
+    check(instrument.sample === null || typeof instrument.sample === "string", "The Keys' sample must be a file or null");
   } else {
-    check(false, `${what}'s Instrument must be the Synth, the Drum Sampler or a Plugin`);
+    check(false, `${what}'s Instrument must be the Synth, the Drum Sampler, the Keys or a Plugin`);
   }
   check(preset === null || typeof preset === "string", "A preset must be a name or null");
 }
@@ -500,24 +510,34 @@ function checkEffect(effect: unknown, ids: Set<string>): asserts effect is Effec
  * it.
  */
 function checkSynthSettings(settings: unknown, what: string): asserts settings is Record<string, unknown> {
+  checkTableSettings(SYNTH_PARAMS, "Synth", settings, what);
+}
+
+/** Settings exactly as `params` declares them: each in range, on its step, and a named choice where it picks from a list. */
+function checkTableSettings(
+  params: readonly { name: string; min: number; max: number; step: number; choices: readonly string[] }[],
+  who: string,
+  settings: unknown,
+  what: string,
+): asserts settings is Record<string, unknown> {
   exactKeys(
     settings,
-    SYNTH_PARAMS.map((param) => param.name),
+    params.map((param) => param.name),
     what,
   );
-  for (const param of SYNTH_PARAMS) {
+  for (const param of params) {
     const value = settings[param.name];
     if (param.choices.length > 0) {
       check(
         typeof value === "string" && param.choices.includes(value),
-        `Synth ${param.name} must be one of ${param.choices.join(", ")}`,
+        `${who} ${param.name} must be one of ${param.choices.join(", ")}`,
       );
     } else {
-      inRange(value, [param.min, param.max], `Synth ${param.name}`);
+      inRange(value, [param.min, param.max], `${who} ${param.name}`);
       if (param.step > 0) {
         check(
           Number.isInteger((value as number) / param.step),
-          `Synth ${param.name} must be a multiple of ${param.step}`,
+          `${who} ${param.name} must be a multiple of ${param.step}`,
         );
       }
     }

@@ -29,6 +29,7 @@ export function audioFiles(project: Project): string[] {
   const files = new Set<string>(padSamples(project));
   for (const track of project.tracks) {
     if (track.kind === "audio") for (const clip of track.clips) files.add(clip.file);
+    if (track.kind === "instrument" && track.instrument.type === "keys" && track.instrument.sample) files.add(track.instrument.sample);
   }
   if (project.referenceTrack) files.add(project.referenceTrack.file);
   return [...files].toSorted();

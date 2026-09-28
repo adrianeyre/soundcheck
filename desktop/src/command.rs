@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use soundcheck_engine::{
-    DjControl, DjMixer, DjTrack, NoteList, PreparedAudioClips, PreparedAudioFile,
+    DjControl, DjMixer, DjTrack, KeysSettings, NoteList, PreparedAudioClips, PreparedAudioFile,
     PreparedAutomation, PreparedBus, PreparedEffect, PreparedInstrument, PreparedSample,
     PreparedSends, PreparedTempoChanges, PreparedTrack, RecordedNote, SynthSettings,
 };
@@ -116,6 +116,20 @@ pub enum EngineCommand {
     ClearPadSample {
         track: usize,
         pad: usize,
+    },
+    /// The Keys' settings, flat, as their table declares them.
+    SetKeysSettings {
+        track: usize,
+        settings: Vec<f32>,
+    },
+    /// The WAV the Keys play across the keyboard, as `setPadSample` sends one.
+    SetKeysSample {
+        track: usize,
+        wav: Vec<u8>,
+    },
+    /// Take the sample off the Keys.
+    ClearKeysSample {
+        track: usize,
     },
     /// Add an Effect, with its default settings, to an Insert Chain.
     /// `chain` is a Track's index, -1 for the Master's, or -2 - b for Bus b's.
@@ -342,6 +356,15 @@ pub enum RtCommand {
     ClearPadSample {
         track: usize,
         pad: usize,
+    },
+    SetKeys {
+        track: usize,
+        settings: KeysSettings,
+    },
+    /// The Keys' sample, decoded on the control side, or none to take it off.
+    SetKeysSample {
+        track: usize,
+        sample: Option<PreparedSample>,
     },
     InsertEffect {
         chain: i32,
@@ -828,6 +851,28 @@ mod tests {
                 pad: 1,
                 wav: b"RIFF".to_vec()
             }
+        );
+    }
+
+    #[test]
+    fn the_keys_commands_read_the_json_the_ui_sends() {
+        assert_eq!(
+            parse(r#"{"type":"setKeysSettings","track":2,"settings":[1,0.5]}"#),
+            EngineCommand::SetKeysSettings {
+                track: 2,
+                settings: vec![1.0, 0.5]
+            }
+        );
+        assert_eq!(
+            parse(r#"{"type":"setKeysSample","track":0,"wav":[82,73,70,70]}"#),
+            EngineCommand::SetKeysSample {
+                track: 0,
+                wav: vec![82, 73, 70, 70]
+            }
+        );
+        assert_eq!(
+            parse(r#"{"type":"clearKeysSample","track":3}"#),
+            EngineCommand::ClearKeysSample { track: 3 }
         );
     }
 }

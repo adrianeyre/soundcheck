@@ -771,6 +771,18 @@ mid-song, 16 Plugins at 128 frames, saving and reopening, the installer).
 
 VST is a registered trademark of Steinberg Media Technologies GmbH.
 
+### The Keys
+
+**Add Keys Track** (in the Tracks menu, or **Keys** under the Track list) adds a
+Track playing the **Keys**: pianos modelled in the Audio Engine, with 33 factory
+sounds to pick from in its panel's sound browser: grands, uprights (Honky-Tonk,
+Felt), electric pianos (tine, suitcase, reed, FM) and more (Toy Piano, Celesta,
+Harpsichord, Clavinet, Lo-fi). Each is a Preset, so it can be changed with the
+controls below it and saved as a User Preset. Choose **Your sample** instead to
+play a WAV across the keyboard: drop it on the panel, from a file or the sample
+browser, and set its root note, the key that plays it as recorded. The
+Keyboard's **Only the key's notes** keeps every key in the Song Key's scale.
+
 ## The Browser Version
 
 The same UI and Audio Engine as a web page, with nothing to install

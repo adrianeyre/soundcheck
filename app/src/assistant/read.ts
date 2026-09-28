@@ -202,6 +202,14 @@ function instrumentDetail(track: Track) {
     };
   }
   if (instrument.type === "synth") return { instrument: instrument.type, preset: instrument.preset, settings: instrument.settings };
+  if (instrument.type === "keys") {
+    return {
+      instrument: instrument.type,
+      preset: instrument.preset,
+      settings: instrument.settings,
+      ...(instrument.sample && { sample: instrument.sample }),
+    };
+  }
   return { instrument: instrument.type, preset: instrument.preset, pads: instrument.pads };
 }
 

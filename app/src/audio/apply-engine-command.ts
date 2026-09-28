@@ -99,6 +99,14 @@ export function applyEngineCommand(engine: Engine, command: EngineCommand, plugi
       return;
     case "clearPadSample":
       return engine.clear_track_pad_sample(command.track, command.pad);
+    case "setKeysSettings":
+      return engine.set_track_keys(command.track, new Float32Array(command.settings));
+    case "setKeysSample":
+      // As a pad's: the UI checked the file before sending it.
+      engine.load_track_keys_sample(command.track, new Uint8Array(command.wav));
+      return;
+    case "clearKeysSample":
+      return engine.clear_track_keys_sample(command.track);
     case "setTrackAudio":
       return engine.set_track_audio(command.track, command.audio);
     case "setTrackMonitoring":

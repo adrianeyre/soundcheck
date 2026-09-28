@@ -80,18 +80,20 @@ const addTrackFromMenu = (label: string) => {
   fireEvent.click(menuItem("Tracks"));
   expect(
     [...screen.getByRole("menu", { name: "Tracks" }).querySelectorAll(".menu-label")].map((item) => item.textContent),
-  ).toEqual(["Add Instrument Track", "Add Drum Track", "Add Audio Track"]);
+  ).toEqual(["Add Instrument Track", "Add Drum Track", "Add Keys Track", "Add Audio Track"]);
   fireEvent.click(menuItem(label));
 };
 
-test("File, then Tracks, adds an Instrument, Drum or Audio Track", async () => {
+test("File, then Tracks, adds an Instrument, Drum, Keys or Audio Track", async () => {
   render(<App />);
   addTrackFromMenu("Add Instrument Track");
   addTrackFromMenu("Add Drum Track");
   addTrackFromMenu("Add Audio Track");
+  addTrackFromMenu("Add Keys Track");
   expect(await screen.findByLabelText("Synth 1 lane")).toBeInTheDocument();
   expect(screen.getByLabelText("Drums 2 lane")).toBeInTheDocument();
   expect(screen.getByLabelText("Audio 3 lane")).toBeInTheDocument();
+  expect(screen.getByLabelText(/^Keys \d lane$/)).toBeInTheDocument();
 });
 
 test("the Editor shows only music-making; the AI settings are on Settings", async () => {

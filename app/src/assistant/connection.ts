@@ -53,7 +53,9 @@ export interface Connection {
   suggestion?: boolean;
   /**
    * Whether `analyse_audio` may send a model that takes audio the render
-   * itself; unset, it doesn't, since audio costs more than the numbers.
+   * itself; unset, it does, so the Assistant listens to the song as well as
+   * measuring it wherever its model can hear. The musician can turn it off,
+   * since audio costs more than the numbers.
    */
   hearAudio?: boolean;
   /**
@@ -243,15 +245,15 @@ export function contextWindowFor(provider: ProviderId, connection: Connection): 
  * How the connection's Requests run: a provider with small models starts
  * with the smaller core and makes Suggestions, and the musician can turn
  * either off, or turn Suggestions on for any provider. The model hears
- * `analyse_audio`'s audio only where it takes audio and the musician turned
- * that on.
+ * `analyse_audio`'s audio wherever it takes audio, unless the musician
+ * turned that off.
  */
 export function requestModeFor(provider: ProviderId, connection: Connection): RequestMode {
   const { smallModels } = providerOf(provider);
   return {
     smallCore: smallModels && (connection.smallCore ?? true),
     suggestion: connection.suggestion ?? smallModels,
-    hearsAudio: capabilitiesFor(provider, connection).audioInput && connection.hearAudio === true,
+    hearsAudio: capabilitiesFor(provider, connection).audioInput && connection.hearAudio !== false,
   };
 }
 

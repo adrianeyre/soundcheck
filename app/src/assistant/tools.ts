@@ -35,6 +35,8 @@ import {
   isMissingInstrument,
   pluginInstrumentTable,
 } from "../instrument/instrument-table";
+import { KEYS_PARAMS, type KeysSettings } from "../instrument/keys-params";
+import { KEYS_PRESETS, keysPresetNames } from "../instrument/keys-presets";
 import { SYNTH_PARAMS } from "../instrument/synth-params";
 import { synthPresetNames } from "../instrument/synth-presets";
 import { BUNDLED_KIT, type SavedKit } from "../kit/kit-library";
@@ -44,6 +46,7 @@ import {
   instrumentPresetTarget,
   presetsFor,
   presetTargetOf,
+  keysPresetCommand,
   synthPresetCommand,
   targetName,
   type ListedPreset,
@@ -65,6 +68,7 @@ import {
   createAudioTrack,
   createBus,
   createDrumTrack,
+  createKeysTrack,
   createEffect,
   createInstrumentTrack,
   isVst3Id,
@@ -437,7 +441,7 @@ function numericParamsText(params: readonly TableParam[]): string {
  * What a setting Automation moves is called, and the values each takes, read
  * from the Effects' and the Synth's own tables as the other tools' are.
  */
-const AUTOMATABLE_TEXT = `The setting is named as the summary and read_automation name it, and each takes values in its own units and range: volume, a linear gain from 0 to 2 (1 is unity, 0.5 about -6 dB, 0 silent); pan, from -1 (left) to 1 (right), which the Master hasn't; send:<busId>, the level of its Send to that Bus, a linear gain from 0 to 2; effect:<effectId>:<setting>, a number of one of its own Effects; instrument:<setting>, a number of its Synth or Plugin Instrument; and instrument:pad<note>.<setting>, a number of its Drum Sampler's Pad that the note plays. The Effects' numbers: ${EFFECT_TYPES.map(
+const AUTOMATABLE_TEXT = `The setting is named as the summary and read_automation name it, and each takes values in its own units and range: volume, a linear gain from 0 to 2 (1 is unity, 0.5 about -6 dB, 0 silent); pan, from -1 (left) to 1 (right), which the Master hasn't; send:<busId>, the level of its Send to that Bus, a linear gain from 0 to 2; effect:<effectId>:<setting>, a number of one of its own Effects; instrument:<setting>, a number of its Synth, Keys or Plugin Instrument; and instrument:pad<note>.<setting>, a number of its Drum Sampler's Pad that the note plays. The Effects' numbers: ${EFFECT_TYPES.map(
   (type) => `${EFFECT_NAMES[type]} (${type}): ${numericParamsText(effectParams(type))}.`,
 ).join(" ")} The Synth's: ${numericParamsText(SYNTH_PARAMS)}. A Pad's: ${PAD_PARAMS.map((param) => `${param.name} (${withUnit(param.min, param.unit)} to ${withUnit(param.max, param.unit)})`).join(", ")}, so a Kick on note 36 has instrument:pad36.volume. A Plugin's take the ranges its Plugin declares. read_channel gives each setting's value now. Mute, solo, bypass and settings that pick from a list or switch on and off are never automated.`;
 
@@ -673,7 +677,7 @@ const TOOLS = {
   set_instrument: {
     group: "sounds",
     description:
-      "Choose an Instrument Track's Instrument and load one of its presets. The Synth's preset replaces all its settings; the Drum Sampler loads a Kit, the bundled one or one the musician saved, whose Pads each play on their own note; a Plugin Instrument starts from its defaults, or from one of the musician's User Presets for it, with any settings given here changed. Its notes stay on the Track.",
+      "Choose an Instrument Track's Instrument and load one of its presets. The Synth's preset replaces all its settings; the Keys' preset is one of their piano sounds (grand, upright, electric and character pianos), with any settings given here changed; the Drum Sampler loads a Kit, the bundled one or one the musician saved, whose Pads each play on their own note; a Plugin Instrument starts from its defaults, or from one of the musician's User Presets for it, with any settings given here changed. Its notes stay on the Track.",
     schema: {
       type: "object",
       properties: {
@@ -681,15 +685,15 @@ const TOOLS = {
         instrument: {
           type: "string",
           description:
-            "synth, drumSampler, or plugin:<id> for one of the installed Plugin Instruments listed after the Project.",
+            "synth, keys (pianos, electric pianos, or a sample the musician loads, played across the keyboard), drumSampler, or plugin:<id> for one of the installed Plugin Instruments listed after the Project.",
         },
         preset: {
           type: "string",
-          description: `The preset to load. Synth: ${synthPresetNames().join(", ")}, or one of the musician's User Presets for the Synth. Drum Sampler: the ${STARTER_KIT_PRESET}, or one of the musician's saved Kits, listed after the Project, whose samples are copied into the Project. Plugin Instrument: one of the musician's User Presets for that Plugin. Left out, the Synth and a Plugin Instrument start from their defaults and the Drum Sampler from the ${STARTER_KIT_PRESET}.`,
+          description: `The preset to load. Synth: ${synthPresetNames().join(", ")}, or one of the musician's User Presets for the Synth. Keys: ${keysPresetNames().join(", ")}, or one of the musician's User Presets for the Keys; left out, the Concert Grand. Drum Sampler: the ${STARTER_KIT_PRESET}, or one of the musician's saved Kits, listed after the Project, whose samples are copied into the Project. Plugin Instrument: one of the musician's User Presets for that Plugin. Left out, the Synth and a Plugin Instrument start from their defaults and the Drum Sampler from the ${STARTER_KIT_PRESET}.`,
         },
         settings: {
           ...SETTINGS_SCHEMA,
-          description: "Only for a Plugin Instrument: settings to change from its defaults, or from the preset. Left out, none are changed.",
+          description: "Only for the Keys or a Plugin Instrument: settings to change from its defaults, or from the preset. Left out, none are changed.",
         },
       },
       required: ["trackId", "instrument"],
@@ -700,10 +704,25 @@ const TOOLS = {
       if (typeof input.instrument === "string" && input.instrument.startsWith("plugin:")) {
         return setPluginInstrument(track, input.instrument.slice("plugin:".length), input, userPresets);
       }
-      if (input.settings !== undefined) {
-        reject("settings are only for a Plugin Instrument: change the Synth with a preset, and the Drum Sampler's Pads on its panel");
+      const type = checkChoice(input.instrument, ["synth", "keys", "drumSampler"] as const, "instrument");
+      if (input.settings !== undefined && type !== "keys") {
+        reject("settings are only for the Keys or a Plugin Instrument: change the Synth with a preset, and the Drum Sampler's Pads on its panel");
       }
-      const type = checkChoice(input.instrument, ["synth", "drumSampler"] as const, "instrument");
+
+      if (type === "keys") {
+        const preset = checkPreset(input.preset ?? KEYS_PRESETS[0]!.name, "keys", userPresets);
+        const settings = input.settings === undefined ? {} : (checkTableSettings(input.settings, "Keys", KEYS_PARAMS) as Partial<KeysSettings>);
+        const instrument = createKeysTrack(track.name).instrument;
+        const commands: Command[] = [{ type: "setInstrument", trackId: track.id, instrument }, keysPresetCommand(track.id, preset)];
+        if (Object.keys(settings).length > 0) commands.push({ type: "setKeysSettings", trackId: track.id, settings });
+        const kept = track.instrument.type === "keys" ? synthOverridden(track.automation, Object.keys(settings)) : instrumentGone(track);
+        const silent = settings.source === "sample" ? " Its source is the sample, which the musician loads on its panel: until they do, it is silent." : "";
+        return {
+          commands,
+          change: `“${track.name}” plays the Keys with the ${presetText(preset)}`,
+          report: `Track ${track.id} plays the Keys with the ${presetText(preset)}.${silent}${kept}`,
+        };
+      }
 
       if (type === "synth") {
         const preset = input.preset === undefined ? undefined : checkPreset(input.preset, "synth", userPresets);
@@ -743,17 +762,27 @@ const TOOLS = {
   set_instrument_settings: {
     group: "sounds",
     description:
-      "Change some of a Plugin Instrument's settings, within the ranges its Plugin declares; the rest stay as they are. The Synth changes with load_preset, and the Drum Sampler's Pads on its panel.",
+      "Change some of the Keys' or a Plugin Instrument's settings, within the ranges their table or Plugin declares; the rest stay as they are. The Synth changes with load_preset, and the Drum Sampler's Pads on its panel.",
     schema: {
       type: "object",
       properties: {
-        trackId: { type: "string", description: "The Instrument Track playing the Plugin Instrument, by its id." },
+        trackId: { type: "string", description: "The Instrument Track playing the Keys or the Plugin Instrument, by its id." },
         settings: { ...SETTINGS_SCHEMA, description: "The settings to change, by name, with their new values." },
       },
       required: ["trackId", "settings"],
       additionalProperties: false,
     },
     plan(input, project) {
+      const keysTrack = project.tracks.find((candidate) => candidate.id === input.trackId);
+      if (keysTrack?.kind === "instrument" && keysTrack.instrument.type === "keys") {
+        const settings = checkTableSettings(input.settings, "Keys", KEYS_PARAMS) as Partial<KeysSettings>;
+        if (Object.keys(settings).length === 0) reject("settings must name at least one setting to change");
+        return {
+          commands: [{ type: "setKeysSettings", trackId: keysTrack.id, settings }],
+          change: `Set the Keys on “${keysTrack.name}”: ${Object.entries(settings).map(([name, value]) => `${name} ${value}`).join(", ")}`,
+          report: `Track ${keysTrack.id}'s Keys now have settings: ${JSON.stringify({ ...keysTrack.instrument.settings, ...settings })}.${synthOverridden(keysTrack.automation, Object.keys(settings))}`,
+        };
+      }
       const { track, instrument } = findPluginInstrument(input.trackId, project);
       const name = instrumentName(instrument);
       const settings = checkTableSettings(input.settings, name, pluginInstrumentTable(instrument)) as Record<string, number>;
@@ -2427,7 +2456,7 @@ const TOOLS = {
   load_preset: {
     group: "sounds",
     description:
-      "Load a Preset into a Track's Synth or Plugin Instrument, or into an Effect already in an Insert Chain: its settings replace all of the Instrument's or the Effect's, which can then be changed. It may be a factory Preset or one of the musician's User Presets, which are listed after the Project and live outside it. Give trackId for a Synth or a Plugin Instrument, or effectId for an Effect.",
+      "Load a Preset into a Track's Synth, Keys or Plugin Instrument, or into an Effect already in an Insert Chain: its settings replace all of the Instrument's or the Effect's, which can then be changed. It may be a factory Preset or one of the musician's User Presets, which are listed after the Project and live outside it. Give trackId for a Synth or a Plugin Instrument, or effectId for an Effect.",
     schema: {
       type: "object",
       properties: {
@@ -2455,6 +2484,14 @@ const TOOLS = {
             commands: [{ type: "setInstrumentSettings", trackId: track.id, settings: { ...(preset.settings as Record<string, number>) } }],
             change: `Loaded the ${presetText(preset)} into the ${name} on “${track.name}”`,
             report: `Track ${track.id}'s ${name} has the ${presetText(preset)}. Its settings: ${JSON.stringify(preset.settings)}.${synthOverridden(track.automation, Object.keys(preset.settings))}`,
+          };
+        }
+        if (track.instrument.type === "keys") {
+          const preset = checkPreset(input.preset, "keys", userPresets);
+          return {
+            commands: [keysPresetCommand(track.id, preset)],
+            change: `Loaded the ${presetText(preset)} into the Keys on “${track.name}”`,
+            report: `Track ${track.id}'s Keys have the ${presetText(preset)}. Its settings: ${JSON.stringify(preset.settings)}.${synthOverridden(track.automation, Object.keys(preset.settings))}`,
           };
         }
         const preset = checkPreset(input.preset, "synth", userPresets);
@@ -3290,7 +3327,7 @@ function findPresetSource(
     const lanes = track.automation.filter((lane) => lane.setting.startsWith("instrument:"));
     const names = lanes.map((lane) => lane.setting.slice("instrument:".length));
     return {
-      target: instrument.type === "plugin" ? instrumentPresetTarget(instrument) : "synth",
+      target: instrument.type === "plugin" ? instrumentPresetTarget(instrument) : instrument.type === "keys" ? "keys" : "synth",
       settings: { ...instrument.settings },
       what: `the ${instrumentName(instrument)} on “${track.name}”`,
       automated: notSaved(names),

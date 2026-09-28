@@ -7,6 +7,7 @@
  * from a list or switch on and off (a Pad's note and choke group among
  * them) stay where they are set.
  */
+import { automatableKeysParams } from "../instrument/keys-params";
 import { effectName, effectTable, isMissingPlugin } from "../effect/effect-table";
 import { instrumentName, isMissingInstrument, pluginInstrumentTable } from "../instrument/instrument-table";
 import { SYNTH_PARAMS } from "../instrument/synth-params";
@@ -149,6 +150,19 @@ export function automatableSettings(project: Pick<Project, "buses">, owner: Auto
           fixed: pad[param.name],
         });
       }
+    }
+  }
+  if ("kind" in owner && owner.kind === "instrument" && owner.instrument.type === "keys") {
+    const values = owner.instrument.settings as unknown as Record<string, number>;
+    for (const param of automatableKeysParams()) {
+      settings.push({
+        setting: `instrument:${param.name}`,
+        label: `Keys: ${param.label}`,
+        unit: param.unit,
+        min: param.min,
+        max: param.max,
+        fixed: values[param.name]!,
+      });
     }
   }
   if ("kind" in owner && owner.kind === "instrument" && owner.instrument.type === "synth") {

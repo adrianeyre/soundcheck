@@ -28,6 +28,8 @@ import type { NoteEvent } from "../midi/midi-input";
 import type { OpenMidiInput } from "../midi/midi-input";
 import { createPluginInstrument } from "../instrument/instrument-table";
 import { PluginInstrumentPanel } from "../instrument/PluginInstrumentPanel";
+import { KeysPanel } from "../instrument/KeysPanel";
+import { KEYS_PRESETS } from "../instrument/keys-presets";
 import { SynthPanel } from "../instrument/SynthPanel";
 import { MeterBridge } from "../mixer/MeterBridge";
 import { Mixer } from "../mixer/Mixer";
@@ -38,7 +40,7 @@ import { DEFAULT_KEY, type MusicalKey } from "../theory/theory";
 import { KitControls } from "../kit/KitControls";
 import { KitLibrary, loadKitCommand, type SavedKit } from "../kit/kit-library";
 import { memoryLibraryStorage, type LibraryStorage } from "../preset/library-storage";
-import { synthPresetCommand } from "../preset/preset-library";
+import { keysPresetCommand, synthPresetCommand } from "../preset/preset-library";
 import { usePresetLibrary } from "../preset/PresetLibraryProvider";
 import type { Command } from "../project/commands";
 import type { PluginFolder } from "../plugin/plugin-folder";
@@ -51,6 +53,7 @@ import { ProjectHistory } from "../project/history";
 import {
   createAudioTrack,
   createDrumTrack,
+  createKeysTrack,
   clipEnd,
   createInstrumentTrack,
   createProject,
@@ -426,7 +429,9 @@ export function SongPage({
   const empty: WidgetId[] = [
     ...(selectedAudio ? [] : (["audioEditor"] as const)),
     ...(selected ? [] : (["stepSequencer", "pianoRoll", "noteTools"] as const)),
-    ...(instrumentType === "synth" || instrumentType === "drumSampler" || instrumentType === "plugin" ? [] : (["instrument"] as const)),
+    ...(instrumentType === "synth" || instrumentType === "drumSampler" || instrumentType === "keys" || instrumentType === "plugin"
+      ? []
+      : (["instrument"] as const)),
     ...(audioInputs && audioTrackCount > 0 ? [] : (["recordAudio"] as const)),
     ...(sampleSource ? [] : (["samples"] as const)),
   ];
@@ -649,6 +654,8 @@ export function SongPage({
 
   const addTrack = () => execute({ type: "addTrack", track: createInstrumentTrack(nextName("Synth")) });
   const addDrumTrack = () => execute({ type: "addTrack", track: createDrumTrack(nextName("Drums")) });
+  // A new Keys Track starts on the first factory piano, the Concert Grand.
+  const addKeysTrack = () => execute({ type: "addTrack", track: createKeysTrack(nextName("Keys"), undefined, KEYS_PRESETS[0]!) });
   const addAudioTrack = () => execute({ type: "addTrack", track: createAudioTrack(nextName("Audio")) });
   const addPluginTrack = (manifest: PluginManifest) => {
     const track = createInstrumentTrack(nextName(manifest.name));
@@ -802,6 +809,22 @@ export function SongPage({
   };
 
   /**
+   * Put a WAV on a Track's Keys, to play at each key's pitch: as a pad's
+   * sample, its bytes go to the engine and its path onto the Keys, and the
+   * source becomes the sample, as one undo step.
+   */
+  const loadKeysSample = async (trackId: string, file: File, label = "Load Keys sample") => {
+    try {
+      const sample = await readWavFile(file);
+      const path = copyPathFor(sample, samples, project);
+      setSamples((loaded) => new Map(loaded).set(path, sample));
+      execute({ type: "setKeysSample", trackId, sample: path }, label);
+    } catch (reason) {
+      setError(String(reason instanceof Error ? reason.message : reason));
+    }
+  };
+
+  /**
    * Put a Kit's pads on a Drum Sampler, as one undo step. Its samples are
    * copied into the Project, like a WAV loaded onto a pad, so saving writes
    * them into the Project folder and the Project never names the library.
@@ -822,6 +845,7 @@ export function SongPage({
    */
   const sampleTargets: SampleTarget[] = project.tracks.flatMap((track): SampleTarget[] => {
     if (track.kind === "audio") return [{ id: `track:${track.id}`, label: track.name }];
+    if (track.instrument.type === "keys") return [{ id: `keys:${track.id}`, label: `${track.name}: Keys sample` }];
     if (track.instrument.type !== "drumSampler") return [];
     return track.instrument.pads.map((pad, index) => ({
       id: `pad:${track.id}:${index}`,
@@ -848,6 +872,7 @@ export function SongPage({
     const track = project.tracks.find((candidate) => candidate.id === trackId);
     if (kind === "track" && track?.kind === "audio") await importAudio(track, file, at, "Drop sample");
     else if (kind === "pad" && track) await loadSample(track.id, Number(pad), file, "Drop sample");
+    else if (kind === "keys" && track) await loadKeysSample(track.id, file, "Drop sample");
   };
 
   const dropSample = (target: string, transfer: DataTransfer, at?: number) => {
@@ -1082,6 +1107,7 @@ export function SongPage({
       items: [
         { kind: "action", id: "add-instrument-track", label: "Add Instrument Track", icon: <Plus size={16} />, shortcut: "Ctrl+Shift+T", trackKind: "instrument", onSelect: addTrack },
         { kind: "action", id: "add-drum-track", label: "Add Drum Track", icon: <Plus size={16} />, shortcut: "Ctrl+Shift+D", trackKind: "drum", onSelect: addDrumTrack },
+        { kind: "action", id: "add-keys-track", label: "Add Keys Track", icon: <Plus size={16} />, trackKind: "instrument", onSelect: addKeysTrack },
         { kind: "action", id: "add-audio-track", label: "Add Audio Track", icon: <Plus size={16} />, shortcut: "Ctrl+Shift+A", trackKind: "audio", onSelect: addAudioTrack },
         ...plugins
           .filter(({ manifest }) => manifest.kind === "instrument")
@@ -1397,7 +1423,11 @@ export function SongPage({
                     onMove={(trackId, index) => execute({ type: "moveTrack", trackId, index })}
                     onDelete={(trackId) => execute({ type: "deleteTrack", trackId })}
                     onAddClip={addClip}
-                    onPickPreset={(trackId, preset) => execute(synthPresetCommand(trackId, preset))}
+                    onPickPreset={(trackId, preset) => {
+                      const track = project.tracks.find((candidate) => candidate.id === trackId);
+                      const keys = track?.kind === "instrument" && track.instrument.type === "keys";
+                      execute(keys ? keysPresetCommand(trackId, preset) : synthPresetCommand(trackId, preset));
+                    }}
                     onImportAudio={(track, file) => void importAudio(track, file)}
                     editingTrackId={selectedAudio?.track.id ?? null}
                     onEditAudio={(track) => {
@@ -1410,6 +1440,7 @@ export function SongPage({
                     choices={[
                       { id: "instrument", kind: "instrument", label: "Instrument", onAdd: addTrack },
                       { id: "drum", kind: "drum", label: "Drum", onAdd: addDrumTrack },
+                      { id: "keys", kind: "instrument", label: "Keys", onAdd: addKeysTrack },
                       { id: "audio", kind: "audio", label: "Audio", onAdd: addAudioTrack },
                       ...plugins
                         .filter(({ manifest }) => manifest.kind === "instrument")
@@ -1554,6 +1585,24 @@ export function SongPage({
                         disabled={requesting}
                         onLoad={(kit, kitSamples) => loadKit(selected.track.id, kit, kitSamples)}
                       />
+                    }
+                  />
+                ) : selected?.track.instrument.type === "keys" ? (
+                  <KeysPanel
+                    trackName={selected.track.name}
+                    preset={selected.track.instrument.preset}
+                    settings={selected.track.instrument.settings}
+                    sampleName={
+                      selected.track.instrument.sample
+                        ? (samples.get(selected.track.instrument.sample)?.name ?? fileName(selected.track.instrument.sample))
+                        : null
+                    }
+                    onChange={(settings) => execute({ type: "setKeysSettings", trackId: selected.track.id, settings })}
+                    onPreset={(preset) => execute(keysPresetCommand(selected.track.id, preset))}
+                    onLoadSample={(file) => void loadKeysSample(selected.track.id, file)}
+                    onClearSample={() => execute({ type: "setKeysSample", trackId: selected.track.id, sample: null }, "Remove Keys sample")}
+                    onDropSample={
+                      sampleSource && !requesting ? (transfer) => dropSample(`keys:${selected.track.id}`, transfer) : undefined
                     }
                   />
                 ) : selected?.track.instrument.type === "plugin" ? (

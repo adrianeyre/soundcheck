@@ -137,6 +137,10 @@ const MIGRATIONS: Record<number, (project: Record<string, unknown>) => Record<st
   // none; the new version keeps an older Soundcheck, which doesn't know them,
   // from opening one.
   17: (project) => project,
+  // 18 -> 19: the Keys, an Instrument of pianos and a sample played across
+  // the keyboard. A schema 18 song has none; the new version keeps an older
+  // Soundcheck, which doesn't know it, from opening one.
+  18: (project) => project,
 };
 
 function migrateAudioClip(clip: unknown, tempo: unknown): unknown {

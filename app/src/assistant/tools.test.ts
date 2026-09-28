@@ -1979,3 +1979,24 @@ test("a set_automation that would leave more breakpoints than an Automation hold
     "An Automation holds at most 4096 breakpoints, and this would leave 4097",
   );
 });
+
+test("set_instrument gives a Track the Keys with one of their piano sounds, and settings changed from it", () => {
+  const project = planned("set_instrument", { trackId: "keys", instrument: "keys", preset: "Honky-Tonk", settings: { brightness: 0.4 } });
+  const { instrument } = instrumentTrack(project, "keys");
+  expect(instrument).toMatchObject({ type: "keys", preset: "Honky-Tonk", sample: null });
+  expect(instrument.type === "keys" && instrument.settings.detune).toBe(18);
+  expect(instrument.type === "keys" && instrument.settings.brightness).toBe(0.4);
+  // Left out, the Concert Grand.
+  expect(instrumentTrack(planned("set_instrument", { trackId: "keys", instrument: "keys" }), "keys").instrument).toMatchObject({ preset: "Concert Grand" });
+  expect(() => plan("set_instrument", { trackId: "keys", instrument: "keys", preset: "Theremin" })).toThrow(/no preset called "Theremin"/);
+});
+
+test("set_instrument_settings and load_preset change the Keys, and their settings are checked", () => {
+  const keys = planned("set_instrument", { trackId: "keys", instrument: "keys" });
+  const bright = planned("set_instrument_settings", { trackId: "keys", settings: { brightness: 0.9, bell: 0.3 } }, keys);
+  const settings = instrumentTrack(bright, "keys").instrument;
+  expect(settings.type === "keys" && [settings.settings.brightness, settings.settings.bell]).toEqual([0.9, 0.3]);
+  expect(() => plan("set_instrument_settings", { trackId: "keys", settings: { brightness: 3 } }, keys)).toThrow(InvalidToolCall);
+  const loaded = planned("load_preset", { trackId: "keys", preset: "Celesta" }, keys);
+  expect(instrumentTrack(loaded, "keys").instrument).toMatchObject({ type: "keys", preset: "Celesta" });
+});

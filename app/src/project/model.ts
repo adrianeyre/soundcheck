@@ -21,6 +21,7 @@ import {
   type SaturatorSettings,
   type UtilitySettings,
 } from "../effect/effect-params";
+import { defaultKeysSettings, type KeysSettings } from "../instrument/keys-params";
 import { defaultSynthSettings, type SynthSettings } from "../instrument/synth-params";
 import { type TempoMap, type TimeSignature, tickAfter } from "./time";
 
@@ -41,7 +42,7 @@ export type {
 };
 
 /** Bumped whenever the shape below changes; `serialise.ts` migrates old ones. */
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export interface Project {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -309,7 +310,21 @@ export interface DrumPad {
 export type Instrument =
   | { type: "synth"; preset: string | null; settings: SynthSettings }
   | { type: "drumSampler"; preset: string | null; pads: DrumPad[] }
+  | KeysInstrument
   | PluginInstrument;
+
+/**
+ * The Keys: a modelled piano, played by one of its Presets' settings, or a
+ * sample the musician loads, played at each key's pitch from `rootNote`.
+ * `sample` is the file's path in the Project folder, as a pad's is, or null
+ * for none; it is kept when the source goes back to the piano.
+ */
+export interface KeysInstrument {
+  type: "keys";
+  preset: string | null;
+  settings: KeysSettings;
+  sample: string | null;
+}
 
 /**
  * A WASM Plugin Instrument (ADR 0003), found by its id in the Plugins
@@ -499,6 +514,14 @@ export const TRACK_KIND_NAMES: Record<TrackKind, string> = {
 export function trackKind(track: Track): TrackKind {
   if (track.kind === "audio") return "audio";
   return track.instrument.type === "drumSampler" ? "drum" : "instrument";
+}
+
+/** An Instrument Track playing the Keys, with the default piano. */
+export function createKeysTrack(name: string, id = newId(), preset: { name: string; settings: KeysSettings } | null = null): InstrumentTrack {
+  return {
+    ...createInstrumentTrack(name, id),
+    instrument: { type: "keys", preset: preset?.name ?? null, settings: { ...(preset?.settings ?? defaultKeysSettings()) }, sample: null },
+  };
 }
 
 /** An Instrument Track playing the Drum Sampler, loaded with the starter kit. */

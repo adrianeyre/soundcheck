@@ -54,7 +54,10 @@ pub use engine::{
     PreparedAutomation, PreparedBus, PreparedEffect, PreparedInstrument, PreparedSample,
     PreparedSends, PreparedTempoChanges, PreparedTrack, bus_chain,
 };
-pub use instrument::{MAX_PADS, PARAMS, Param, Preset, SynthSettings, WavError, factory_presets};
+pub use instrument::{
+    KEYS_PARAMS, KeysPreset, KeysSettings, MAX_PADS, PARAMS, Param, Preset, SynthSettings,
+    WavError, factory_presets, keys_factory_presets,
+};
 pub use mp3_writer::{MP3_BITRATES, encode_mp3, mp3_bytes};
 pub use plugin::{
     ABI_VERSION, MAX_PLUGIN_SETTINGS, PluginBlock, PluginFault, PluginInstance, PluginKind,
@@ -126,6 +129,18 @@ pub fn synth_presets() -> String {
     instrument::presets_json()
 }
 
+/// Every setting of the Keys as JSON, as `synth_parameters` has the Synth's.
+#[wasm_bindgen]
+pub fn keys_parameters() -> String {
+    instrument::keys_parameters_json()
+}
+
+/// The Keys' factory presets as JSON: name, category, description and settings for each.
+#[wasm_bindgen]
+pub fn keys_presets() -> String {
+    instrument::keys_presets_json()
+}
+
 /// The bundled starter kit's pads as JSON — name, note and choke group for
 /// each, in pad order — so the UI labels the Step Sequencer with the same
 /// pads the engine plays.
@@ -180,6 +195,8 @@ mod tests {
     fn the_settings_and_presets_are_published_as_json() {
         assert!(synth_parameters().contains("\"name\":\"cutoffHz\""));
         assert!(synth_presets().contains("\"name\":\"Warm Pad\""));
+        assert!(keys_parameters().contains("\"name\":\"rootNote\""));
+        assert!(keys_presets().contains("\"name\":\"Honky-Tonk\""));
     }
 
     #[test]

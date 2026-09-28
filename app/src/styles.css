@@ -5947,3 +5947,177 @@ button[data-clipping="true"] {
 .synth-visual[data-interactive="true"] > svg {
   overflow: visible;
 }
+
+/* ---------- Keys ---------- */
+
+.keys-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.keys-source {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.keys-browser-bar {
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.keys-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.keys-category[aria-checked="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.keys-search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.keys-search:has(input:focus-visible) {
+  outline: var(--focus-ring) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.keys-search input {
+  min-width: 10rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.keys-browser {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-2);
+  max-height: 320px;
+  margin: 0;
+  padding: 0 var(--space-1) var(--space-1) 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* A sound's card: its category's colour down the left, as a chord pad's function is. */
+.keys-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-3);
+  border-width: 1px 1px 1px 4px;
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.keys-preset-name {
+  font-weight: 700;
+}
+
+.keys-preset-description {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.keys-preset[aria-pressed="true"] .keys-preset-description {
+  color: var(--text);
+}
+
+:is(.keys-preset, .keys-category)[data-category="grand"] {
+  border-left-color: var(--kind-instrument);
+}
+
+:is(.keys-preset, .keys-category)[data-category="upright"] {
+  border-left-color: var(--warning);
+}
+
+:is(.keys-preset, .keys-category)[data-category="electric"] {
+  border-left-color: var(--focus);
+}
+
+:is(.keys-preset, .keys-category)[data-category="character"] {
+  border-left-color: var(--play);
+}
+
+.keys-category[data-category]:not([data-category="all"]) {
+  border-left-width: 4px;
+}
+
+.keys-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 2px dashed var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: border-color var(--fast) var(--ease-out), background-color var(--fast) var(--ease-out);
+}
+
+.keys-drop[data-dragging="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.keys-drop-text {
+  flex: 1 1 12rem;
+  gap: 2px;
+}
+
+.keys-file {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  font-size: 0.875rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.keys-file:has(input:focus-visible) {
+  outline: var(--focus-ring) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.keys-group > summary {
+  min-height: var(--control-h);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.keys-group > .param-grid {
+  margin-top: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keys-drop {
+    transition: none;
+  }
+}

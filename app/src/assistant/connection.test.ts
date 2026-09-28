@@ -178,11 +178,14 @@ test("how Requests run is saved with each provider's settings and read back", ()
   });
 });
 
-test("hearing audio is off by default, and on only where the musician allows it and the model takes audio", () => {
-  for (const provider of ["claude", "openai", "gemini", "local"] as const) {
+test("hearing audio is on by default wherever the model takes audio, unless the musician turns it off", () => {
+  for (const provider of ["claude", "openai", "local", "meta"] as const) {
     expect(requestModeFor(provider, { apiKey: "key" }).hearsAudio).toBe(false);
   }
-  expect(requestModeFor("gemini", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(true);
+  expect(requestModeFor("gemini", { apiKey: "key" }).hearsAudio).toBe(true);
+  expect(requestModeFor("gemini", { apiKey: "key", hearAudio: false }).hearsAudio).toBe(false);
+  // Meta suggests Muse Spark 1.2 for audio, not 1.3.
+  expect(requestModeFor("meta", { apiKey: "key", model: "muse-spark-1.2" }).hearsAudio).toBe(true);
   // Claude and OpenAI's models don't declare audio input, so the setting does nothing there.
   expect(requestModeFor("claude", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(false);
   expect(requestModeFor("openai", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(false);

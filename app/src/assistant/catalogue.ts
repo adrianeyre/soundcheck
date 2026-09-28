@@ -40,8 +40,8 @@
  *   several calls a turn, on by default. None takes audio.
  * - Meta AI: dev.meta.ai/docs/models gives every Muse Spark model text,
  *   image, video, audio and PDF input and tool calling, with parallel tool
- *   calls. Its Chat Completions endpoint's audio input isn't documented, and
- *   1.3's audio is "not fully supported", so none is marked as hearing audio.
+ *   calls. 1.3's audio is "not fully supported", and Meta suggests 1.2 for
+ *   audio, so 1.2 and 1.1 hear audio and 1.3 doesn't.
  * - Local: every tag above is marked "tools" by ollama.com/library, so each
  *   uses tools. Whether it sees images or hears audio depends on how it is
  *   run (llama.cpp's server sees images only with the model's projector
@@ -162,8 +162,8 @@ function grok(name: string, efforts: readonly string[], contextWindow: number): 
   return { name, id: `grok-${name}`, efforts, capabilities: GROK_CAPABILITIES, contextWindow };
 }
 
-function muse(name: string, efforts: readonly string[] = META_EFFORTS): ModelVersion {
-  return { name, id: `muse-spark-${name}`, efforts, capabilities: META_CAPABILITIES, contextWindow: META_CONTEXT };
+function muse(name: string, efforts: readonly string[] = META_EFFORTS, hears = true): ModelVersion {
+  return { name, id: `muse-spark-${name}`, efforts, capabilities: { ...META_CAPABILITIES, audioInput: hears }, contextWindow: META_CONTEXT };
 }
 
 /** Ollama names a model `family:tag`, and the tag is the version. */
@@ -267,7 +267,7 @@ export const PROVIDERS: readonly Provider[] = [
     families: [
       {
         name: "Muse Spark",
-        versions: [muse("1.3", [...META_EFFORTS, "max"]), muse("1.2"), muse("1.1")],
+        versions: [muse("1.3", [...META_EFFORTS, "max"], false), muse("1.2"), muse("1.1")],
       },
     ],
   },

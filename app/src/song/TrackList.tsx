@@ -2,6 +2,7 @@ import { AudioWaveform, ChevronDown, ChevronUp, Drum, Piano, Plus, Scissors, Tra
 
 import { isMissingInstrument } from "../instrument/instrument-table";
 import { PresetPicker } from "../instrument/SynthPanel";
+import { PresetSelect } from "../preset/PresetControls";
 import type { ListedPreset } from "../preset/preset-library";
 import { type AudioTrack, type InstrumentTrack, type Track, trackKind, type TrackKind } from "../project/model";
 import { AUDIO_FILE_TYPES } from "./import-audio";
@@ -127,6 +128,15 @@ export function TrackList(props: TrackListProps) {
                 onPick={(preset) => props.onPickPreset(track.id, preset)}
               />
             )}
+            {track.kind === "instrument" && track.instrument.type === "keys" && (
+              <PresetSelect
+                target="keys"
+                label={`${track.name} preset`}
+                value={track.instrument.settings.source === "sample" ? null : track.instrument.preset}
+                placeholder={track.instrument.settings.source === "sample" ? "Sample" : "Preset…"}
+                onPick={(preset) => props.onPickPreset(track.id, preset)}
+              />
+            )}
           </div>
         </li>
       ))}
@@ -137,6 +147,7 @@ export function TrackList(props: TrackListProps) {
 function kindOf(track: Track): string {
   if (track.kind === "audio") return "Audio";
   if (track.instrument.type === "plugin") return isMissingInstrument(track.instrument) ? "Missing Plugin" : "Plugin";
+  if (track.instrument.type === "keys") return "Keys";
   return track.instrument.type === "drumSampler" ? "Drums" : "Synth";
 }
 

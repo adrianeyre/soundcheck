@@ -697,7 +697,7 @@ test("Local starts with Suggestions and the smaller core, and turning them off i
   expect(screen.getByLabelText("Suggest changes for me to apply")).not.toBeChecked();
 });
 
-test("hearing audio is offered only for a model that takes it, is off by default, and turning it on is saved", async () => {
+test("hearing audio is offered only for a model that takes it, is on by default, and turning it off is saved", async () => {
   const keyStore = memoryKeyStore(JSON.stringify({ provider: "gemini", connections: { gemini: { apiKey: "k" } } }));
   const modes: unknown[] = [];
   render(
@@ -712,20 +712,21 @@ test("hearing audio is offered only for a model that takes it, is off by default
   );
 
   const hear = await screen.findByLabelText("Let the Assistant hear the audio when it listens");
-  expect(hear).not.toBeChecked();
+  // A model that takes audio hears it unless the musician says not to.
+  expect(hear).toBeChecked();
   fireEvent.change(screen.getByLabelText("Request"), { target: { value: "hello" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByLabelText("What the Assistant said");
-  expect(modes.at(-1)).toMatchObject({ hearsAudio: false });
+  expect(modes.at(-1)).toMatchObject({ hearsAudio: true });
 
   fireEvent.click(hear);
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(async () =>
-    expect(JSON.parse((await keyStore.read())!)).toEqual({ provider: "gemini", connections: { gemini: { apiKey: "k", hearAudio: true } } }),
+    expect(JSON.parse((await keyStore.read())!)).toEqual({ provider: "gemini", connections: { gemini: { apiKey: "k", hearAudio: false } } }),
   );
   fireEvent.change(screen.getByLabelText("Request"), { target: { value: "how does it sound?" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
-  await waitFor(() => expect(modes.at(-1)).toMatchObject({ hearsAudio: true }));
+  await waitFor(() => expect(modes.at(-1)).toMatchObject({ hearsAudio: false }));
 
   // Claude's models don't take audio, so it isn't offered there.
   fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "claude" } });
@@ -734,7 +735,7 @@ test("hearing audio is offered only for a model that takes it, is off by default
   fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "local" } });
   expect(screen.queryByLabelText("Let the Assistant hear the audio when it listens")).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Hears audio"));
-  expect(screen.getByLabelText("Let the Assistant hear the audio when it listens")).not.toBeChecked();
+  expect(screen.getByLabelText("Let the Assistant hear the audio when it listens")).toBeChecked();
 });
 
 test("a Request waiting for a Stem Separation shows its progress and a Cancel, which leaves the Project as it was", async () => {
