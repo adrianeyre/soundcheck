@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { readLocal, writeLocal } from "../settings/local-settings";
-import { defaultLayout, GRID_KEY, parseLayout, serialiseLayout, type WidgetLayout } from "./layout";
+import { defaultLayout, type GridPage, gridKey, parseLayout, serialiseLayout, type WidgetLayout } from "./layout";
 
 export interface WidgetLayoutState {
   layout: WidgetLayout;
@@ -9,13 +9,16 @@ export interface WidgetLayoutState {
   reset: () => void;
 }
 
-/** The Grid's layout, remembered in local storage so the Editor opens as it was left. */
-export function useWidgetLayout(): WidgetLayoutState {
-  const [layout, setState] = useState(() => parseLayout(readLocal(GRID_KEY)));
-  const setLayout = useCallback((next: WidgetLayout) => {
-    setState(next);
-    writeLocal(GRID_KEY, serialiseLayout(next));
-  }, []);
-  const reset = useCallback(() => setLayout(defaultLayout()), [setLayout]);
+/** A page's Grid layout, remembered in local storage so the page opens as it was left. */
+export function useWidgetLayout(page: GridPage = "editor"): WidgetLayoutState {
+  const [layout, setState] = useState(() => parseLayout(readLocal(gridKey(page)), page));
+  const setLayout = useCallback(
+    (next: WidgetLayout) => {
+      setState(next);
+      writeLocal(gridKey(page), serialiseLayout(next));
+    },
+    [page],
+  );
+  const reset = useCallback(() => setLayout(defaultLayout(page)), [setLayout, page]);
   return { layout, setLayout, reset };
 }

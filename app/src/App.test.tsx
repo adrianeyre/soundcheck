@@ -136,7 +136,7 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
   expect(items.map((item) => item.textContent)).toEqual([
     "File",
     "Editor",
-    "Mixing",
+    "Mixer",
     "Settings",
     "Grid",
     "Cookie Policy",
@@ -351,4 +351,55 @@ test("the Browser Version's Settings say what only the Desktop App has, and link
   // It is listed with the other sections, so it can be jumped to.
   const sections = screen.getByRole("navigation", { name: "Settings sections" });
   expect(within(sections).getByRole("link", { name: "Browser version" })).toBeInTheDocument();
+});
+
+/** The Grid menu's Widgets, opened from the app's menu. */
+function gridMenuItems(): string[] {
+  fireEvent.keyDown(menu(), { key: "ArrowDown" });
+  const gridItem = screen.getByRole("menuitem", { name: "Grid" });
+  gridItem.focus();
+  fireEvent.keyDown(gridItem, { key: "ArrowRight" });
+  const items = within(screen.getByRole("menu", { name: "Grid" }))
+    .getAllByRole("menuitemcheckbox")
+    .map((box) => box.textContent ?? "");
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  return items;
+}
+
+test("the Grid menu lists the open page's Widgets, and each page keeps its own layout", async () => {
+  render(<App />);
+  await screen.findByRole("button", { name: /^Menu, / });
+  expect(gridMenuItems()).toContain("Transport");
+
+  choose("Mixer");
+  expect(screen.getByRole("heading", { level: 1, name: "Mixer" })).toBeInTheDocument();
+  expect(menu()).toHaveAccessibleName("Menu, Mixer");
+  // With two Decks, the third and fourth have nothing to show.
+  expect(gridMenuItems()).toEqual([
+    "Waveforms",
+    "Deck 1",
+    "Mixer",
+    "Deck 2",
+    "Deck 3 (empty)",
+    "Deck 4 (empty)",
+    "Track browser",
+  ]);
+
+  // Hiding the Mixer page's mixer leaves the Editor's Mixer where it is.
+  fireEvent.keyDown(menu(), { key: "ArrowDown" });
+  const gridItem = screen.getByRole("menuitem", { name: "Grid" });
+  gridItem.focus();
+  fireEvent.keyDown(gridItem, { key: "ArrowRight" });
+  fireEvent.click(within(screen.getByRole("menu", { name: "Grid" })).getByRole("menuitemcheckbox", { name: "Mixer" }));
+  expect(JSON.parse(localStorage.getItem("soundcheck.grid.mixing")!).widgets.djMixer.hidden).toBe(true);
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  choose("Editor");
+  expect(screen.getByRole("region", { name: "Mixer" })).toBeVisible();
+
+  // Settings has no Grid, so no Grid menu.
+  choose("Settings");
+  fireEvent.keyDown(menu(), { key: "ArrowDown" });
+  expect(screen.queryByRole("menuitem", { name: "Grid" })).not.toBeInTheDocument();
 });

@@ -38,8 +38,20 @@ export interface WidgetPlacement extends Cell {
   sized?: boolean;
 }
 
-/** Every Widget there is. A new one is added here and in `WIDGETS` below (ADR 0004). */
-export type WidgetId =
+/**
+ * A page with a Grid of its own: the Editor's Widgets, and the Mixing
+ * page's. Each page keeps its own layout, holding only its own Widgets, and
+ * the Grid menu lists the Widgets of the page that is open.
+ */
+export type GridPage = "editor" | "mixing";
+
+/** Every Widget there is, on either page. A new one is added here and in its page's list below (ADR 0004). */
+export type WidgetId = EditorWidgetId | MixingWidgetId;
+
+/** The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer and the Track browser. */
+export type MixingWidgetId = "djWaveforms" | "deck1" | "deck2" | "deck3" | "deck4" | "djMixer" | "djBrowser";
+
+export type EditorWidgetId =
   | "transport"
   | "assistant"
   | "tracks"
@@ -77,7 +89,7 @@ export interface WidgetSpec {
 
 const MIN = { w: 4, h: 3 };
 
-/** In Grid menu order, which is also their order for keyboards, screen readers and narrow windows. */
+/** The Editor's, in Grid menu order, which is also their order for keyboards, screen readers and narrow windows. */
 export const WIDGETS: readonly WidgetSpec[] = [
   { id: "transport", title: "Transport", initial: { x: 0, y: 0, w: 24, h: 7 }, min: MIN },
   // 20 rows is about 800 pixels: a long Conversation's latest Requests, and the prompt, stay on a laptop's screen.
@@ -103,17 +115,46 @@ export const WIDGETS: readonly WidgetSpec[] = [
   { id: "eq", title: "EQ", initial: { x: 0, y: 129, w: 24, h: 18 }, min: { w: 10, h: 8 } },
 ];
 
+/**
+ * The Mixer page's, in the same order. The waveforms span the top, the
+ * first two Decks stand either side of the mixer, the third and fourth
+ * (shown only with four Decks) under them, and the Track browser below.
+ */
+export const MIXING_WIDGETS: readonly WidgetSpec[] = [
+  { id: "djWaveforms", title: "Waveforms", initial: { x: 0, y: 0, w: 24, h: 6 }, min: { w: 8, h: 3 } },
+  // Tall enough for a whole player or the whole mixer; each is then drawn no taller than its content.
+  { id: "deck1", title: "Deck 1", initial: { x: 0, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "djMixer", title: "Mixer", initial: { x: 8, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "deck2", title: "Deck 2", initial: { x: 16, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "deck3", title: "Deck 3", initial: { x: 0, y: 50, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "deck4", title: "Deck 4", initial: { x: 16, y: 50, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "djBrowser", title: "Track browser", initial: { x: 0, y: 94, w: 24, h: 14 }, min: { w: 8, h: 5 } },
+];
+
+/** Each page's Widgets. */
+export const PAGE_WIDGETS: Readonly<Record<GridPage, readonly WidgetSpec[]>> = { editor: WIDGETS, mixing: MIXING_WIDGETS };
+
+/**
+ * Where each Widget of one page sits. It holds only that page's Widgets,
+ * so every function here works over the Widgets the layout holds.
+ */
 export type WidgetLayout = Record<WidgetId, WidgetPlacement>;
 
-const SPECS = new Map(WIDGETS.map((spec) => [spec.id, spec]));
+const ALL_WIDGETS: readonly WidgetSpec[] = [...WIDGETS, ...MIXING_WIDGETS];
+const SPECS = new Map(ALL_WIDGETS.map((spec) => [spec.id, spec]));
 
 export function widgetSpec(id: WidgetId): WidgetSpec {
   return SPECS.get(id)!;
 }
 
-export function defaultLayout(): WidgetLayout {
+/** The Widgets `layout` holds, in their page's order. */
+export function specsOf(layout: WidgetLayout): WidgetSpec[] {
+  return ALL_WIDGETS.filter((spec) => layout[spec.id] !== undefined);
+}
+
+export function defaultLayout(page: GridPage = "editor"): WidgetLayout {
   return Object.fromEntries(
-    WIDGETS.map((spec) => [spec.id, { ...spec.initial, zone: "main", hidden: false }]),
+    PAGE_WIDGETS[page].map((spec) => [spec.id, { ...spec.initial, zone: "main", hidden: false }]),
   ) as WidgetLayout;
 }
 
@@ -121,7 +162,8 @@ const overlaps = (a: Cell, b: Cell) => a.x < b.x + b.w && b.x < a.x + a.w && a.y
 
 /** The Widgets shown in `zone`, top to bottom, then left to right. */
 export function widgetsIn(layout: WidgetLayout, zone: Zone): WidgetId[] {
-  return WIDGETS.map((spec) => spec.id)
+  return specsOf(layout)
+    .map((spec) => spec.id)
     .filter((id) => layout[id].zone === zone && !layout[id].hidden)
     .toSorted((a, b) => layout[a].y - layout[b].y || layout[a].x - layout[b].x);
 }
@@ -174,7 +216,7 @@ function closeRowGaps(layout: WidgetLayout, zone: Zone): WidgetLayout {
     return empty;
   };
   const next = { ...layout };
-  for (const spec of WIDGETS) {
+  for (const spec of specsOf(layout)) {
     const at = next[spec.id];
     const up = at.zone === zone ? emptyAbove(at.y) : 0;
     if (up > 0) next[spec.id] = { ...at, y: at.y - up };
@@ -224,7 +266,7 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
   let next = { ...layout };
   let changed = false;
   const grown: WidgetId[] = [];
-  for (const spec of WIDGETS) {
+  for (const spec of specsOf(layout)) {
     const rows = needed[spec.id];
     const at = next[spec.id];
     if (rows === undefined || at.hidden) continue;
@@ -251,7 +293,7 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
  */
 export function unfitted(next: WidgetLayout, kept: WidgetLayout, resized: WidgetId | null): WidgetLayout {
   const layout = { ...next };
-  for (const spec of WIDGETS) {
+  for (const spec of specsOf(next)) {
     if (spec.id === resized) continue;
     const h = spec.grows === undefined ? Math.max(next[spec.id].h, kept[spec.id].h) : kept[spec.id].h;
     layout[spec.id] = { ...next[spec.id], h };
@@ -317,8 +359,13 @@ export function pinWidget(layout: WidgetLayout, id: WidgetId, zone: Zone): Widge
   return place(layout, id, { zone, y, hidden: false });
 }
 
-/** Where the Grid is kept between runs. */
+/** Where the Editor's Grid is kept between runs. */
 export const GRID_KEY = "soundcheck.grid";
+
+/** Where each page's Grid is kept between runs: the Editor's under the key it always had. */
+export function gridKey(page: GridPage): string {
+  return page === "editor" ? GRID_KEY : `${GRID_KEY}.${page}`;
+}
 
 export function serialiseLayout(layout: WidgetLayout): string {
   return JSON.stringify({ version: 1, widgets: layout });
@@ -328,8 +375,8 @@ export function serialiseLayout(layout: WidgetLayout): string {
  * A saved layout, as far as it can be trusted. A Widget missing from it
  * (one added since it was saved) or saved wrongly gets its starting place.
  */
-export function parseLayout(saved: string | null): WidgetLayout {
-  const layout = defaultLayout();
+export function parseLayout(saved: string | null, page: GridPage = "editor"): WidgetLayout {
+  const layout = defaultLayout(page);
   if (!saved) return layout;
   let widgets: unknown;
   try {
@@ -338,7 +385,7 @@ export function parseLayout(saved: string | null): WidgetLayout {
     return layout;
   }
   if (typeof widgets !== "object" || widgets === null) return layout;
-  for (const spec of WIDGETS) {
+  for (const spec of PAGE_WIDGETS[page]) {
     const entry = (widgets as Record<string, unknown>)[spec.id] as Partial<WidgetPlacement> | undefined;
     if (!entry || !ZONES.includes(entry.zone as Zone)) continue;
     const cell = [entry.x, entry.y, entry.w, entry.h];
@@ -352,6 +399,6 @@ export function parseLayout(saved: string | null): WidgetLayout {
   }
   // Saved by hand or by an older version, it may overlap or leave empty rows: settle each in order, then close them.
   return closeAllRowGaps(
-    WIDGETS.reduce((settled, spec) => (settled[spec.id].hidden ? settled : settle(settled, spec.id)), layout),
+    PAGE_WIDGETS[page].reduce((settled, spec) => (settled[spec.id].hidden ? settled : settle(settled, spec.id)), layout),
   );
 }
