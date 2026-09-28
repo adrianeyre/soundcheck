@@ -512,11 +512,12 @@ export function SongPage({
     const commands = transportCommands(
       { ...transport, timeSignature: project.timeSignature },
       { start: range.start, end: range.end },
+      { recording: recording || recordingAudio },
     );
     for (const command of commands) {
       if (command.type !== "setTempo" && command.type !== "setTimeSignature") output.send(command);
     }
-  }, [output, transport, project.timeSignature, range.start, range.end]);
+  }, [output, transport, project.timeSignature, range.start, range.end, recording, recordingAudio]);
 
   // Live notes play through the Track being recorded onto.
   useEffect(() => {
@@ -1299,6 +1300,7 @@ export function SongPage({
                   <TransportBar
                     settings={{ ...transport, ...projectTiming() }}
                     range={range}
+                    onWholeSong={() => setPlaySectionId(null)}
                     tempoMap={tempoMapOf(project)}
                     onChange={changeTransport}
                     send={send}
@@ -1442,6 +1444,7 @@ export function SongPage({
                     setTransport({ ...transport, loop: true, loopStart, loopEnd, loopRegionSet: true });
                   }}
                   onSelectSection={setPlaySectionId}
+                  selectedSectionId={playSectionId}
                   waveforms={waveformsByPath}
                   absentAudio={absentAudio}
                   clipMenuItems={clipMenuItems}

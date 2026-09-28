@@ -43,7 +43,8 @@ export interface PlayRange {
  * What Play plays: the Section selected on the timeline, else the region
  * dragged on the ruler, else the whole song, from its start to the bar
  * line after the last Clip ends, so a looped song comes round in time. A
- * song with nothing in it has an empty range, which plays on for ever.
+ * song with nothing in it plays its first bar: Play stops at its end, or
+ * loops it with Loop on, rather than running on for ever over nothing.
  */
 export function playRange(
   settings: Pick<TransportSettings, "loopStart" | "loopEnd" | "loopRegionSet">,
@@ -53,7 +54,7 @@ export function playRange(
 ): PlayRange {
   if (section) return { start: section.start, end: section.end, label: section.name };
   if (settings.loopRegionSet) return { start: settings.loopStart, end: settings.loopEnd, label: "Loop region" };
-  if (songEnd <= 0) return { start: 0, end: 0, label: "Whole song" };
+  if (songEnd <= 0) return { start: 0, end: barStart(map, 2), label: "Whole song" };
   const { bar, beat, tick } = barBeatTick(map, songEnd);
   const end = beat === 1 && tick === 0 ? songEnd : barStart(map, bar + 1);
   return { start: 0, end, label: "Whole song" };
@@ -62,15 +63,21 @@ export function playRange(
 /**
  * The commands that put the engine's transport into `settings`, playing
  * `range`: looping it with Loop on, and stopping at its end, back at its
- * start, with Loop off.
+ * start, with Loop off, except while `recording`, when it plays on.
  */
-export function transportCommands(settings: TransportSettings, range: Pick<PlayRange, "start" | "end">): EngineCommand[] {
+export function transportCommands(
+  settings: TransportSettings,
+  range: Pick<PlayRange, "start" | "end">,
+  { recording = false }: { recording?: boolean } = {},
+): EngineCommand[] {
   const { tempo, timeSignature, loop, metronome } = settings;
+  // While a take is recorded, playback runs on past the end, so the take is never cut off.
+  const stopAt = recording ? range.start : range.end;
   return [
     { type: "setTempo", bpm: tempo },
     { type: "setTimeSignature", ...timeSignature },
     { type: "setLoop", startTick: range.start, endTick: range.end, enabled: loop },
-    { type: "setPlayRange", startTick: range.start, endTick: range.end },
+    { type: "setPlayRange", startTick: range.start, endTick: stopAt },
     { type: "setMetronome", on: metronome },
   ];
 }

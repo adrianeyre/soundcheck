@@ -87,6 +87,12 @@ test("settings become engine commands, looping or stopping at the end of what pl
     { type: "setPlayRange", startTick: 2880, endTick: 8640 },
     { type: "setMetronome", on: true },
   ]);
+  // While a take is recorded, playback runs on past the end.
+  expect(transportCommands(settings, { start: 0, end: 7680 }, { recording: true })).toContainEqual({
+    type: "setPlayRange",
+    startTick: 0,
+    endTick: 0,
+  });
   expect(transportCommands({ ...settings, loop: false }, { start: 0, end: 7680 })).toContainEqual({
     type: "setLoop",
     startTick: 0,
@@ -101,7 +107,8 @@ test("what plays is the selected Section, else the ruler's region, else the whol
   // The last Clip ends half way through bar 3: the song is three bars.
   expect(playRange(whole, map, 3840 * 2 + 1920, null)).toEqual({ start: 0, end: 3840 * 3, label: "Whole song" });
   expect(playRange(whole, map, 3840 * 2, null)).toEqual({ start: 0, end: 3840 * 2, label: "Whole song" });
-  expect(playRange(whole, map, 0, null)).toEqual({ start: 0, end: 0, label: "Whole song" });
+  // An empty song plays its first bar, rather than on for ever over nothing.
+  expect(playRange(whole, map, 0, null)).toEqual({ start: 0, end: 3840, label: "Whole song" });
   expect(playRange({ ...whole, loopRegionSet: true }, map, 99_999, null)).toEqual({ start: 0, end: 3840, label: "Loop region" });
   expect(playRange({ ...whole, loopRegionSet: true }, map, 99_999, { name: "Chorus", start: 7680, end: 15_360 })).toEqual({
     start: 7680,

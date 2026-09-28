@@ -44,7 +44,7 @@ interface EdgeDrag {
 }
 
 /** How far the pointer may move, in pixels, and still be a click rather than a drag. */
-const CLICK_SLOP = 3;
+const CLICK_SLOP = 5;
 
 /**
  * The song's Sections, on a lane above the ruler: each a named block of
@@ -112,8 +112,8 @@ export function SectionLane(props: SectionLaneProps) {
     const onUp = (event: MouseEvent) => {
       setDrag(null);
       if (!section) return;
-      // A click on the selected Section unselects it, so the whole song plays again.
-      if (drag.wasSelected && !drag.copy && drag.edge === "body" && Math.abs(event.clientX - drag.fromX) < CLICK_SLOP) {
+      // A click on the selected Section, on its body or an edge, unselects it, so the whole song plays again.
+      if (drag.wasSelected && !drag.copy && Math.abs(event.clientX - drag.fromX) < CLICK_SLOP) {
         setSelectedId(null);
         return;
       }
@@ -158,6 +158,8 @@ export function SectionLane(props: SectionLaneProps) {
         const startBar = clamp(section.startBar + by, first, end - 1);
         resize(section, { startBar, bars: end - startBar });
       }
+    } else if (event.key === "Escape" && section.id === selectedId) {
+      setSelectedId(null);
     } else if (event.key === "Delete" || event.key === "Backspace") {
       onCommands([{ type: "deleteSection", sectionId: section.id }], "Delete Section");
       setSelectedId(null);

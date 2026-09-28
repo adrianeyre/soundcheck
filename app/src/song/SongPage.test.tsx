@@ -516,6 +516,28 @@ test("playback stops at the end of the song, or loops it with Loop ticked", asyn
   expect(output.send).toHaveBeenCalledWith({ type: "setLoop", startTick: 0, endTick: 4 * BAR, enabled: true });
 });
 
+test("an empty song stops after its first bar, a take plays on, and Whole song clears a Section", async () => {
+  const { output, history } = await ready();
+  // Nothing on the timeline: Play plays a bar and stops, rather than on for ever.
+  await waitFor(() => expect(output.send).toHaveBeenCalledWith({ type: "setPlayRange", startTick: 0, endTick: BAR }));
+  // Recording runs on past the end, so the take is never cut off.
+  output.send.mockClear();
+  click("Record");
+  await waitFor(() => expect(output.send).toHaveBeenCalledWith({ type: "setPlayRange", startTick: 0, endTick: 0 }));
+  click("Stop recording");
+
+  // A Section selected on the timeline is what plays, until Whole song.
+  history.execute({ type: "addSection", section: { id: "verse", name: "Verse", startBar: 3, bars: 2 } });
+  const verse = await screen.findByRole("button", { name: /^Section Verse,/ });
+  fireEvent.mouseDown(verse, { clientX: 5 });
+  fireEvent.mouseUp(window, { clientX: 5 });
+  expect(screen.getByLabelText("Plays")).toHaveTextContent("Verse");
+  output.send.mockClear();
+  click("Whole song");
+  expect(screen.getByRole("button", { name: /^Section Verse,/ })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByLabelText("Plays")).toHaveTextContent("Whole song");
+});
+
 test("clicking a key or a drum wherever one is drawn plays it through the engine", async () => {
   const { output } = await ready();
   click("Add Pattern Clip");

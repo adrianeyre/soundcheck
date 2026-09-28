@@ -18,6 +18,8 @@ export interface TransportBarProps {
   readReport: () => EngineReport | null;
   /** What Play plays: looped with Loop on, stopped at its end with it off. Without one, the loop region. */
   range?: PlayRange;
+  /** Play the whole song again rather than the selected Section. */
+  onWholeSong?: () => void;
 }
 
 /** A number of bars as the loop fields show it: whole, or to two places. */
@@ -26,7 +28,7 @@ function shown(bars: number): number {
 }
 
 /** Play/stop, tempo, time signature, loop, metronome and the position. */
-export function TransportBar({ settings, tempoMap, onChange, send, readReport, range: given }: TransportBarProps) {
+export function TransportBar({ settings, tempoMap, onChange, send, readReport, range: given, onWholeSong }: TransportBarProps) {
   const range = given ?? { start: settings.loopStart, end: settings.loopEnd, label: "Loop region" };
   const [report, setReport] = useState<EngineReport | null>(null);
   const [tempoText, setTempoText] = useState(String(settings.tempo));
@@ -194,12 +196,15 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport, r
         {range.end > range.start && `: ${formatPosition(range.start, tempoMap)}–${formatPosition(range.end, tempoMap)}`}
         {` · ${settings.loop ? "loops" : "stops at the end"}`}
       </output>
-      {settings.loopRegionSet && (
+      {(settings.loopRegionSet || (range.label !== "Whole song" && onWholeSong)) && (
         <button
           type="button"
           className="btn-sm"
-          title="Play the whole song again, not the loop region"
-          onClick={() => update({ loopRegionSet: false })}
+          title="Play the whole song again, not the Section or loop region"
+          onClick={() => {
+            onWholeSong?.();
+            if (settings.loopRegionSet) update({ loopRegionSet: false });
+          }}
         >
           Whole song
         </button>

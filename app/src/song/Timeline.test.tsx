@@ -907,6 +907,15 @@ test("clicking a Section plays it, and clicking it again unselects it so the who
   expect(onSelectSection).toHaveBeenLastCalledWith(chorusId);
   fireEvent.keyDown(section("Chorus"), { key: "Enter" });
   expect(onSelectSection).toHaveBeenLastCalledWith(null);
+  // Escape unselects it too, and so does a click on one of its edges.
+  click("Chorus");
+  fireEvent.keyDown(section("Chorus"), { key: "Escape" });
+  expect(onSelectSection).toHaveBeenLastCalledWith(null);
+  click("Chorus");
+  const handle = section("Chorus").querySelector(".section-handle")!;
+  fireEvent.mouseDown(handle, { clientX: 10 });
+  fireEvent.mouseUp(window, { clientX: 12 });
+  expect(section("Chorus")).toHaveAttribute("aria-pressed", "false");
   // A drag is a move, not a click, and leaves it selected.
   click("Chorus");
   fireEvent.mouseDown(section("Chorus"), { clientX: 10 });
