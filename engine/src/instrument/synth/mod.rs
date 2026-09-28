@@ -20,6 +20,7 @@
 mod params;
 mod presets;
 
+pub(crate) use params::number_json;
 pub use params::{MAX_VOICES, PARAMS, Param, SynthSettings, parameters_json};
 pub use presets::{Preset, factory_presets, presets_json};
 

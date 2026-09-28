@@ -73,3 +73,26 @@ test("a named progression fills the list", () => {
   fireEvent.click(screen.getByRole("button", { name: "Remove chord 4, C" }));
   expect(within(screen.getByRole("list", { name: "Progression chords" })).getAllByRole("listitem")).toHaveLength(3);
 });
+
+test("with Jev set up, it picks the next chord of the progression from the pads", async () => {
+  const nextChord = vi.fn<NonNullable<Parameters<typeof ChordPads>[0]["nextChord"]>>(async (_key, _progression, candidates) => ({
+    chord: candidates.find(({ chord }) => chord.numeral === "IV")!.chord,
+    confidence: 0.72,
+  }));
+  render(
+    <ChordPads songKey={{ root: 0, scale: "major" }} onSongKey={() => {}} canPlay noteOn={() => {}} noteOff={() => {}} target={TARGET} onNotes={() => {}} nextChord={nextChord} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "C, I" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next chord from Jev" }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Jev picked F, 72% confident.");
+  expect(within(screen.getByRole("list", { name: "Progression chords" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["C", "F"]);
+  const [, progression, candidates] = nextChord.mock.calls[0]!;
+  expect(progression.map((chord) => chord.numeral)).toEqual(["I"]);
+  expect(candidates.some(({ borrowed }) => borrowed)).toBe(true);
+});
+
+test("without Jev there is no button to ask it", () => {
+  pads();
+  expect(screen.queryByRole("button", { name: "Next chord from Jev" })).not.toBeInTheDocument();
+});

@@ -83,6 +83,10 @@ _Avoid_: Generator, VSTi
 A named set of an Instrument's or Effect's settings. It is either a Factory Preset, which ships with the app, or a User Preset, which the musician saved. Loading one copies its settings into the Instrument or Effect, where they can then be changed. User Presets live in the app's Preset library, outside any Project, so every Project can load them.
 _Avoid_: Patch, program, sound
 
+**Keys**:
+The Instrument that plays pitched sounds across the keyboard: its modelled piano, set by one of its factory Presets (grand, upright, electric and character pianos, 33 of them), or a sample the musician loads, played at each key's pitch from its root note, the key that plays it as recorded. The sample is the Project's own audio, as a Pad's is.
+_Avoid_: Piano (on its own: the Keyboard Widget is the on-screen piano), sampler (on its own), multisample
+
 **Drum Sampler**:
 The Instrument that plays one sample per Pad, each triggered by its own note.
 _Avoid_: Drum machine, sampler (on its own)
@@ -156,15 +160,19 @@ The LLM feature that edits the Project on the musician's behalf, and can listen 
 _Avoid_: Claude, AI, the LLM, copilot
 
 **Provider**:
-Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, or a Local one (Ollama or llama.cpp). The musician picks one, then its model, version and effort; each Provider keeps its own key and settings in the platform's key store, never in a Project.
+Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, Meta AI, or a Local one (Ollama or llama.cpp). The musician picks one, then its model, version and effort; each Provider keeps its own key and settings in the platform's key store, never in a Project. With several set up, the Assistant Widget switches between them.
 _Avoid_: Backend, vendor
+
+**Decision Engine**:
+A model that only picks between options the app or the Assistant defines, answering each with a probability, and never chats or makes a change: TypeSafe's Jev. The Assistant asks it for many small bounded musical choices and makes the changes itself; the Chords Widget asks it for the next chord. It is not a Provider, and its key is kept beside theirs.
+_Avoid_: Provider (it can't be one), classifier, System One (TypeSafe's own name for the kind)
 
 **Capability**:
 What a Provider's model can do, as the Provider's catalogue declares it: tool use, image input, audio input, and several tool calls per turn. The Assistant uses a feature only where the model declares it, and a model without tool use can't be the Assistant. A Local model's image input, audio input and several calls per turn start off, and the musician turns on what their server gives it.
 _Avoid_: Feature, support
 
 **Audio Analysis**:
-Measurements the Audio Engine takes of rendered sound (the whole mix, one Track, or a time range) so the Assistant can "listen" to it. Each one a Request makes is kept for the rest of it by an id, so the Assistant can compare two of the same sound before and after its change. Where the model declares audio input and the musician allows it, the Assistant can also be sent the rendered sound itself, capped in length, beside the measurements.
+Measurements the Audio Engine takes of rendered sound (the whole mix, one Track, or a time range) so the Assistant can "listen" to it. Each one a Request makes is kept for the rest of it by an id, so the Assistant can compare two of the same sound before and after its change. Where the model declares audio input, the Assistant is also sent the rendered sound itself, capped in length, beside the measurements, unless the musician turns that off.
 _Avoid_: Listening, audio understanding
 
 **Project Summary**:

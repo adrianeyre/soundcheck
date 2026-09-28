@@ -7,11 +7,14 @@
  * Widget covers whole cells, so everything snaps. It sits in one of three
  * Zones: `main` scrolls with the page, `top` is pinned under the title bar
  * and `bottom` above the footer. Widgets never overlap within a Zone: one
- * dropped onto others pushes them down. A Zone never has a row with nothing
- * in it: whatever is below an empty row moves up into it, so the page has no
- * bands of blank space. A gap beside a Widget is kept, so a Widget stays in
- * its column where the musician put it. Pinned Widgets are full-width bands,
- * stacked one above the other; only their height changes.
+ * dropped onto others pushes them down. A Widget the musician moves stays
+ * exactly where they dropped it, into any blank space on the Grid, with blank
+ * space left above or beside it if that is where they put it. The rows a
+ * change frees without the musician asking for space there (a Widget hidden,
+ * pinned away, made shorter, or with nothing to show) are closed up, whatever
+ * is below them moving up, so no band of blank space opens by itself. Pinned
+ * Widgets are full-width bands, stacked one above the other; only their
+ * height changes.
  */
 
 export const GRID = { columns: 24, rowHeight: 24, gap: 16 } as const;
@@ -36,6 +39,14 @@ export interface WidgetPlacement extends Cell {
    * layout" fits it again.
    */
   sized?: boolean;
+  /**
+   * The most rows it takes by itself, fitted to its content, where that is
+   * more than it is drawn now (`h`): so a Deck that starts room enough for a
+   * whole player, and is drawn no taller than its content, leaves the rows
+   * under that content free for another Widget, and grows back into them
+   * only if its content does, pushing down what is there.
+   */
+  room?: number;
 }
 
 /**
@@ -202,29 +213,35 @@ function settle(layout: WidgetLayout, id: WidgetId): WidgetLayout {
   return next;
 }
 
+/** The rows of `zone` some shown Widget covers. */
+function coveredRows(layout: WidgetLayout, zone: Zone): Set<number> {
+  return new Set(widgetsIn(layout, zone).flatMap((id) => Array.from({ length: layout[id].h }, (_, row) => layout[id].y + row)));
+}
+
 /**
- * Take out every row of `zone` that no shown Widget covers, moving what is
- * below it up. A hidden Widget moves with the rows above it, so it comes
+ * Take out the rows of each Zone that a shown Widget covered in `before` and
+ * none covers now, moving what is below them up: the rows a change freed.
+ * Blank rows the musician left on purpose, which nothing covered before
+ * either, are kept. A hidden Widget moves with the rows above it, so it comes
  * back beside the same neighbours.
  */
-function closeRowGaps(layout: WidgetLayout, zone: Zone): WidgetLayout {
-  const shown = widgetsIn(layout, zone);
-  const covered = new Set(shown.flatMap((id) => Array.from({ length: layout[id].h }, (_, row) => layout[id].y + row)));
-  const emptyAbove = (y: number) => {
-    let empty = 0;
-    for (let row = 0; row < y; row++) if (!covered.has(row)) empty++;
-    return empty;
-  };
-  const next = { ...layout };
-  for (const spec of specsOf(layout)) {
-    const at = next[spec.id];
-    const up = at.zone === zone ? emptyAbove(at.y) : 0;
-    if (up > 0) next[spec.id] = { ...at, y: at.y - up };
+function closeFreedRows(layout: WidgetLayout, before: WidgetLayout): WidgetLayout {
+  let next = { ...layout };
+  for (const zone of ZONES) {
+    const now = coveredRows(next, zone);
+    const freed = [...coveredRows(before, zone)].filter((row) => !now.has(row));
+    if (freed.length === 0) continue;
+    const moved = { ...next };
+    for (const spec of specsOf(next)) {
+      const at = next[spec.id];
+      if (at.zone !== zone) continue;
+      const up = freed.filter((row) => row < at.y).length;
+      if (up > 0) moved[spec.id] = { ...at, y: at.y - up };
+    }
+    next = moved;
   }
   return next;
 }
-
-const closeAllRowGaps = (layout: WidgetLayout) => ZONES.reduce(closeRowGaps, layout);
 
 /**
  * The layout as a page that doesn't draw `absent` shows it: without them,
@@ -239,7 +256,7 @@ export function withoutWidgets(layout: WidgetLayout, absent: readonly WidgetId[]
   const shown = ZONES.flatMap((zone) => widgetsIn(next, zone));
   const clashes = shown.some((id, index) => shown.slice(index + 1).some((other) => next[id].zone === next[other].zone && overlaps(next[id], next[other])));
   if (absent.length === 0 && !clashes) return layout;
-  return closeAllRowGaps(clashes ? shown.reduce(settle, next) : next);
+  return closeFreedRows(clashes ? shown.reduce(settle, next) : next, layout);
 }
 
 /**
@@ -270,7 +287,7 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
     const rows = needed[spec.id];
     const at = next[spec.id];
     if (rows === undefined || at.hidden) continue;
-    const most = Math.max(at.h, spec.grows ?? 0);
+    const most = Math.max(at.room ?? at.h, at.h, spec.grows ?? 0);
     const fitted = Math.max(spec.min.h, Math.min(most, rows));
     const h = at.sized ? Math.max(at.h, fitted) : fitted;
     if (h === at.h) continue;
@@ -280,69 +297,86 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
   }
   if (!changed) return layout;
   next = grown.reduce(settle, next);
-  return closeAllRowGaps(next);
+  return closeFreedRows(next, layout);
 }
 
 /**
  * A layout changed as it is drawn (`fitToContent`) back as it is kept: where
- * each Widget now is, with the height each had in `kept`, the most it
- * takes, except `resized`'s, which is the one given it. Taller again, each
- * pushes down what it now overlaps, which drawing it fitted closes up again.
- * One that grew with its content is kept at its own height, not the one it
- * grew to, so it shrinks again when its content does.
+ * each Widget now is, at the height it is drawn, so the rows under a Widget
+ * drawn shorter than it may be are free for another; the most it takes
+ * (`room`) is kept beside that, for its content to grow back into.
+ * `resized`'s is the height given it. One that grew with its content is
+ * kept at its own height, not the one it grew to, so it shrinks again when
+ * its content does; the rows that frees are closed up, and drawing it grown
+ * pushes down what is below it again.
  */
 export function unfitted(next: WidgetLayout, kept: WidgetLayout, resized: WidgetId | null): WidgetLayout {
   const layout = { ...next };
   for (const spec of specsOf(next)) {
     if (spec.id === resized) continue;
-    const h = spec.grows === undefined ? Math.max(next[spec.id].h, kept[spec.id].h) : kept[spec.id].h;
-    layout[spec.id] = { ...next[spec.id], h };
+    const drawn = next[spec.id];
+    const own = kept[spec.id];
+    if (spec.grows !== undefined) {
+      layout[spec.id] = { ...drawn, h: own.h };
+      continue;
+    }
+    const room = Math.max(own.room ?? own.h, own.h);
+    const { room: _, ...rest } = drawn;
+    layout[spec.id] = room > drawn.h ? { ...rest, room } : rest;
   }
   const order = ZONES.flatMap((zone) => widgetsIn(layout, zone));
-  return closeAllRowGaps(order.reduce(settle, layout));
-}
-
-function place(layout: WidgetLayout, id: WidgetId, changes: Partial<WidgetPlacement>): WidgetLayout {
-  const placed = { ...layout[id], ...changes };
-  return closeAllRowGaps(settle({ ...layout, [id]: { ...placed, ...fit(id, placed, placed.zone) } }, id));
+  return closeFreedRows(order.reduce(settle, layout), next);
 }
 
 /**
- * Moved down onto the Widgets below it, a Widget swaps with them: they rise
- * into the rows it left and it goes under them. Without that, closing the
- * rows it left would put it straight back, and the arrow keys could never
- * move a Widget past the one under it. If they can't rise, it pushes them
- * down instead.
+ * `id` changed, and whatever it now covers pushed down. With `close`, the
+ * rows the change freed are closed up; a move leaves them, so the Widget
+ * stays where it was dropped.
+ */
+function place(layout: WidgetLayout, id: WidgetId, changes: Partial<WidgetPlacement>, close = true): WidgetLayout {
+  const placed = { ...layout[id], ...changes };
+  const settled = settle({ ...layout, [id]: { ...placed, ...fit(id, placed, placed.zone) } }, id);
+  return close ? closeFreedRows(settled, layout) : settled;
+}
+
+/**
+ * A Widget moved goes where it was dropped, into blank space as readily as
+ * beside another, and the rows it left stay as they are: blank space the
+ * musician makes by moving a Widget is theirs. Moved down onto the Widgets
+ * below it, a Widget swaps with them: they rise into the rows it left and it
+ * goes under them, so the arrow keys can move a Widget past the one under
+ * it. If they can't rise, it pushes them down instead.
  */
 export function moveWidget(layout: WidgetLayout, id: WidgetId, x: number, y: number): WidgetLayout {
   const from = layout[id];
   const to = { ...from, ...fit(id, { ...from, x, y }, from.zone) };
-  if (to.y <= from.y) return place(layout, id, to);
+  if (to.y <= from.y) return place(layout, id, to, false);
   const below = widgetsIn(layout, from.zone).filter(
     (other) => other !== id && layout[other].y >= from.y + from.h && overlaps(to, layout[other]),
   );
-  if (below.length === 0) return place(layout, id, to);
+  if (below.length === 0) return place(layout, id, to, false);
   const rise = Math.min(...below.map((other) => layout[other].y)) - from.y;
   const risen = { ...layout };
   for (const other of below) risen[other] = { ...layout[other], y: layout[other].y - rise };
   const blocked = widgetsIn(layout, from.zone).some(
     (other) => other !== id && !below.includes(other) && below.some((b) => overlaps(risen[b], layout[other])),
   );
-  if (blocked) return place(layout, id, to);
+  if (blocked) return place(layout, id, to, false);
   const under = Math.max(to.y, ...below.filter((b) => overlaps({ ...to, y: 0, h: Infinity }, risen[b])).map((b) => risen[b].y + risen[b].h));
-  return place(risen, id, { ...to, y: under });
+  return place(risen, id, { ...to, y: under }, false);
 }
 
 /** Made taller or shorter, a Widget keeps the height given it, blank space and all (`sized`). */
 export function resizeWidget(layout: WidgetLayout, id: WidgetId, w: number, h: number): WidgetLayout {
   const at = layout[id];
   const sized = at.sized === true || fit(id, { ...at, w, h }, at.zone).h !== at.h;
-  return place(layout, id, sized ? { w, h, sized } : { w, h });
+  // Made a height of its own, it takes that height and no more.
+  return place(layout, id, sized ? { w, h, sized, room: undefined } : { w, h });
 }
 
 /** Hidden, a Widget's rows close up; shown again, it goes back where it was and pushes down whatever is there now. */
 export function setWidgetHidden(layout: WidgetLayout, id: WidgetId, hidden: boolean): WidgetLayout {
-  return hidden ? closeAllRowGaps({ ...layout, [id]: { ...layout[id], hidden } }) : place(layout, id, { hidden });
+  return hidden ? closeFreedRows({ ...layout, [id]: { ...layout[id], hidden } }, layout) : place(layout, id, { hidden });
 }
 
 /**
@@ -395,10 +429,9 @@ export function parseLayout(saved: string | null, page: GridPage = "editor"): Wi
       zone: entry.zone!,
       hidden: entry.hidden === true,
       ...(entry.sized === true && { sized: true }),
+      ...(typeof entry.room === "number" && Number.isInteger(entry.room) && entry.room > (entry.h as number) && { room: entry.room }),
     };
   }
-  // Saved by hand or by an older version, it may overlap or leave empty rows: settle each in order, then close them.
-  return closeAllRowGaps(
-    PAGE_WIDGETS[page].reduce((settled, spec) => (settled[spec.id].hidden ? settled : settle(settled, spec.id)), layout),
-  );
+  // Saved by hand or by an older version, it may overlap: settle each in order. Blank rows it keeps are the musician's.
+  return PAGE_WIDGETS[page].reduce((settled, spec) => (settled[spec.id].hidden ? settled : settle(settled, spec.id)), layout);
 }

@@ -10,6 +10,7 @@ import {
   modelChoice,
   readConnection,
   readSettings,
+  readyProviders,
   requestModeFor,
   saveConnection,
   saveSettings,
@@ -177,11 +178,14 @@ test("how Requests run is saved with each provider's settings and read back", ()
   });
 });
 
-test("hearing audio is off by default, and on only where the musician allows it and the model takes audio", () => {
-  for (const provider of ["claude", "openai", "gemini", "local"] as const) {
+test("hearing audio is on by default wherever the model takes audio, unless the musician turns it off", () => {
+  for (const provider of ["claude", "openai", "local", "meta"] as const) {
     expect(requestModeFor(provider, { apiKey: "key" }).hearsAudio).toBe(false);
   }
-  expect(requestModeFor("gemini", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(true);
+  expect(requestModeFor("gemini", { apiKey: "key" }).hearsAudio).toBe(true);
+  expect(requestModeFor("gemini", { apiKey: "key", hearAudio: false }).hearsAudio).toBe(false);
+  // Meta suggests Muse Spark 1.2 for audio, not 1.3.
+  expect(requestModeFor("meta", { apiKey: "key", model: "muse-spark-1.2" }).hearsAudio).toBe(true);
   // Claude and OpenAI's models don't declare audio input, so the setting does nothing there.
   expect(requestModeFor("claude", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(false);
   expect(requestModeFor("openai", { apiKey: "key", hearAudio: true }).hearsAudio).toBe(false);
@@ -219,4 +223,31 @@ test("Local's Context Window is saved and read back, and one that isn't a whole 
   expect(readSettings(bad).connections.local?.contextWindow).toBeUndefined();
   const notLocal = JSON.stringify({ provider: "claude", connections: { claude: { apiKey: "k", contextWindow: 5 } } });
   expect(readSettings(notLocal).connections.claude?.contextWindow).toBeUndefined();
+});
+
+test("Jev's connection is saved beside the providers' and read back, and doesn't make Claude's key a bare one", () => {
+  const settings: Settings = {
+    provider: "claude",
+    connections: { claude: { apiKey: "sk-test" } },
+    jev: { apiKey: "ts-key", baseUrl: " https://gateway.example.com ", model: "jev-1.13.0" },
+  };
+  const saved = saveSettings(settings);
+  expect(saved.startsWith("{")).toBe(true);
+  expect(readSettings(saved)).toEqual({ ...settings, jev: { apiKey: "ts-key", baseUrl: "https://gateway.example.com", model: "jev-1.13.0" } });
+  // Without Jev, Claude's key alone is saved as it always was.
+  expect(saveSettings({ provider: "claude", connections: { claude: { apiKey: "sk-test" } } })).toBe("sk-test");
+  // Jev set up before any provider is still read, with no provider ready.
+  const jevOnly = readSettings(saveSettings({ provider: "claude", connections: {}, jev: { apiKey: "ts-key" } }));
+  expect(jevOnly).toEqual({ provider: "claude", connections: {}, jev: { apiKey: "ts-key" } });
+  expect(readyProviders(jevOnly)).toEqual([]);
+});
+
+test("the ready providers are those with a connection saved, with a key where one is needed, in the catalogue's order", () => {
+  expect(readyProviders(null)).toEqual([]);
+  expect(
+    readyProviders({
+      provider: "meta",
+      connections: { local: { apiKey: "" }, meta: { apiKey: "m" }, openai: { apiKey: " " }, claude: { apiKey: "sk" } },
+    }),
+  ).toEqual(["claude", "meta", "local"]);
 });

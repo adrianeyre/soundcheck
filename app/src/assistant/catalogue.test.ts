@@ -34,7 +34,7 @@ test("no code decides what a model can do by which provider it is", () => {
   const allowed = /^(providers\.ts|connection\.ts):/;
   expect(lines.filter(({ where, line }) => byId.test(line) && !allowed.test(where)).map(({ where }) => where)).toEqual([]);
   expect(lines.filter(({ where, line }) => byId.test(line) && where.startsWith("connection.ts")).map(({ line }) => line.trim())).toEqual([
-    'if (settings.provider === "claude" && saved.every(([id]) => id === "claude")) {',
+    'if (settings.provider === "claude" && saved.every(([id]) => id === "claude") && !settings.jev) {',
   ]);
 });
 

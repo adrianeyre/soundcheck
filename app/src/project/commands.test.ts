@@ -5,6 +5,7 @@ import type { Command, CommandType } from "./commands";
 import { applyCommand, applyCommands } from "./commands";
 import { deepFreeze, sampleProject } from "./fixtures";
 import { ProjectHistory } from "./history";
+import { keysPreset } from "../instrument/keys-presets";
 import { synthPreset } from "../instrument/synth-presets";
 import {
   createAudioTrack,
@@ -12,6 +13,7 @@ import {
   createDrumTrack,
   createEffect,
   createInstrumentTrack,
+  createKeysTrack,
   DEFAULT_SYNTH,
   type Project,
   STARTER_KIT,
@@ -39,6 +41,9 @@ const buses: Command[] = [
   { type: "setBusOutput", busId: "drum-bus", output: "band" },
   { type: "setTrackOutput", trackId: "keys", output: "drum-bus" },
 ];
+
+/** The Track "keys" given the Keys, for the commands that change them. */
+const KEYS_ON_TRACK: Command = { type: "setInstrument", trackId: "keys", instrument: createKeysTrack("Piano").instrument };
 
 /**
  * One case per command: the command, and what should be true afterwards. The
@@ -174,6 +179,35 @@ const cases: Record<CommandType, { command: Command; check: (p: Project) => void
       const synth = keys.kind === "instrument" && keys.instrument.type === "synth" && keys.instrument;
       expect(synth && synth.preset).toBe("Warm Pad");
       expect(synth && synth.settings).toEqual(synthPreset("Warm Pad")!.settings);
+    },
+  },
+  setKeysSettings: {
+    before: [KEYS_ON_TRACK],
+    command: { type: "setKeysSettings", trackId: "keys", settings: { brightness: 0.9, source: "sample" } },
+    check: (p) => {
+      const track = p.tracks[0]!;
+      const keys = track.kind === "instrument" && track.instrument.type === "keys" && track.instrument;
+      expect(keys && keys.settings).toMatchObject({ brightness: 0.9, source: "sample", decay: 8 });
+    },
+  },
+  setKeysPreset: {
+    before: [KEYS_ON_TRACK],
+    command: { type: "setKeysPreset", trackId: "keys", preset: "Honky-Tonk" },
+    check: (p) => {
+      const track = p.tracks[0]!;
+      const keys = track.kind === "instrument" && track.instrument.type === "keys" && track.instrument;
+      expect(keys && keys.preset).toBe("Honky-Tonk");
+      expect(keys && keys.settings).toEqual(keysPreset("Honky-Tonk")!.settings);
+    },
+  },
+  setKeysSample: {
+    before: [KEYS_ON_TRACK],
+    command: { type: "setKeysSample", trackId: "keys", sample: "audio/choir.wav", rootNote: 57 },
+    check: (p) => {
+      const track = p.tracks[0]!;
+      const keys = track.kind === "instrument" && track.instrument.type === "keys" && track.instrument;
+      expect(keys && keys.sample).toBe("audio/choir.wav");
+      expect(keys && keys.settings).toMatchObject({ source: "sample", rootNote: 57 });
     },
   },
   setDrumPad: {

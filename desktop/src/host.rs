@@ -14,11 +14,11 @@ use std::time::Instant;
 
 use rtrb::{Consumer, Producer, RingBuffer};
 use soundcheck_engine::{
-    AUDITION_GAIN, Audition, DJ_REPORT_LEN, DjControl, DjMixer, Engine, MAX_BUSES, MAX_TRACKS,
-    NoteList, PluginKind, PluginRuntime, PreparedAudioClips, PreparedAudioFile, PreparedAutomation,
-    PreparedBus, PreparedDjTrack, PreparedEffect, PreparedInstrument, PreparedSample,
-    PreparedSends, PreparedTempoChanges, PreparedTrack, RECORDING_CAPACITY, SynthSettings,
-    TICKS_PER_BEAT, bus_chain,
+    AUDITION_GAIN, Audition, DJ_REPORT_LEN, DjControl, DjMixer, Engine, KeysSettings, MAX_BUSES,
+    MAX_TRACKS, NoteList, PluginKind, PluginRuntime, PreparedAudioClips, PreparedAudioFile,
+    PreparedAutomation, PreparedBus, PreparedDjTrack, PreparedEffect, PreparedInstrument,
+    PreparedSample, PreparedSends, PreparedTempoChanges, PreparedTrack, RECORDING_CAPACITY,
+    SynthSettings, TICKS_PER_BEAT, bus_chain,
 };
 
 use crate::command::{EffectSettings, EngineCommand, Garbage, RecordedNoteEvent, RtCommand};
@@ -249,6 +249,24 @@ impl Controller {
                     None => self.push(RtCommand::ClearPadSample { track, pad }),
                 }
             }
+            EngineCommand::SetKeysSettings { track, settings } => {
+                // Parsed here, as the Synth's are: plain numbers on the audio thread.
+                let settings = KeysSettings::from_flat(&settings);
+                self.push(RtCommand::SetKeys { track, settings });
+            }
+            EngineCommand::SetKeysSample { track, wav } => {
+                // Decoded here, as a pad's sample is; the UI checked the file.
+                if let Ok(sample) = PreparedSample::decode(&wav) {
+                    self.push(RtCommand::SetKeysSample {
+                        track,
+                        sample: Some(sample),
+                    });
+                }
+            }
+            EngineCommand::ClearKeysSample { track } => self.push(RtCommand::SetKeysSample {
+                track,
+                sample: None,
+            }),
             EngineCommand::InsertEffect {
                 chain,
                 index,
@@ -943,6 +961,14 @@ impl Renderer {
             }
             RtCommand::ClearPadSample { track, pad } => {
                 if let Some(old) = engine.take_pad_sample(track, pad) {
+                    self.discard(Garbage::Sample(old));
+                }
+            }
+            RtCommand::SetKeys { track, settings } => {
+                engine.set_track_keys_settings(track, settings)
+            }
+            RtCommand::SetKeysSample { track, sample } => {
+                if let Some(old) = engine.swap_keys_sample(track, sample) {
                     self.discard(Garbage::Sample(old));
                 }
             }

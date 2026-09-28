@@ -24,10 +24,11 @@ export function isMissingInstrument(instrument: Instrument): boolean {
   return instrument.type === "plugin" && instrumentManifestOf(instrument) === undefined;
 }
 
-/** What the UI calls it: "Synth", "Drum Sampler", a Plugin's own name, or a missing Plugin's id. */
+/** What the UI calls it: "Synth", "Drum Sampler", "Keys", a Plugin's own name, or a missing Plugin's id. */
 export function instrumentName(instrument: Instrument): string {
   if (instrument.type === "synth") return "Synth";
   if (instrument.type === "drumSampler") return "Drum Sampler";
+  if (instrument.type === "keys") return "Keys";
   return instrumentManifestOf(instrument)?.name ?? instrument.vst3?.name ?? instrument.plugin.id;
 }
 

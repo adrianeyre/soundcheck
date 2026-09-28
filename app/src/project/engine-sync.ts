@@ -17,6 +17,7 @@ import { effectFlat, pluginManifestOf } from "../effect/effect-table";
 import { instrumentManifestOf, isMissingInstrument, pluginInstrumentFlat } from "../instrument/instrument-table";
 import { installedPlugin } from "../plugin/plugins";
 import { vst3Generation, vst3InstrumentKey } from "../plugin/vst3";
+import { keysSettingsToFlat } from "../instrument/keys-params";
 import { synthSettingsToFlat } from "../instrument/synth-params";
 import { parsePadSetting, parseSetting } from "./automation";
 import {
@@ -132,6 +133,10 @@ interface Sent {
   synth: number[] | null;
   /** An installed Plugin Instrument's settings, flat, or null for any other Instrument. */
   plugin: number[] | null;
+  /** The Keys' settings, flat, or null for any other Instrument. */
+  keys: number[] | null;
+  /** The sample the Keys were last sent, by identity, or null for none. */
+  keysSample: LoadedSample | null;
   pads: DrumPad[];
   /** The sample last sent for each pad, by identity, or null for none. */
   samples: (LoadedSample | null)[];
@@ -238,6 +243,8 @@ function fresh(instrument = "synth"): Sent {
     instrument,
     synth: null,
     plugin: null,
+    keys: null,
+    keysSample: null,
     pads: [],
     samples: [],
     notes: [],
@@ -513,6 +520,15 @@ export class EngineSync {
       commands.push({ type: "setInstrumentSettings", track: index, settings: plugin });
     }
 
+    // The Keys' settings, and the sample they play across the keyboard.
+    const keysInstrument = track.instrument.type === "keys" ? track.instrument : null;
+    const keys = keysInstrument ? keysSettingsToFlat(keysInstrument.settings) : null;
+    if (keys && !sameNumbers(sent.keys ?? [], keys)) commands.push({ type: "setKeysSettings", track: index, settings: keys });
+    const keysSample = keysInstrument?.sample ? (samples.get(keysInstrument.sample) ?? null) : null;
+    if (keysInstrument && keysSample !== sent.keysSample) {
+      commands.push(keysSample ? { type: "setKeysSample", track: index, wav: keysSample.bytes } : { type: "clearKeysSample", track: index });
+    }
+
     const sample = (pad: number): LoadedSample | null => {
       const path = pads[pad]?.sample;
       return (path ? samples.get(path) : null) ?? null;
@@ -553,6 +569,8 @@ export class EngineSync {
       instrument,
       synth,
       plugin,
+      keys,
+      keysSample,
       pads: pads.map((pad) => ({ ...pad })),
       samples: pads.map((_, padIndex) => sample(padIndex)),
       notes,

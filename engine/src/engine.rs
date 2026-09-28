@@ -652,6 +652,47 @@ impl Engine {
         }
     }
 
+    /// Change the settings of Track `track`'s Keys: `settings` is the flat
+    /// form their table declares, and anything missing or out of range takes
+    /// its default. Notes sounding carry on as they were struck. Ignored
+    /// unless the Track plays the Keys.
+    pub fn set_track_keys(&mut self, track: usize, settings: &[f32]) {
+        self.set_track_keys_settings(track, crate::instrument::KeysSettings::from_flat(settings));
+    }
+
+    /// Track `track`'s Keys settings in their flat form, or none unless it plays the Keys.
+    pub fn track_keys(&self, track: usize) -> Vec<f32> {
+        self.tracks
+            .get(track)
+            .and_then(|track| track.keys_settings())
+            .map(|settings| settings.to_flat())
+            .unwrap_or_default()
+    }
+
+    /// Give Track `track`'s Keys a WAV file to play across the keyboard,
+    /// from its root note, when their source is the sample. Answers what is
+    /// wrong, or `None` when it was loaded.
+    pub fn load_track_keys_sample(&mut self, track: usize, wav: &[u8]) -> Option<String> {
+        let sample = match crate::instrument::decode(wav) {
+            Ok(sample) => sample,
+            Err(error) => return Some(error.message().to_string()),
+        };
+        match self.keys(track) {
+            Some(keys) => {
+                keys.set_sample(Some(Arc::new(sample)));
+                None
+            }
+            None => Some("That Track isn't playing the Keys".to_string()),
+        }
+    }
+
+    /// Take the sample off Track `track`'s Keys: the sample source is silent until another comes.
+    pub fn clear_track_keys_sample(&mut self, track: usize) {
+        if let Some(keys) = self.keys(track) {
+            keys.set_sample(None);
+        }
+    }
+
     /// Take the musician's own WAV off a pad, so that it plays the bundled
     /// kit's own sample again — or nothing, on a pad past the kit's end.
     /// The engine has no other way back to the kit's sound.
@@ -1683,6 +1724,32 @@ impl Engine {
         }
     }
 
+    /// Change Track `track`'s Keys settings, already parsed: what a native
+    /// host's audio thread calls, since nothing here allocates.
+    pub fn set_track_keys_settings(
+        &mut self,
+        track: usize,
+        settings: crate::instrument::KeysSettings,
+    ) {
+        if let Some(track) = self.tracks.get_mut(track) {
+            track.set_keys_settings(settings);
+        }
+    }
+
+    /// Give Track `track`'s Keys a sample decoded elsewhere, or none,
+    /// handing back the one it replaces to be dropped off the audio thread.
+    pub fn swap_keys_sample(
+        &mut self,
+        track: usize,
+        sample: Option<PreparedSample>,
+    ) -> Option<PreparedSample> {
+        let sample = sample.map(|PreparedSample(sample)| sample);
+        match self.keys(track) {
+            Some(keys) => keys.set_sample(sample).map(PreparedSample),
+            None => sample.map(PreparedSample),
+        }
+    }
+
     /// Leave a pad with no sample at all, handing back the one it had to be
     /// dropped off the audio thread. A host puts the kit's own sample back
     /// with `swap_pad_sample` where the kit has one; this is for the pads
@@ -1935,6 +2002,10 @@ impl Engine {
 
     fn drums(&mut self, track: usize) -> Option<&mut DrumSampler> {
         self.tracks.get_mut(track)?.instrument_mut().drums_mut()
+    }
+
+    fn keys(&mut self, track: usize) -> Option<&mut crate::instrument::Keys> {
+        self.tracks.get_mut(track)?.instrument_mut().keys_mut()
     }
 
     /// The earliest tick, at or after `scan_from`, when something is due.

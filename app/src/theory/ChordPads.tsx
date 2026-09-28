@@ -1,8 +1,9 @@
-import { Music4, Plus, Replace, Trash2, X } from "lucide-react";
+import { Music4, Plus, Replace, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { Note } from "../project/model";
 import { KeySelect } from "./KeySelect";
+import type { NextChord } from "./next-chord";
 import {
   type Chord,
   CHORD_RHYTHMS,
@@ -36,6 +37,8 @@ export interface ChordPadsProps {
   /** The selected Pattern Clip, or null when none is. */
   target: ChordTarget | null;
   onNotes: (notes: Note[], label: string) => void;
+  /** Asks Jev for the next chord of the progression; only where Jev is set up. */
+  nextChord?: NextChord;
 }
 
 const CHORD_LENGTHS = [
@@ -52,7 +55,7 @@ const OCTAVES = [
 ];
 
 /** The same root's parallel key: major for a minor-sounding scale, natural minor for a major one. */
-function parallelKey(key: MusicalKey): MusicalKey {
+export function parallelKey(key: MusicalKey): MusicalKey {
   return { root: key.root, scale: scaleOf(key.scale).intervals.includes(4) ? "minor" : "major" };
 }
 
@@ -62,9 +65,10 @@ function parallelKey(key: MusicalKey): MusicalKey {
  * tension), and the ones borrowed from its parallel key. Holding a pad plays
  * it; with a Pattern Clip selected, the pads build a progression, or a
  * well-worn one is picked, and it is written into the Clip as block chords,
- * stabs or an arpeggio, as one undo step.
+ * stabs or an arpeggio, as one undo step. With Jev set up, it can pick the
+ * next chord of the progression from the pads.
  */
-export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target, onNotes }: ChordPadsProps) {
+export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target, onNotes, nextChord }: ChordPadsProps) {
   const [sevenths, setSevenths] = useState(false);
   const [nearPitch, setNearPitch] = useState(60);
   const [progression, setProgression] = useState<Chord[]>([]);
@@ -73,6 +77,9 @@ export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target
   const [bass, setBass] = useState(true);
   const [voiceLeading, setVoiceLeading] = useState(true);
   const [velocity, setVelocity] = useState(0.75);
+  // What Jev last said: its pick and how sure it was, or why it couldn't pick; and whether it is being asked.
+  const [asking, setAsking] = useState(false);
+  const [jevSaid, setJevSaid] = useState<{ text: string; failed: boolean } | null>(null);
   // The pitches the pad being held is sounding: one Set, cleared and refilled, so letting go always finds them.
   const sounding = useRef(new Set<number>());
 
@@ -81,6 +88,21 @@ export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target
   const borrowed = diatonicChords(borrowedKey, sevenths).filter(
     (chord) => !chords.some((own) => own.root === chord.root && own.quality === chord.quality),
   );
+
+  const askJev = async () => {
+    if (!nextChord) return;
+    setAsking(true);
+    setJevSaid(null);
+    try {
+      const candidates = [...chords.map((chord) => ({ chord, borrowed: false })), ...borrowed.map((chord) => ({ chord, borrowed: true }))];
+      const { chord, confidence } = await nextChord(songKey, progression, candidates);
+      setProgression((list) => [...list, chord]);
+      setJevSaid({ text: `Jev picked ${chordName(chord)}, ${Math.round(confidence * 100)}% confident.`, failed: false });
+    } catch (reason) {
+      setJevSaid({ text: reason instanceof Error ? reason.message : String(reason), failed: true });
+    }
+    setAsking(false);
+  };
 
   const stop = () => {
     for (const pitch of sounding.current) noteOff(pitch);
@@ -215,6 +237,12 @@ export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target
                 ))}
               </select>
             </label>
+            {nextChord && (
+              <button type="button" className="btn-sm" disabled={asking} aria-busy={asking} onClick={() => void askJev()}>
+                <Sparkles size={14} aria-hidden />
+                {asking ? "Asking Jev…" : "Next chord from Jev"}
+              </button>
+            )}
             <label className="field-inline">
               Rhythm
               <select aria-label="Rhythm" value={rhythm} onChange={(event) => setRhythm(event.target.value as ChordRhythm)}>
@@ -244,6 +272,11 @@ export function ChordPads({ songKey, onSongKey, canPlay, noteOn, noteOff, target
               Voice leading
             </label>
           </div>
+          {jevSaid && (
+            <p role={jevSaid.failed ? "alert" : "status"} className={jevSaid.failed ? "alert" : "hint"}>
+              {jevSaid.text}
+            </p>
+          )}
           <ol className="progression" aria-label="Progression chords">
             {progression.length === 0 && <li className="hint">No chords yet.</li>}
             {progression.map((chord, index) => (

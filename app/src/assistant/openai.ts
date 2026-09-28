@@ -1,5 +1,6 @@
 /**
- * The Assistant's connection to OpenAI, to xAI's Grok, and to a local model
+ * The Assistant's connection to OpenAI, to xAI's Grok, to Meta AI's Model
+ * API (dev.meta.ai, OpenAI-compatible at api.meta.ai/v1), and to a local model
  * through its OpenAI-compatible endpoint (Ollama, llama.cpp's server).
  *
  * All speak Chat Completions, the one API a local server is sure to have.
@@ -93,6 +94,21 @@ export function grokConversations(
   capabilities: Capabilities,
 ): StartConversation {
   const server: Server = { who: "Grok", capabilities, maxTokens: "max_completion_tokens", reasoningApart: true };
+  return start(new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice, server);
+}
+
+/**
+ * Talks to Meta AI's Muse Spark with the user's own key. Its Chat
+ * Completions take the token limit as `max_tokens`, which counts the
+ * reasoning too.
+ */
+export function metaConversations(
+  apiKey: string,
+  options: OpenAIOptions,
+  choice: OpenAIChoice,
+  capabilities: Capabilities,
+): StartConversation {
+  const server: Server = { who: "Meta AI", capabilities, maxTokens: "max_tokens" };
   return start(new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice, server);
 }
 

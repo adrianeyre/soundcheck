@@ -17,6 +17,7 @@ import type {
   Effect,
   EqSettings,
   Instrument,
+  KeysInstrument,
   Mixer,
   Note,
   Output,
@@ -32,6 +33,8 @@ import type {
 } from "./model";
 import type { Arrangement } from "./arrangement";
 import { automatableSetting, pruneAutomation, sortAutomation } from "./automation";
+import type { KeysSettings } from "../instrument/keys-params";
+import { keysPreset } from "../instrument/keys-presets";
 import { synthPreset } from "../instrument/synth-presets";
 import { findBus as busById, type Channel, routingProblem, sendProblem } from "./routing";
 import { overlappingSection, sectionBarsText, type SectionRange } from "./sections";
@@ -87,6 +90,16 @@ export type Command =
    * User Preset brings its settings, since the library is outside the Project.
    */
   | { type: "setSynthPreset"; trackId: string; preset: string; settings?: SynthSettings }
+  /** The Keys' settings; only the settings given change. */
+  | { type: "setKeysSettings"; trackId: string; settings: Partial<KeysSettings> }
+  /** Load one of the Keys' presets, as `setSynthPreset` does the Synth's. */
+  | { type: "setKeysPreset"; trackId: string; preset: string; settings?: KeysSettings }
+  /**
+   * The sample the Keys play across the keyboard: a file in the Project
+   * folder, or null to take it off. Setting one plays it: the source
+   * becomes the sample, from `rootNote` if given.
+   */
+  | { type: "setKeysSample"; trackId: string; sample: string | null; rootNote?: number }
   /** One Drum Sampler pad; only the fields given change. */
   | { type: "setDrumPad"; trackId: string; pad: number; settings: Partial<DrumPad> }
   /** Only the fields given change. */
@@ -172,6 +185,9 @@ export const COMMAND_LABELS: Record<CommandType, string> = {
   setSynthSettings: "Change Synth",
   setInstrumentSettings: "Change Instrument",
   setSynthPreset: "Load Synth preset",
+  setKeysSettings: "Change Keys",
+  setKeysPreset: "Load Keys preset",
+  setKeysSample: "Load Keys sample",
   setDrumPad: "Change pad",
   setTrackMixer: "Change mixer",
   setMasterVolume: "Set Master volume",
@@ -363,6 +379,29 @@ function change(project: Project, command: Command): void {
       const synth = findSynth(project, command.trackId);
       synth.preset = command.preset;
       synth.settings = { ...settings };
+      return;
+    }
+    case "setKeysSettings": {
+      const keys = findKeys(project, command.trackId);
+      keys.settings = { ...keys.settings, ...command.settings };
+      return;
+    }
+    case "setKeysPreset": {
+      const settings = command.settings ?? keysPreset(command.preset)?.settings;
+      if (!settings) reject(`There is no Keys preset called ${command.preset}`);
+      const keys = findKeys(project, command.trackId);
+      keys.preset = command.preset;
+      keys.settings = { ...settings };
+      return;
+    }
+    case "setKeysSample": {
+      const keys = findKeys(project, command.trackId);
+      keys.sample = command.sample;
+      if (command.sample !== null) {
+        keys.settings = { ...keys.settings, source: "sample", ...(command.rootNote !== undefined && { rootNote: command.rootNote }) };
+      } else if (keys.settings.source === "sample") {
+        keys.settings = { ...keys.settings, source: "piano" };
+      }
       return;
     }
     case "setDrumPad": {
@@ -600,6 +639,15 @@ function findSynth(project: Project, trackId: string): Extract<Instrument, { typ
   const track = findTrack(project, trackId);
   if (track.kind !== "instrument" || track.instrument.type !== "synth") {
     reject(`${track.name} has no Synth`);
+  }
+  return track.instrument;
+}
+
+/** A Track's Keys, or a rejection if it hasn't got them. */
+function findKeys(project: Project, trackId: string): KeysInstrument {
+  const track = findTrack(project, trackId);
+  if (track.kind !== "instrument" || track.instrument.type !== "keys") {
+    reject(`${track.name} isn't playing the Keys`);
   }
   return track.instrument;
 }

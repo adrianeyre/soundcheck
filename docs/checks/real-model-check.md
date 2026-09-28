@@ -408,13 +408,14 @@ Assistant can, with the Model and Version pickers' names or the API's own id:
 … real-model-check --provider openai                               # OPENAI_API_KEY
 … real-model-check --provider gemini --model Pro                   # GEMINI_API_KEY
 … real-model-check --provider grok --version 4.3                   # XAI_API_KEY
+… real-model-check --provider meta --version 1.3                   # META_API_KEY
 … real-model-check --provider local --model qwen3:8b               # no key; LOCAL_BASE_URL
 ```
 
 Left out, the provider is Claude and the model the catalogue's default
 (`catalogue.ts`). Each provider reads `<PREFIX>_API_KEY`, `<PREFIX>_BASE_URL`
 and `<PREFIX>_CUSTOM_HEADERS`, with the prefix `ANTHROPIC`, `OPENAI`, `GEMINI`,
-`XAI` or `LOCAL`. The first lines of the output name the provider, model, effort,
+`XAI`, `META` or `LOCAL`. The first lines of the output name the provider, model, effort,
 base URL and the custom headers sent (names only; no key or header value is
 printed).
 

@@ -3,8 +3,8 @@
  * so a Preset saved in one loads into every other (#50), listed alongside
  * the Factory Presets that ship with the app.
  *
- * A User Preset is a named copy of a Synth's, a Plugin Instrument's or an
- * Effect's settings. Loading
+ * A User Preset is a named copy of a Synth's, the Keys', a Plugin
+ * Instrument's or an Effect's settings. Loading
  * one copies its settings into the Project, as a Factory Preset's are, so the
  * Project never depends on the library: renaming or deleting a Preset later
  * changes nothing that has already loaded it.
@@ -22,24 +22,32 @@ import {
   type EffectType,
 } from "../effect/effect-params";
 import { effectPresets } from "../effect/effect-presets";
+import { defaultKeysSettings, type KeysSettings } from "../instrument/keys-params";
+import { KEYS_PRESETS } from "../instrument/keys-presets";
 import { defaultSynthSettings, type SynthSettings } from "../instrument/synth-params";
 import { SYNTH_PRESETS } from "../instrument/synth-presets";
 import { pluginManifest } from "../plugin/plugins";
 import type { Command } from "../project/commands";
 import { type Effect, newId, type PluginInstrument } from "../project/model";
-import { LIMITS, validateEffectSettings, validatePluginSettings, validateSynthSettings } from "../project/validate";
+import {
+  LIMITS,
+  validateEffectSettings,
+  validateKeysSettings,
+  validatePluginSettings,
+  validateSynthSettings,
+} from "../project/validate";
 import type { LibraryStorage } from "./library-storage";
 
 /**
  * What a Preset is for: the Synth, one kind of built-in Effect, or one
  * Plugin, by its id, whatever version of it is installed.
  */
-export type PresetTarget = "synth" | EffectType | `plugin:${string}`;
+export type PresetTarget = "synth" | "keys" | EffectType | `plugin:${string}`;
 
-export const PRESET_TARGETS: readonly PresetTarget[] = ["synth", ...EFFECT_TYPES];
+export const PRESET_TARGETS: readonly PresetTarget[] = ["synth", "keys", ...EFFECT_TYPES];
 
-/** A Preset's settings: a Synth's, a built-in Effect's, or a Plugin's numbers by name. */
-export type PresetSettings = SynthSettings | EffectSettings | Record<string, number>;
+/** A Preset's settings: a Synth's, the Keys', a built-in Effect's, or a Plugin's numbers by name. */
+export type PresetSettings = SynthSettings | KeysSettings | EffectSettings | Record<string, number>;
 
 /** The Presets an Effect loads and saves. */
 export function presetTargetOf(effect: Effect): PresetTarget {
@@ -76,7 +84,7 @@ export interface ListedPreset {
   source: "factory" | "user";
   /** What it sounds like; Factory Presets have one. */
   description?: string;
-  /** A Synth Factory Preset's category: bass, lead, pad, pluck or keys. */
+  /** A Factory Preset's category: the Synth's bass, lead, pad, pluck or keys; the Keys' grand, upright, electric or character. */
   category?: string;
   settings: PresetSettings;
 }
@@ -91,6 +99,7 @@ const FILE_VERSION = 1;
 export function targetName(target: PresetTarget): string {
   const plugin = pluginOf(target);
   if (plugin !== null) return pluginManifest(plugin)?.name ?? plugin;
+  if (target === "keys") return "Keys";
   return target === "synth" ? "Synth" : EFFECT_NAMES[target as EffectType];
 }
 
@@ -98,7 +107,7 @@ export function targetName(target: PresetTarget): string {
 export function factoryPresets(target: PresetTarget): ListedPreset[] {
   // Plugins ship no Factory Presets yet.
   if (pluginOf(target) !== null) return [];
-  const factory = target === "synth" ? SYNTH_PRESETS : effectPresets(target as EffectType);
+  const factory = target === "synth" ? SYNTH_PRESETS : target === "keys" ? KEYS_PRESETS : effectPresets(target as EffectType);
   return factory.map((preset) => ({ ...preset, source: "factory" }));
 }
 
@@ -140,6 +149,13 @@ export function synthPresetCommand(trackId: string, preset: ListedPreset): Comma
   return preset.source === "factory"
     ? { type: "setSynthPreset", trackId, preset: preset.name }
     : { type: "setSynthPreset", trackId, preset: preset.name, settings: { ...(preset.settings as SynthSettings) } };
+}
+
+/** The command that loads `preset` into a Track's Keys, as `synthPresetCommand` does the Synth's. */
+export function keysPresetCommand(trackId: string, preset: ListedPreset): Command {
+  return preset.source === "factory"
+    ? { type: "setKeysPreset", trackId, preset: preset.name }
+    : { type: "setKeysPreset", trackId, preset: preset.name, settings: { ...(preset.settings as KeysSettings) } };
 }
 
 /** A User Preset's name can't be saved: the reason is the message. */
@@ -257,6 +273,7 @@ function presetId(file: string): string {
 function settingsProblem(target: PresetTarget, settings: unknown): string | null {
   const plugin = pluginOf(target);
   if (plugin !== null) return validatePluginSettings(pluginManifest(plugin), settings);
+  if (target === "keys") return validateKeysSettings(settings);
   return target === "synth" ? validateSynthSettings(settings) : validateEffectSettings(target as EffectType, settings);
 }
 
@@ -272,6 +289,7 @@ function presetDefaults(target: PresetTarget, settings: object): Record<string, 
     if (!manifest) return { ...settings };
     return Object.fromEntries(manifest.settings.map((param) => [param.name, param.default]));
   }
+  if (target === "keys") return { ...defaultKeysSettings() };
   return { ...(target === "synth" ? defaultSynthSettings() : defaultEffectSettings(target as EffectType)) };
 }
 

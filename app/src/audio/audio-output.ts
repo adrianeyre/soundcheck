@@ -104,6 +104,11 @@ export type EngineCommand =
    * the desktop, and a byte array survives both.
    */
   | { type: "setPadSample"; track: number; pad: number; wav: number[] }
+  /** The Keys' settings, flat, as their table declares them. */
+  | { type: "setKeysSettings"; track: number; settings: number[] }
+  /** The WAV the Keys play at each key's pitch, as a pad's sample is sent. */
+  | { type: "setKeysSample"; track: number; wav: number[] }
+  | { type: "clearKeysSample"; track: number }
   /**
    * Take the musician's own WAV off a pad, so that it plays the bundled
    * kit's own sample again — or nothing, on a pad past the kit's end. The

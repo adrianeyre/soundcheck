@@ -12,7 +12,10 @@ use crate::audio_clip::AudioClips;
 use crate::automation::{Automatable, Automation, ChannelAutomation, Line, TableAutomation};
 use crate::bus::{BusSend, Output, feeds};
 use crate::effect::InsertChain;
-use crate::instrument::{Instrument, MAX_PADS, PARAMS, PadParam, SynthSettings};
+use crate::instrument::{
+    Instrument, KEYS_PARAM_COUNT, KEYS_PARAMS, KeysSettings, MAX_PADS, PARAMS, PadParam,
+    SynthSettings,
+};
 use crate::schedule::{NoteList, Schedule};
 use crate::transport::Transport;
 
@@ -76,6 +79,10 @@ pub struct Track {
     /// The Synth's settings as the host last set them, which an automated
     /// setting goes back to when its Automation is taken away.
     synth_fixed: SynthSettings,
+    /// What moves the Keys' settings, by their place in its table, as the
+    /// Synth's does, and their settings as the host last set them.
+    keys_automation: TableAutomation,
+    keys_fixed: KeysSettings,
     /// What moves the Drum Sampler's pads' numbers, by `pad_lane`. Like the
     /// Synth's, it stays with the Track when its Instrument changes, and
     /// only a Drum Sampler follows it; the sampler keeps the fixed values.
@@ -160,6 +167,8 @@ impl Track {
             automation: ChannelAutomation::default(),
             synth_automation: TableAutomation::new(PARAMS.len()),
             synth_fixed: SynthSettings::default(),
+            keys_automation: TableAutomation::new(KEYS_PARAM_COUNT),
+            keys_fixed: KeysSettings::default(),
             pad_automation: TableAutomation::new(MAX_PADS * PadParam::ALL.len()),
             output: Output::Master,
             sends: Vec::new(),
@@ -241,6 +250,14 @@ impl Track {
             Automatable::Instrument(param) => match &mut self.instrument {
                 Instrument::Plugin(plugin) => plugin.set_automation(param.as_str(), automation),
                 Instrument::Missing(_) => automation,
+                Instrument::Keys(_) => match keys_param(param.as_str()) {
+                    Some(index) => {
+                        let old = self.keys_automation.set(index, automation);
+                        set_keys(&mut self.instrument, index, self.keys_fixed.value(index));
+                        old
+                    }
+                    None => automation,
+                },
                 _ => match synth_param(param.as_str()) {
                     Some(index) => {
                         let old = self.synth_automation.set(index, automation);
@@ -281,6 +298,7 @@ impl Track {
         [
             self.automation.next_point(from),
             self.synth_automation.next_point(from),
+            self.keys_automation.next_point(from),
             self.pad_automation.next_point(from),
             self.instrument
                 .plugin()
@@ -342,6 +360,9 @@ impl Track {
         if let Some(settings) = instrument.synth_settings() {
             self.synth_fixed = settings;
         }
+        if let Some(settings) = instrument.keys_settings() {
+            self.keys_fixed = settings;
+        }
         std::mem::replace(&mut self.instrument, instrument)
     }
 
@@ -360,6 +381,20 @@ impl Track {
             synth.set_settings(settings);
             self.synth_fixed = settings;
         }
+    }
+
+    /// Change the Keys' sound, as `set_synth_settings` does the Synth's.
+    /// Ignored unless this Track's Instrument is the Keys.
+    pub fn set_keys_settings(&mut self, settings: KeysSettings) {
+        if let Some(keys) = self.instrument.keys_mut() {
+            keys.set_settings(settings);
+            self.keys_fixed = settings;
+        }
+    }
+
+    /// This Track's Keys settings as the host set them, or `None` when it plays another Instrument.
+    pub fn keys_settings(&self) -> Option<KeysSettings> {
+        self.instrument.keys_settings().map(|_| self.keys_fixed)
     }
 
     /// This Track's Synth settings, or `None` when it plays another
@@ -433,6 +468,9 @@ impl Track {
         if let Some(drums) = self.instrument.drums_mut() {
             drums.release_all();
         }
+        if let Some(keys) = self.instrument.keys_mut() {
+            keys.release_all();
+        }
         self.clips.silence();
     }
 
@@ -492,6 +530,9 @@ impl Track {
             if matches!(self.instrument, Instrument::Drums(_)) {
                 self.pad_automation
                     .drive(frames, ticks, &mut self.instrument, set_pad, render);
+            } else if matches!(self.instrument, Instrument::Keys(_)) {
+                self.keys_automation
+                    .drive(frames, ticks, &mut self.instrument, set_keys, render);
             } else {
                 self.synth_automation
                     .drive(frames, ticks, &mut self.instrument, set_synth, render);
@@ -536,6 +577,21 @@ fn set_synth(instrument: &mut Instrument, index: usize, value: f32) {
         if settings != synth.settings() {
             synth.set_settings(settings);
         }
+    }
+}
+
+/// Where the Keys' setting called `name` is in its table, if Automation can
+/// move it: a continuous number, not a choice or a count.
+fn keys_param(name: &str) -> Option<usize> {
+    KEYS_PARAMS
+        .iter()
+        .position(|param| param.name == name && param.choices.is_empty() && param.step == 0.0)
+}
+
+/// Set the Keys' setting at `index` to `value`, clamped. Allocates nothing.
+fn set_keys(instrument: &mut Instrument, index: usize, value: f32) {
+    if let Some(keys) = instrument.keys_mut() {
+        keys.set_setting(index, value);
     }
 }
 

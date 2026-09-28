@@ -106,6 +106,7 @@ test("every tool is described to the model with a closed schema", () => {
     "analyse_audio",
     "compare_audio",
     "compare_to_reference",
+    "decide",
   ]);
   for (const tool of TOOL_DEFINITIONS) {
     expect(tool.description.length).toBeGreaterThan(0);
@@ -166,7 +167,8 @@ test("the core is reading, Tracks, Clips, the mixer basics, listening and load_t
     arrangement: ["add_section", "rename_section", "delete_section", "copy_clips", "insert_bars", "delete_bars", "duplicate_section", "move_section"],
   });
   // Every tool is in the core or in exactly one group.
-  expect([...CORE_TOOL_DEFINITIONS.map((tool) => tool.name), ...Object.values(groups).flat()].toSorted()).toEqual(
+  // decide, which only a Request that can ask Jev is offered, is in neither.
+  expect([...CORE_TOOL_DEFINITIONS.map((tool) => tool.name), ...Object.values(groups).flat(), "decide"].toSorted()).toEqual(
     TOOL_DEFINITIONS.map((tool) => tool.name).toSorted(),
   );
   for (const [group, names] of Object.entries(groups)) {
@@ -188,7 +190,7 @@ test("the core's definitions are smaller than every tool's, and loading groups a
   expect(size(CORE_TOOL_DEFINITIONS)).toBeLessThan(size(everyTool));
 
   expect(toolDefinitions([])).toEqual(CORE_TOOL_DEFINITIONS);
-  expect(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[])).toEqual(TOOL_DEFINITIONS);
+  expect(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], false, false, true)).toEqual(TOOL_DEFINITIONS);
   const loaded = toolDefinitions(["time", "notes"]).map((tool) => tool.name);
   expect(loaded.filter((name) => toolGroupOf(name) !== undefined)).toEqual([...groupToolNames("notes"), ...groupToolNames("time")]);
 });
@@ -219,7 +221,7 @@ test("the smaller core leaves read_automation, set_track_solo, set_master_volume
   ));
   expect(loadedReport("automation", true)).toContain("read_automation, set_automation, clear_automation");
   // Every tool is still there to load, whichever core a Request starts with.
-  expect(toolNames(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], true))).toEqual(toolNames(TOOL_DEFINITIONS));
+  expect(toolNames(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], true, false, true))).toEqual(toolNames(TOOL_DEFINITIONS));
   // A smaller core, sent on every turn: about a sixth less than the whole one.
   expect(JSON.stringify(SMALL_CORE_TOOL_DEFINITIONS).length).toBeLessThan(JSON.stringify(CORE_TOOL_DEFINITIONS).length * 0.85);
 });
@@ -1976,4 +1978,25 @@ test("a set_automation that would leave more breakpoints than an Automation hold
   expect(() => plan("set_automation", { channel: "vocals", setting: "volume", start: 10_000, end: 20_000, breakpoints }, song)).toThrow(
     "An Automation holds at most 4096 breakpoints, and this would leave 4097",
   );
+});
+
+test("set_instrument gives a Track the Keys with one of their piano sounds, and settings changed from it", () => {
+  const project = planned("set_instrument", { trackId: "keys", instrument: "keys", preset: "Honky-Tonk", settings: { brightness: 0.4 } });
+  const { instrument } = instrumentTrack(project, "keys");
+  expect(instrument).toMatchObject({ type: "keys", preset: "Honky-Tonk", sample: null });
+  expect(instrument.type === "keys" && instrument.settings.detune).toBe(18);
+  expect(instrument.type === "keys" && instrument.settings.brightness).toBe(0.4);
+  // Left out, the Concert Grand.
+  expect(instrumentTrack(planned("set_instrument", { trackId: "keys", instrument: "keys" }), "keys").instrument).toMatchObject({ preset: "Concert Grand" });
+  expect(() => plan("set_instrument", { trackId: "keys", instrument: "keys", preset: "Theremin" })).toThrow(/no preset called "Theremin"/);
+});
+
+test("set_instrument_settings and load_preset change the Keys, and their settings are checked", () => {
+  const keys = planned("set_instrument", { trackId: "keys", instrument: "keys" });
+  const bright = planned("set_instrument_settings", { trackId: "keys", settings: { brightness: 0.9, bell: 0.3 } }, keys);
+  const settings = instrumentTrack(bright, "keys").instrument;
+  expect(settings.type === "keys" && [settings.settings.brightness, settings.settings.bell]).toEqual([0.9, 0.3]);
+  expect(() => plan("set_instrument_settings", { trackId: "keys", settings: { brightness: 3 } }, keys)).toThrow(InvalidToolCall);
+  const loaded = planned("load_preset", { trackId: "keys", preset: "Celesta" }, keys);
+  expect(instrumentTrack(loaded, "keys").instrument).toMatchObject({ type: "keys", preset: "Celesta" });
 });

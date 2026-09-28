@@ -8,7 +8,7 @@ import { assistantModel, effortsFor, provider as providerOf, type ProviderId } f
 import { claudeConversations } from "./claude";
 import { capabilitiesFor, clientOptions, headersOf, modelChoice, type Connection } from "./connection";
 import { geminiConversations } from "./gemini";
-import { grokConversations, localConversations, openaiConversations, type OpenAIChoice } from "./openai";
+import { grokConversations, localConversations, metaConversations, openaiConversations, type OpenAIChoice } from "./openai";
 
 export function conversationsFor(
   provider: ProviderId,
@@ -37,6 +37,13 @@ export function conversationsFor(
       return grokConversations(
         connection.apiKey,
         { ...openai, baseURL: baseUrl || providerOf("grok").baseUrl },
+        { model, ...(effort && { effort: effort as OpenAIChoice["effort"] }) },
+        capabilities,
+      );
+    case "meta":
+      return metaConversations(
+        connection.apiKey,
+        { ...openai, baseURL: baseUrl || providerOf("meta").baseUrl },
         { model, ...(effort && { effort: effort as OpenAIChoice["effort"] }) },
         capabilities,
       );
