@@ -383,6 +383,8 @@ export function SongPage({
   }, []);
   const noteOn = useCallback((note: number, velocity: number) => playNote({ type: "noteOn", note, velocity }), [playNote]);
   const noteOff = useCallback((note: number) => playNote({ type: "noteOff", note }), [playNote]);
+  // A key or drum clicked in a picture of the kit or the keys, at the on-screen Keyboard's middle velocity.
+  const playOrStop = useCallback((note: number, on: boolean) => (on ? noteOn(note, 0.8) : noteOff(note)), [noteOn, noteOff]);
   const syncRef = useRef(new EngineSync());
   const recordedRef = useRef<RecordedNoteEvent[]>([]);
   const recordingFromRef = useRef<RecordingFrom | null>(null);
@@ -409,6 +411,8 @@ export function SongPage({
     ...(sampleSource ? [] : (["samples"] as const)),
   ];
   const emptyKey = empty.join(" ");
+  // Clicking a key or a drum wherever one is drawn plays it, while there is audio to hear it.
+  const playFromPicture = output ? playOrStop : undefined;
   // What the Keyboard lights and the Chords write into. Each is a fresh object on every render, but the
   // memoised Widgets compare them by what they hold (`ui/memo.ts`), so a meter reading doesn't redraw them.
   const keyboardPlaying = recordTrack && position !== null ? soundingOnTrack(recordTrack, position) : new Set<number>();
@@ -1442,6 +1446,7 @@ export function SongPage({
                   onNotes={(notes) => execute({ type: "setPatternNotes", clipId: selected.clip.id, notes })}
                   playhead={position}
                   held={held}
+                  onPlay={playFromPicture}
                   onLength={(length) =>
                     execute({ type: "trimClip", clipId: selected.clip.id, start: selected.clip.start, length })
                   }
@@ -1462,6 +1467,7 @@ export function SongPage({
                   onNotes={(notes, label) => execute({ type: "setPatternNotes", clipId: selected.clip.id, notes }, label)}
                   playhead={position}
                   held={held}
+                  onPlay={playFromPicture}
                 />
               ) : null,
               instrument:
@@ -1483,7 +1489,7 @@ export function SongPage({
                     hitting={
                       new Set([...(position !== null ? soundingOnTrack(selected.track, position) : []), ...held])
                     }
-                    onHit={output ? (note, on) => (on ? noteOn(note, 0.9) : noteOff(note)) : undefined}
+                    onHit={playFromPicture}
                     onLoad={(pad, file) => void loadSample(selected.track.id, pad, file)}
                     onDropSample={
                       sampleSource && !requesting

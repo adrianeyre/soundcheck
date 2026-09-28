@@ -28,6 +28,8 @@ export interface StepSequencerProps {
   playhead?: number | null;
   /** Notes held now, from the keys, the computer keyboard or MIDI. */
   held?: ReadonlySet<number>;
+  /** Play a note, or hit a drum, from the piano or kit drawn above the grid; absent without audio. */
+  onPlay?: (note: number, on: boolean) => void;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface StepSequencerProps {
  * are pitches under the Synth and the kit's pads under the Drum Sampler.
  */
 export function StepSequencer(props: StepSequencerProps) {
-  const { clip, trackName, instrument, timeSignature, stepTicks, onNotes, onLength, onDelete, playhead = null, held } = props;
+  const { clip, trackName, instrument, timeSignature, stepTicks, onNotes, onLength, onDelete, playhead = null, held, onPlay } = props;
   const [octave, setOctave] = useState(DEFAULT_OCTAVE);
   const bar = barTicks(timeSignature);
   const steps = stepCount(clip, stepTicks);
@@ -96,7 +98,12 @@ export function StepSequencer(props: StepSequencerProps) {
         </button>
       </div>
       {instrument.type === "drumSampler" ? (
-        <DrumKit trackName={trackName} pads={instrument.pads} hitting={new Set([...sounding, ...(held ?? [])])} />
+        <DrumKit
+          trackName={trackName}
+          pads={instrument.pads}
+          hitting={new Set([...sounding, ...(held ?? [])])}
+          onHit={onPlay}
+        />
       ) : (
         <MiniPiano
           label={`Keys of ${trackName}`}
@@ -105,6 +112,7 @@ export function StepSequencer(props: StepSequencerProps) {
           playing={sounding}
           held={held}
           used={new Set(clip.notes.map((note) => note.pitch))}
+          onPlay={onPlay}
         />
       )}
       <div className="grid-scroll">

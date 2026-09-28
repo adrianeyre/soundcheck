@@ -75,6 +75,8 @@ export interface PianoRollProps {
   playhead?: number | null;
   /** Notes held now, from the keys, the computer keyboard or MIDI. */
   held?: ReadonlySet<number>;
+  /** Play a note from the piano above the roll or a row's key; absent without audio. */
+  onPlay?: (note: number, on: boolean) => void;
 }
 
 /**
@@ -84,7 +86,7 @@ export interface PianoRollProps {
  * or Delete removes. A drag previews here and becomes one edit when the
  * mouse is let go.
  */
-export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes, playhead = null, held }: PianoRollProps) {
+export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes, playhead = null, held, onPlay }: PianoRollProps) {
   const [snap, setSnap] = useState<PianoSnapId>(DEFAULT_PIANO_SNAP);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [clipboard, setClipboard] = useState<{ copied: Clipboard; at: number } | null>(null);
@@ -376,6 +378,7 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes,
           playing={sounding}
           held={held}
           used={new Set(clip.notes.map((note) => note.pitch))}
+          onPlay={onPlay}
         />
       )}
       <div ref={scrollRef} className="pr-scroll">
@@ -389,7 +392,12 @@ export function PianoRoll({ clip, trackName, instrument, timeSignature, onNotes,
                   data-shaded={row.shaded}
                   data-black={!drums && isBlackKey(row.pitch) ? "true" : undefined}
                   data-sounding={sounding.has(row.pitch) || held?.has(row.pitch) ? "true" : undefined}
+                  data-playable={onPlay ? "true" : undefined}
                   style={{ height: ROW_HEIGHT }}
+                  // The piano above, or the Pads' kit on drums, is the keyboard's way to the same notes.
+                  onPointerDown={onPlay && (() => onPlay(row.pitch, true))}
+                  onPointerUp={onPlay && (() => onPlay(row.pitch, false))}
+                  onPointerLeave={onPlay && ((event) => event.buttons & 1 && onPlay(row.pitch, false))}
                 >
                   {row.label}
                 </div>

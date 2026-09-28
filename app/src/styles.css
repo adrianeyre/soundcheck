@@ -4983,3 +4983,21 @@ button[data-clipping="true"] {
     background: rgb(255 92 92 / 0.35);
   }
 }
+
+/* Keys that play when clicked. */
+.mini-piano-key {
+  cursor: pointer;
+}
+
+.mini-piano-key:focus-visible {
+  outline: none;
+}
+
+.mini-piano-key:focus-visible > rect {
+  stroke: var(--focus);
+  stroke-width: 2.5;
+}
+
+.pr-key[data-playable="true"] {
+  cursor: pointer;
+}

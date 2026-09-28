@@ -505,6 +505,30 @@ test("the computer keyboard plays into the engine, so it records like a MIDI key
   expect(output.send).toHaveBeenCalledWith({ type: "noteOff", note: 60 });
 });
 
+test("clicking a key or a drum wherever one is drawn plays it through the engine", async () => {
+  const { output } = await ready();
+  click("Add Pattern Clip");
+  // The Step Sequencer's and the Piano Roll's pianos both play the selected Clip's Track.
+  const [inSequencer, inRoll] = screen.getAllByRole("button", { name: "Play E4" });
+  for (const key of [inSequencer!, inRoll!]) {
+    output.send.mockClear();
+    fireEvent.pointerDown(key);
+    fireEvent.pointerUp(key);
+    expect(output.send).toHaveBeenCalledWith({ type: "noteOn", note: 64, velocity: 0.8 });
+    expect(output.send).toHaveBeenCalledWith({ type: "noteOff", note: 64 });
+  }
+
+  click("Add Drum Track");
+  fireEvent.click(screen.getAllByRole("button", { name: "Add Pattern Clip" }).at(-1)!);
+  const snares = screen.getAllByRole("button", { name: "Hit Snare" });
+  expect(snares.length).toBeGreaterThanOrEqual(2);
+  for (const snare of snares) {
+    output.send.mockClear();
+    fireEvent.pointerDown(snare);
+    expect(output.send).toHaveBeenCalledWith({ type: "noteOn", note: 38, velocity: 0.8 });
+  }
+});
+
 test("a Drum Track is programmed by pad name, and its pads are edited and loaded", async () => {
   const { output, tracks } = setUp();
   click("Add Drum Track");
