@@ -4300,11 +4300,70 @@ button[data-clipping="true"] {
   color: var(--on-primary);
 }
 
+/* Never wider than the window: whatever doesn't fit wraps, or scrolls inside itself, so the page (and the
+   footer under it) never gets a horizontal scroll bar. */
+.dj-page {
+  /* Its visually hidden labels are positioned, and would otherwise be placed against the document,
+     outside the page's scroll area, stretching the whole window: a second scroll bar that squeezes
+     the footer. */
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Wide enough, the Decks stand either side of the mixer, as on a club's booth; narrower, they stand side
+   by side above it; on a phone, one above the other. The mixer's width is bounded, so it never takes the
+   Decks' room. */
 .dj-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "left right"
+    "mixer mixer";
   gap: var(--space-3);
   align-items: start;
+  min-width: 0;
+}
+
+.dj-decks-left {
+  grid-area: left;
+}
+
+.dj-decks-right {
+  grid-area: right;
+}
+
+.dj-stage > .dj-mixer {
+  grid-area: mixer;
+  justify-self: center;
+  width: min(100%, 720px);
+  min-width: 0;
+  overflow-x: auto;
+}
+
+@media (min-width: 1500px) {
+  .dj-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 480px) minmax(0, 1fr);
+    grid-template-areas: "left mixer right";
+  }
+
+  .dj-stage[data-layout="4"] {
+    grid-template-columns: minmax(0, 1fr) minmax(480px, 620px) minmax(0, 1fr);
+  }
+
+  .dj-stage > .dj-mixer {
+    width: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .dj-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "left"
+      "mixer"
+      "right";
+  }
 }
 
 .dj-decks {
@@ -4312,12 +4371,6 @@ button[data-clipping="true"] {
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
-}
-
-@media (max-width: 1280px) {
-  .dj-stage {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .dj-deck {
