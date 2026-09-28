@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-import type { HotCue } from "./dj-logic";
+import { formatBpm, formatTime, type HotCue } from "./dj-logic";
 
 /** A record at 33⅓ RPM turns once every 1.8 seconds. */
 export const SECONDS_PER_TURN = 1.8;
@@ -15,6 +15,12 @@ export interface JogWheelProps {
   /** Vinyl mode: the top of the platter scratches. Otherwise it bends the pitch. */
   vinyl: boolean;
   playing: boolean;
+  /** The track's length, for the position ring and the centre display; 0 when none is loaded. */
+  duration?: number;
+  /** BPM as it plays now, for the centre display. */
+  bpm?: number;
+  /** Show the time remaining in the centre, rather than the time elapsed. */
+  remaining?: boolean;
   /** The hand on (true) or off the platter. */
   onTouch: (on: boolean) => void;
   /** Where a scratch is taking the record, as a speed: 1 is its own. */
@@ -35,7 +41,8 @@ export function platterAngle(seconds: number): number {
  * dragging bends the tempo to nudge the beat. With the keyboard, the arrow
  * keys held nudge it slower or faster.
  */
-export function JogWheel({ deck, position, cue, hotCues, vinyl, playing, onTouch, onScratch, onBend }: JogWheelProps) {
+export function JogWheel(props: JogWheelProps) {
+  const { deck, position, cue, hotCues, vinyl, playing, duration = 0, bpm = 0, remaining = false, onTouch, onScratch, onBend } = props;
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ angle: number; time: number; scratch: boolean } | null>(null);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,21 +109,44 @@ export function JogWheel({ deck, position, cue, hotCues, vinyl, playing, onTouch
         else onBend(0);
       }}
     >
-      <circle cx={100} cy={100} r={96} className="dj-jog-ring" />
-      <circle cx={100} cy={100} r={80} className="dj-jog-platter" />
+      <circle cx={100} cy={100} r={98} className="dj-jog-ring" />
+      {/* The position ring: how far through the track, lit round from the top. */}
+      <circle cx={100} cy={100} r={90} className="dj-jog-track" />
+      {duration > 0 && (
+        <circle
+          cx={100}
+          cy={100}
+          r={90}
+          className="dj-jog-progress"
+          pathLength={100}
+          strokeDasharray={`${Math.min(100, (position / duration) * 100)} 100`}
+          transform="rotate(-90 100 100)"
+        />
+      )}
+      <circle cx={100} cy={100} r={82} className="dj-jog-platter" />
       <g transform={`rotate(${rotation} 100 100)`}>
-        <circle cx={100} cy={100} r={62} className="dj-jog-label" />
-        <line x1={100} y1={40} x2={100} y2={66} className="dj-jog-mark" />
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((groove) => (
-          <circle key={groove} cx={100} cy={100} r={66 + groove * 1.6} className="dj-jog-groove" />
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((groove) => (
+          <circle key={groove} cx={100} cy={100} r={58 + groove * 2} className="dj-jog-groove" />
         ))}
+        <line x1={100} y1={20} x2={100} y2={54} className="dj-jog-mark" />
       </g>
+      {/* The centre display, as the player's own: the time and the tempo. */}
+      <circle cx={100} cy={100} r={50} className="dj-jog-display" />
+      <text x={100} y={92} className="dj-jog-caption" aria-hidden>
+        {vinyl ? "VINYL" : "CDJ"}
+      </text>
+      <text x={100} y={110} className="dj-jog-time" aria-hidden>
+        {duration > 0 ? (remaining ? `−${formatTime(duration - position)}` : formatTime(position)) : "--:--"}
+      </text>
+      <text x={100} y={126} className="dj-jog-bpm" aria-hidden>
+        {bpm > 0 ? `${formatBpm(bpm)} BPM` : ""}
+      </text>
       <g aria-hidden>
         <line
           x1={100}
-          y1={4}
+          y1={2}
           x2={100}
-          y2={18}
+          y2={16}
           transform={`rotate(${marker(cue)} 100 100)`}
           className="dj-jog-cue"
         />
@@ -126,15 +156,14 @@ export function JogWheel({ deck, position, cue, hotCues, vinyl, playing, onTouch
               <circle
                 key={index}
                 cx={100}
-                cy={10}
-                r={4}
+                cy={9}
+                r={4.5}
                 fill={hot.colour}
                 transform={`rotate(${marker(hot.seconds)} 100 100)`}
               />
             ),
         )}
       </g>
-      <circle cx={100} cy={100} r={14} className="dj-jog-hub" />
     </svg>
   );
 }

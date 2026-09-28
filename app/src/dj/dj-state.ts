@@ -9,6 +9,9 @@ import type { DjAnalysis, DjControlKind } from "../audio/audio-output";
 import { DECKS } from "./dj-report";
 import type { HotCue, TempoRangeId } from "./dj-logic";
 
+/** The drag type a file from the Track browser's loaded list travels under. */
+export const DJ_TRACK_DRAG_TYPE = "application/x-soundcheck-dj-track";
+
 /** A file in the Track browser. */
 export interface LibraryTrack {
   id: string;
@@ -16,6 +19,8 @@ export interface LibraryTrack {
   bytes: Uint8Array;
   /** Known once it has been loaded onto a Deck. */
   analysis: DjAnalysis | null;
+  /** Where in the sample folders it came from, so choosing it again finds this one. */
+  from?: string;
 }
 
 export interface DeckState {

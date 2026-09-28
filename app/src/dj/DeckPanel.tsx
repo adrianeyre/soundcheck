@@ -1,7 +1,8 @@
-import { Disc3, Eject, FolderOpen, Pause, Play, Repeat, Rewind, SkipBack, SkipForward, ZoomIn, ZoomOut } from "lucide-react";
 import { useRef, useState } from "react";
 
 import type { DjAnalysis } from "../audio/audio-output";
+import { droppedSample, isSampleDrag } from "../samples/sample-drag";
+import type { SampleRef } from "../samples/sample-source";
 import {
   BEAT_JUMPS,
   beatsLabel,
@@ -23,13 +24,13 @@ import {
   shiftKey,
   TapTempo,
   TEMPO_RANGES,
-  type TempoRangeId,
   tempoRange,
 } from "./dj-logic";
 import type { DeckReport } from "./dj-report";
-import type { DeckState } from "./dj-state";
+import { DJ_TRACK_DRAG_TYPE, type DeckState } from "./dj-state";
 import { JogWheel } from "./JogWheel";
-import { Overview, Zoom } from "./Waveform";
+import { Overview } from "./Waveform";
+
 
 export interface DeckPanelProps {
   deck: number;
@@ -46,21 +47,67 @@ export interface DeckPanelProps {
   set: (name: string, value: number) => void;
   onState: (change: Partial<DeckState>) => void;
   onLoadFile: (file: File) => void;
-  /** A file from the Track browser, dropped on the Deck. */
+  /** A file from the Track browser's loaded list, dropped on the Deck. */
   onDropTrack: (trackId: string) => void;
+  /** A file from the folder tree, dropped on the Deck. */
+  onDropSample?: (sample: SampleRef) => void;
   onEject: () => void;
+  /** Take the DJ to the Track browser, as the player's BROWSE button does. */
+  onBrowse?: () => void;
 }
 
-const ZOOMS = [1, 2, 4, 8, 16, 32];
 const BEND = 0.04;
 
 /**
- * One CDJ-3000: the track's display (time, BPM, key and tempo, the whole
- * waveform and a close-up with its Beat Grid), the jog wheel, Play and Cue,
- * eight Hot Cues, memory cues, loops, Beat Jump, the tempo fader with its
- * ranges, Master Tempo, Key Shift and Key Sync, Sync, Slip, Reverse, the
- * vinyl brake and spin-back, and tap tempo and grid nudges to fix the Beat
- * Grid. Every button says what it does, and every drag has keys too.
+ * A lit hardware button: a small-caps label, and a light that is off, on
+ * or blinking. It is a toggle when `pressed` is given.
+ */
+function HwButton({
+  label,
+  caption,
+  pressed,
+  light,
+  disabled,
+  onClick,
+  tone,
+  wide = false,
+}: {
+  /** Its full name, for assistive technology. */
+  label: string;
+  /** What is printed on it. */
+  caption: React.ReactNode;
+  pressed?: boolean;
+  light?: "on" | "blink";
+  disabled?: boolean;
+  onClick: () => void;
+  tone?: "amber" | "green" | "red" | "blue";
+  wide?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="dj-hw-button"
+      aria-label={label}
+      aria-pressed={pressed}
+      data-light={light ?? (pressed ? "on" : undefined)}
+      data-tone={tone}
+      data-wide={wide || undefined}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {caption}
+    </button>
+  );
+}
+
+/**
+ * One Deck drawn as a club player: the source and browse buttons top left
+ * of its screen (the track, its time, BPM, key, tempo and overview), the
+ * Beat Grid buttons beside it, eight Hot Cue pads under it, Beat Jump and
+ * the loops left of the jog wheel with the big CUE and PLAY/PAUSE buttons
+ * under them, and the syncs, keys, Master Tempo and the long tempo fader
+ * down the right. Every button says what it does, and every drag has keys
+ * too.
  */
 export function DeckPanel(props: DeckPanelProps) {
   const { deck, state, report, title, analysis, syncMaster, masterKey, canPlay, set, onState } = props;
@@ -68,10 +115,12 @@ export function DeckPanel(props: DeckPanelProps) {
   const tap = useRef(new TapTempo());
   const [deleting, setDeleting] = useState(false);
   const [editingCues, setEditingCues] = useState(false);
+  const [remainFirst, setRemainFirst] = useState(false);
   const name = `Deck ${deck + 1}`;
   const loaded = report.loaded && analysis !== null;
   const disabled = !canPlay || !loaded;
   const range = tempoRange(state.range);
+  const rangeIndex = TEMPO_RANGES.findIndex((r) => r.id === state.range);
   const baseKey = analysis?.key ?? null;
   const playingKey = baseKey && shiftKey(baseKey, report.keyShift);
   const mixes = playingKey && masterKey ? compatible(playingKey, masterKey) : null;
@@ -83,39 +132,48 @@ export function DeckPanel(props: DeckPanelProps) {
   })();
   const snap = (seconds: number) => (report.quantize ? quantize(seconds, report.bpm, report.firstBeat) : seconds);
   const loopBeats = report.loop && report.bpm > 0 ? ((report.loop.end - report.loop.start) * report.bpm) / 60 : null;
-  const toggle = (label: string, pressed: boolean, control: string, extra?: string) => (
-    <button type="button" className="dj-toggle" aria-pressed={pressed} disabled={disabled} onClick={() => set(control, pressed ? 0 : 1)}>
-      {label}
-      {extra && <span className="visually-hidden"> {extra}</span>}
-    </button>
+  const loopIndex = LOOP_BEATS.indexOf(state.loopBeats);
+  const atCue = Math.abs(report.position - report.cue) < 0.02;
+  const cueLight = !loaded ? undefined : report.previewing || (!report.playing && atCue) ? "on" : !report.playing ? "blink" : undefined;
+  const playLight = !loaded ? undefined : report.playing ? "on" : "blink";
+  const warning = report.playing && endWarning(report.position, report.duration);
+  const toggle = (caption: string, pressed: boolean, control: string, label: string, tone?: "amber" | "green" | "red" | "blue") => (
+    <HwButton label={`${name} ${label}`} caption={caption} pressed={pressed} disabled={disabled} tone={tone} onClick={() => set(control, pressed ? 0 : 1)} />
   );
+  const hold = (bend: number) => ({
+    onPointerDown: () => set("bend", bend),
+    onPointerUp: () => set("bend", 0),
+    onPointerLeave: () => set("bend", 0),
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if ((event.key === " " || event.key === "Enter") && !event.repeat) set("bend", bend);
+    },
+    onKeyUp: () => set("bend", 0),
+  });
 
   return (
     <section
-      className="dj-deck"
+      className="dj-deck dj-hw"
       aria-label={name}
+      data-deck={deck}
       data-playing={report.playing}
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes("application/x-soundcheck-dj-track") || event.dataTransfer.types.includes("Files")) {
+        const types = event.dataTransfer.types;
+        if (types.includes(DJ_TRACK_DRAG_TYPE) || types.includes("Files") || isSampleDrag(event.dataTransfer)) {
           event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
         }
       }}
       onDrop={(event) => {
         event.preventDefault();
-        const trackId = event.dataTransfer.getData("application/x-soundcheck-dj-track");
+        const trackId = event.dataTransfer.getData(DJ_TRACK_DRAG_TYPE);
+        const sample = droppedSample(event.dataTransfer);
         if (trackId) props.onDropTrack(trackId);
+        else if (sample) props.onDropSample?.(sample);
         else if (event.dataTransfer.files[0]) props.onLoadFile(event.dataTransfer.files[0]);
       }}
     >
-      <header className="dj-deck-head">
-        <h2>
-          <Disc3 size={18} aria-hidden />
-          <span className="dj-deck-number">{deck + 1}</span>
-          <span className="dj-deck-title">{state.loading ? "Loading…" : (title ?? "No track")}</span>
-        </h2>
-        <div className="row">
-          {syncMaster && <span className="dj-badge" data-kind="master">MASTER</span>}
-          {report.sync && <span className="dj-badge" data-kind="sync">SYNC</span>}
+      <div className="dj-deck-top">
+        <div className="dj-hw-column dj-deck-source" role="group" aria-label={`${name} source`}>
           <input
             ref={file}
             type="file"
@@ -128,64 +186,68 @@ export function DeckPanel(props: DeckPanelProps) {
               event.target.value = "";
             }}
           />
-          <button type="button" className="btn-sm" disabled={!canPlay || state.loading} onClick={() => file.current?.click()}>
-            <FolderOpen size={14} aria-hidden />
-            Load
-          </button>
-          <button
-            type="button"
-            className="btn-sm"
-            aria-label={`Eject ${name}`}
+          <HwButton label={`Load a file from disk onto ${name}`} caption="SOURCE" disabled={!canPlay || state.loading} onClick={() => file.current?.click()} />
+          <HwButton label={`Browse files for ${name}`} caption="BROWSE" disabled={!props.onBrowse} onClick={() => props.onBrowse?.()} />
+          <HwButton
+            label={`${name} time mode, ${remainFirst ? "remaining" : "elapsed"}`}
+            caption={remainFirst ? "REMAIN" : "ELAPSED"}
+            pressed={remainFirst}
+            onClick={() => setRemainFirst(!remainFirst)}
+          />
+          <HwButton
+            label={`Eject ${name}`}
+            caption="EJECT"
             disabled={!loaded || report.playing}
-            title={report.playing ? "Pause the Deck to eject it" : undefined}
             onClick={props.onEject}
-          >
-            <Eject size={14} aria-hidden />
-          </button>
+          />
         </div>
-      </header>
-      {state.error && (
-        <p className="hint" role="alert">
-          {state.error}
-        </p>
-      )}
 
-      <div className="dj-screen" aria-live="off">
-        <div className="dj-readouts">
-          <div className="dj-readout">
-            <span className="dj-readout-label">ELAPSED</span>
-            <span className="num dj-time">{formatTime(report.position)}</span>
+        <div className="dj-screen">
+          <div className="dj-screen-head">
+            <span className="dj-deck-number">{deck + 1}</span>
+            <h2 className="dj-deck-title">{state.loading ? "Loading…" : (title ?? "No track")}</h2>
+            {syncMaster && <span className="dj-badge" data-kind="master">MASTER</span>}
+            {report.sync && <span className="dj-badge" data-kind="sync">SYNC</span>}
+            {report.masterTempo && <span className="dj-badge" data-kind="mt">MT</span>}
           </div>
-          <div className="dj-readout" data-warn={report.playing && endWarning(report.position, report.duration)}>
-            <span className="dj-readout-label">REMAIN</span>
-            <span className="num dj-time">−{formatTime(report.duration - report.position)}</span>
+          {state.error && (
+            <p className="dj-screen-error" role="alert">
+              {state.error}
+            </p>
+          )}
+          <div className="dj-readouts">
+            <div className="dj-readout" data-main={!remainFirst}>
+              <span className="dj-readout-label">ELAPSED</span>
+              <span className="num dj-time">{formatTime(report.position)}</span>
+            </div>
+            <div className="dj-readout" data-main={remainFirst} data-warn={warning}>
+              <span className="dj-readout-label">REMAIN</span>
+              <span className="num dj-time">−{formatTime(report.duration - report.position)}</span>
+            </div>
+            <div className="dj-readout">
+              <span className="dj-readout-label">BPM</span>
+              <span className="num dj-bpm">{formatBpm(report.effectiveBpm)}</span>
+              <span className="num dj-readout-sub">{formatBpm(report.bpm)}</span>
+            </div>
+            <div className="dj-readout">
+              <span className="dj-readout-label">TEMPO {TEMPO_RANGES[rangeIndex]?.label}</span>
+              <span className="num">{formatTempo(report.rate - 1)}</span>
+            </div>
+            <div className="dj-readout" data-compatible={mixes === null ? undefined : mixes}>
+              <span className="dj-readout-label">KEY</span>
+              <span className="num">{playingKey ? `${keyName(playingKey)} · ${camelotName(playingKey)}` : "—"}</span>
+              <span className="dj-readout-sub">
+                {report.keyShift !== 0 && `${report.keyShift > 0 ? "+" : ""}${report.keyShift} st `}
+                {mixes !== null && (mixes ? "mixes with Master" : "clashes with Master")}
+              </span>
+            </div>
+            <div className="dj-readout">
+              <span className="dj-readout-label">BEAT</span>
+              <span className="num">{barBeat(report.position, report.bpm, report.firstBeat)}</span>
+              <span className="num dj-readout-sub">{beatsTo !== null ? `${beatsTo} to cue` : ""}</span>
+            </div>
           </div>
-          <div className="dj-readout">
-            <span className="dj-readout-label">BPM</span>
-            <span className="num dj-bpm">{formatBpm(report.effectiveBpm)}</span>
-            <span className="num hint">{formatBpm(report.bpm)}</span>
-          </div>
-          <div className="dj-readout">
-            <span className="dj-readout-label">TEMPO</span>
-            <span className="num">{formatTempo(report.rate - 1)}</span>
-            <span className="hint">{report.masterTempo ? "MT" : ""}</span>
-          </div>
-          <div className="dj-readout" data-compatible={mixes === null ? undefined : mixes}>
-            <span className="dj-readout-label">KEY</span>
-            <span className="num">{playingKey ? `${keyName(playingKey)} · ${camelotName(playingKey)}` : "—"}</span>
-            <span className="hint">
-              {report.keyShift !== 0 && `${report.keyShift > 0 ? "+" : ""}${report.keyShift} st`}
-              {mixes !== null && (mixes ? " mixes with Master" : " clashes with Master")}
-            </span>
-          </div>
-          <div className="dj-readout">
-            <span className="dj-readout-label">BEAT</span>
-            <span className="num">{barBeat(report.position, report.bpm, report.firstBeat)}</span>
-            <span className="hint num">{beatsTo !== null ? `${beatsTo} to cue` : ""}</span>
-          </div>
-        </div>
-        {analysis ? (
-          <>
+          {analysis ? (
             <Overview
               deck={deck}
               analysis={analysis}
@@ -195,96 +257,232 @@ export function DeckPanel(props: DeckPanelProps) {
               loop={report.loop}
               onSeek={(seconds) => set("seek", seconds)}
             />
-            <div className="dj-zoom-row">
-              <Zoom
-                deck={deck}
-                analysis={analysis}
-                position={report.position}
-                span={state.zoom}
-                bpm={report.bpm}
-                firstBeat={report.firstBeat}
-                cue={report.cue}
-                hotCues={state.hotCues}
-                loop={report.loop}
-              />
-              <div className="dj-zoom-buttons">
-                <button
-                  type="button"
-                  className="btn-sm btn-icon"
-                  aria-label={`Zoom ${name}'s waveform in`}
-                  disabled={state.zoom === ZOOMS[0]}
-                  onClick={() => onState({ zoom: ZOOMS[Math.max(0, ZOOMS.indexOf(state.zoom) - 1)]! })}
-                >
-                  <ZoomIn size={14} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="btn-sm btn-icon"
-                  aria-label={`Zoom ${name}'s waveform out`}
-                  disabled={state.zoom === ZOOMS.at(-1)}
-                  onClick={() => onState({ zoom: ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(state.zoom) + 1)]! })}
-                >
-                  <ZoomOut size={14} aria-hidden />
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="dj-empty hint">
-            {canPlay ? "Load a file, or drop one here or from the Track browser." : "Start audio to load a Deck."}
-          </p>
+          ) : (
+            <p className="dj-empty">
+              {canPlay ? "Load a file: BROWSE, SOURCE, or drop one here." : "Start audio to load a Deck."}
+            </p>
+          )}
+        </div>
+
+        <div className="dj-hw-column dj-deck-grid" role="group" aria-label={`${name} Beat Grid`}>
+          <span className="dj-hw-caption">GRID</span>
+          <HwButton
+            label={`${name} tap tempo`}
+            caption="TAP"
+            disabled={disabled}
+            onClick={() => {
+              const bpm = tap.current.tap(performance.now());
+              if (bpm) set("gridBpm", bpm);
+            }}
+          />
+          <div className="dj-hw-pair">
+            <HwButton label={`Halve ${name}'s BPM`} caption="÷2" disabled={disabled || report.bpm <= 0} onClick={() => set("gridBpm", report.bpm / 2)} />
+            <HwButton label={`Double ${name}'s BPM`} caption="×2" disabled={disabled || report.bpm <= 0} onClick={() => set("gridBpm", report.bpm * 2)} />
+          </div>
+          <div className="dj-hw-pair">
+            <HwButton label={`Move ${name}'s grid earlier`} caption="◀" disabled={disabled} onClick={() => set("gridOffset", report.firstBeat - 0.01)} />
+            <HwButton label={`Move ${name}'s grid later`} caption="▶" disabled={disabled} onClick={() => set("gridOffset", report.firstBeat + 0.01)} />
+          </div>
+          <HwButton label={`${name}: beat 1 here`} caption="BEAT 1" disabled={disabled} onClick={() => set("gridOffset", report.position)} />
+        </div>
+      </div>
+
+      <div className="dj-pads-row">
+        <div className="dj-hot-cues" role="group" aria-label={`${name} Hot Cues`}>
+          {state.hotCues.map((hot, index) => {
+            const letter = HOT_CUE_NAMES[index]!;
+            return (
+              <button
+                key={letter}
+                type="button"
+                className="dj-hot-cue"
+                style={hot ? ({ "--pad": hot.colour } as React.CSSProperties) : undefined}
+                data-set={hot !== null}
+                aria-label={
+                  hot
+                    ? `${deleting ? "Delete" : "Jump to"} Hot Cue ${letter}, ${hot.label}, at ${formatTime(hot.seconds)}`
+                    : `Set Hot Cue ${letter}`
+                }
+                disabled={disabled}
+                onPointerDown={() => {
+                  if (!hot || deleting) return;
+                  set("jumpHold", hot.seconds);
+                }}
+                onPointerUp={() => {
+                  if (hot && !deleting) set("jumpRelease", 1);
+                }}
+                onClick={(event) => {
+                  if (hot && deleting) {
+                    onState({ hotCues: state.hotCues.map((c, at) => (at === index ? null : c)) });
+                  } else if (!hot) {
+                    const seconds = snap(report.position);
+                    onState({
+                      hotCues: state.hotCues.map((c, at) =>
+                        at === index ? { seconds, label: letter, colour: HOT_CUE_COLOURS[index]! } : c,
+                      ),
+                    });
+                  } else if (event.detail === 0) {
+                    // The keyboard: Enter jumps and returns at once.
+                    set("jumpHold", hot.seconds);
+                    set("jumpRelease", 1);
+                  }
+                }}
+              >
+                <span className="dj-hot-cue-letter">{letter}</span>
+                <span className="dj-hot-cue-label">{hot && hot.label !== letter ? hot.label : ""}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="dj-hw-row" role="group" aria-label={`${name} cue memory`}>
+          <HwButton
+            label={`${name} previous memory cue`}
+            caption="◀ CALL"
+            disabled={disabled || !state.memoryCues.some((c) => c < report.cue - 0.01)}
+            onClick={() => {
+              const previous = state.memoryCues.filter((c) => c < report.cue - 0.01).at(-1);
+              if (previous !== undefined) {
+                set("seek", previous);
+                set("setCue", previous);
+              }
+            }}
+          />
+          <HwButton
+            label={`${name} store the cue as a memory cue, ${state.memoryCues.length} stored`}
+            caption={`MEMORY ${state.memoryCues.length || ""}`}
+            disabled={disabled}
+            onClick={() => onState({ memoryCues: [...new Set([...state.memoryCues, report.cue])].toSorted((a, b) => a - b) })}
+          />
+          <HwButton
+            label={`${name} next memory cue`}
+            caption="CALL ▶"
+            disabled={disabled || !state.memoryCues.some((c) => c > report.cue + 0.01)}
+            onClick={() => {
+              const next = state.memoryCues.find((c) => c > report.cue + 0.01);
+              if (next !== undefined) {
+                set("seek", next);
+                set("setCue", next);
+              }
+            }}
+          />
+          <HwButton
+            label={deleting ? `${name}: pick a Hot Cue to delete` : `${name} delete a Hot Cue`}
+            caption="DELETE"
+            pressed={deleting}
+            tone="red"
+            onClick={() => setDeleting(!deleting)}
+          />
+          <HwButton label={`Name ${name}'s Hot Cues`} caption="NAME" pressed={editingCues} onClick={() => setEditingCues(!editingCues)} />
+        </div>
+        {editingCues && (
+          <div className="dj-cue-names">
+            {state.hotCues.every((hot) => hot === null) && <span className="dj-hw-caption">Set a Hot Cue to name it.</span>}
+            {state.hotCues.map(
+              (hot, index) =>
+                hot && (
+                  <label key={index} className="dj-cue-name">
+                    <span className="dj-hw-caption">{HOT_CUE_NAMES[index]}</span>
+                    <input
+                      type="text"
+                      value={hot.label}
+                      maxLength={24}
+                      onChange={(event) =>
+                        onState({
+                          hotCues: state.hotCues.map((c, at) => (at === index && c ? { ...c, label: event.target.value } : c)),
+                        })
+                      }
+                    />
+                  </label>
+                ),
+            )}
+          </div>
         )}
       </div>
 
       <div className="dj-deck-body">
-        <div className="dj-left">
-          <JogWheel
-            deck={deck}
-            position={report.position}
-            cue={report.cue}
-            hotCues={state.hotCues}
-            vinyl={state.vinyl}
-            playing={report.playing}
-            onTouch={(touching) => set("touch", touching ? 1 : 0)}
-            onScratch={(speed) => set("scratch", speed)}
-            onBend={(bend) => set("bend", bend)}
-          />
-          <div className="row dj-jog-modes">
-            <button type="button" className="dj-toggle" aria-pressed={state.vinyl} onClick={() => onState({ vinyl: !state.vinyl })}>
-              VINYL
-            </button>
-            {toggle("REV", report.reverse, "reverse", "Reverse")}
-            {toggle("SLIP", report.slip, "slip", "Slip")}
-          </div>
-          <div className="row">
-            <button type="button" className="btn-sm" disabled={disabled || !report.playing} onClick={() => set("brake", state.brakeSeconds)}>
-              Brake
-            </button>
-            <button type="button" className="btn-sm" disabled={disabled || !report.playing} onClick={() => set("spinback", state.brakeSeconds)}>
-              <Rewind size={14} aria-hidden />
-              Spin back
-            </button>
-            <label className="field-inline hint">
-              <span className="visually-hidden">{name} brake and spin-back time</span>
-              <input
-                type="range"
-                min={0.1}
-                max={4}
-                step={0.1}
-                value={state.brakeSeconds}
-                aria-valuetext={`${state.brakeSeconds.toFixed(1)} seconds`}
-                onChange={(event) => onState({ brakeSeconds: Number(event.target.value) })}
+        <div className="dj-hw-column dj-deck-left">
+          <div className="dj-hw-section" role="group" aria-label={`${name} Beat Jump`}>
+            <span className="dj-hw-caption">BEAT JUMP</span>
+            <div className="dj-hw-pair">
+              <HwButton
+                label={`${name} jump back ${state.jumpBeats} beats`}
+                caption="◀◀"
+                disabled={disabled || report.bpm <= 0}
+                onClick={() => set("beatJump", -state.jumpBeats)}
               />
-              <span className="num">{state.brakeSeconds.toFixed(1)} s</span>
-            </label>
+              <HwButton
+                label={`${name} jump forward ${state.jumpBeats} beats`}
+                caption="▶▶"
+                disabled={disabled || report.bpm <= 0}
+                onClick={() => set("beatJump", state.jumpBeats)}
+              />
+            </div>
+            <div className="dj-hw-steps" role="radiogroup" aria-label={`${name} Beat Jump size`}>
+              {BEAT_JUMPS.map((beats) => (
+                <button
+                  key={beats}
+                  type="button"
+                  role="radio"
+                  aria-checked={state.jumpBeats === beats}
+                  aria-label={`${beats} ${beats === 1 ? "beat" : "beats"}`}
+                  className="dj-hw-step"
+                  onClick={() => onState({ jumpBeats: beats })}
+                >
+                  {beats}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="row dj-transport">
+          <div className="dj-hw-section" role="group" aria-label={`${name} loop`}>
+            <span className="dj-hw-caption">
+              LOOP {loopBeats !== null && <span className="num dj-loop-size">{beatsLabel(Math.round(loopBeats * 32) / 32)}</span>}
+            </span>
+            <div className="dj-hw-pair">
+              <HwButton label={`${name} loop in`} caption="IN" light={report.loop ? "on" : undefined} tone="amber" disabled={disabled} onClick={() => set("loopIn", report.position)} />
+              <HwButton label={`${name} loop out`} caption="OUT" light={report.loop ? "on" : undefined} tone="amber" disabled={disabled} onClick={() => set("loopOut", report.position)} />
+            </div>
+            <HwButton
+              label={report.loop ? `Exit ${name}'s loop` : `Reloop ${name}`}
+              caption="RELOOP/EXIT"
+              light={report.loop ? "blink" : undefined}
+              tone="amber"
+              wide
+              disabled={disabled}
+              onClick={() => set(report.loop ? "exitLoop" : "reloop", 1)}
+            />
+            <div className="dj-hw-stepper">
+              <HwButton
+                label={`Shorter ${name} loop size`}
+                caption="◀"
+                disabled={loopIndex <= 0}
+                onClick={() => onState({ loopBeats: LOOP_BEATS[loopIndex - 1]! })}
+              />
+              <HwButton
+                label={`${name} ${beatsLabel(state.loopBeats)} beat loop`}
+                caption={<span className="num">{beatsLabel(state.loopBeats)}</span>}
+                tone="amber"
+                disabled={disabled || report.bpm <= 0}
+                onClick={() => set("autoLoop", state.loopBeats)}
+              />
+              <HwButton
+                label={`Longer ${name} loop size`}
+                caption="▶"
+                disabled={loopIndex >= LOOP_BEATS.length - 1}
+                onClick={() => onState({ loopBeats: LOOP_BEATS[loopIndex + 1]! })}
+              />
+            </div>
+            <div className="dj-hw-pair">
+              <HwButton label={`Halve ${name}'s loop`} caption="½X" disabled={!report.loop} onClick={() => set("resizeLoop", 0.5)} />
+              <HwButton label={`Double ${name}'s loop`} caption="2X" disabled={!report.loop} onClick={() => set("resizeLoop", 2)} />
+            </div>
+          </div>
+          <div className="dj-transport">
             <button
               type="button"
               className="dj-cue"
               aria-label={`${name} cue`}
               aria-keyshortcuts={["Q", "I", "A", "J"][deck]}
-              data-lit={report.previewing || (!report.playing && Math.abs(report.position - report.cue) < 0.02)}
+              data-light={cueLight}
               disabled={disabled}
               onPointerDown={() => set("cueDown", 1)}
               onPointerUp={() => set("cueUp", 1)}
@@ -309,268 +507,109 @@ export function DeckPanel(props: DeckPanelProps) {
               aria-label={report.playing ? `Pause ${name}` : `Play ${name}`}
               aria-keyshortcuts={["W", "O", "S", "K"][deck]}
               aria-pressed={report.playing}
+              data-light={playLight}
               disabled={disabled}
               onClick={() => set("play", report.playing ? 0 : 1)}
             >
-              {report.playing ? <Pause size={22} aria-hidden /> : <Play size={22} aria-hidden />}
+              <span aria-hidden>▶/❚❚</span>
             </button>
           </div>
         </div>
 
-        <div className="dj-centre">
-          <div className="dj-hot-cues" role="group" aria-label={`${name} Hot Cues`}>
-            {state.hotCues.map((hot, index) => {
-              const letter = HOT_CUE_NAMES[index]!;
-              return (
-                <button
-                  key={letter}
-                  type="button"
-                  className="dj-hot-cue"
-                  style={hot ? { borderColor: hot.colour, color: hot.colour } : undefined}
-                  data-set={hot !== null}
-                  aria-label={
-                    hot
-                      ? `${deleting ? "Delete" : "Jump to"} Hot Cue ${letter}, ${hot.label}, at ${formatTime(hot.seconds)}`
-                      : `Set Hot Cue ${letter}`
-                  }
-                  disabled={disabled}
-                  onPointerDown={() => {
-                    if (!hot || deleting) return;
-                    set("jumpHold", hot.seconds);
-                  }}
-                  onPointerUp={() => {
-                    if (hot && !deleting) set("jumpRelease", 1);
-                  }}
-                  onClick={(event) => {
-                    if (hot && deleting) {
-                      onState({ hotCues: state.hotCues.map((c, at) => (at === index ? null : c)) });
-                    } else if (!hot) {
-                      const seconds = snap(report.position);
-                      onState({
-                        hotCues: state.hotCues.map((c, at) =>
-                          at === index ? { seconds, label: letter, colour: HOT_CUE_COLOURS[index]! } : c,
-                        ),
-                      });
-                    } else if (event.detail === 0) {
-                      // The keyboard: Enter jumps and returns at once.
-                      set("jumpHold", hot.seconds);
-                      set("jumpRelease", 1);
-                    }
-                  }}
-                >
-                  <span className="dj-hot-cue-letter">{letter}</span>
-                  <span className="dj-hot-cue-label">{hot ? hot.label : ""}</span>
-                </button>
-              );
-            })}
+        <div className="dj-deck-jog">
+          <JogWheel
+            deck={deck}
+            position={report.position}
+            remaining={remainFirst}
+            duration={report.duration}
+            bpm={report.effectiveBpm}
+            cue={report.cue}
+            hotCues={state.hotCues}
+            vinyl={state.vinyl}
+            playing={report.playing}
+            onTouch={(touching) => set("touch", touching ? 1 : 0)}
+            onScratch={(speed) => set("scratch", speed)}
+            onBend={(bend) => set("bend", bend)}
+          />
+          <div className="dj-hw-row dj-jog-modes">
+            <HwButton
+              label={`${name} jog mode, ${state.vinyl ? "vinyl: the platter scratches" : "CDJ: the platter bends the pitch"}`}
+              caption={state.vinyl ? "VINYL" : "CDJ"}
+              pressed={state.vinyl}
+              onClick={() => onState({ vinyl: !state.vinyl })}
+            />
+            {toggle("SLIP", report.slip, "slip", "Slip", "amber")}
+            {toggle("Q", report.quantize, "quantize", "Quantize", "red")}
+            {toggle("REV", report.reverse, "reverse", "Reverse", "red")}
           </div>
-          <div className="row">
-            <button type="button" className="dj-toggle" aria-pressed={deleting} onClick={() => setDeleting(!deleting)}>
-              {deleting ? "Deleting: pick a Hot Cue" : "Delete Hot Cue"}
-            </button>
-            <button type="button" className="btn-sm" aria-expanded={editingCues} onClick={() => setEditingCues(!editingCues)}>
-              Name Hot Cues
-            </button>
-            <button
-              type="button"
-              className="btn-sm"
-              disabled={disabled}
-              onClick={() => onState({ memoryCues: [...new Set([...state.memoryCues, report.cue])].toSorted((a, b) => a - b) })}
-            >
-              Memory
-            </button>
-            <button
-              type="button"
-              className="btn-sm btn-icon"
-              aria-label={`${name} previous memory cue`}
-              disabled={disabled || !state.memoryCues.some((c) => c < report.cue - 0.01)}
-              onClick={() => {
-                const previous = state.memoryCues.filter((c) => c < report.cue - 0.01).at(-1);
-                if (previous !== undefined) {
-                  set("seek", previous);
-                  set("setCue", previous);
-                }
-              }}
-            >
-              <SkipBack size={14} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="btn-sm btn-icon"
-              aria-label={`${name} next memory cue`}
-              disabled={disabled || !state.memoryCues.some((c) => c > report.cue + 0.01)}
-              onClick={() => {
-                const next = state.memoryCues.find((c) => c > report.cue + 0.01);
-                if (next !== undefined) {
-                  set("seek", next);
-                  set("setCue", next);
-                }
-              }}
-            >
-              <SkipForward size={14} aria-hidden />
-            </button>
-            <span className="hint num">{state.memoryCues.length} memory</span>
+          <div className="dj-hw-row dj-brakes">
+            <HwButton label={`${name} vinyl brake`} caption="BRAKE" disabled={disabled || !report.playing} onClick={() => set("brake", state.brakeSeconds)} />
+            <HwButton label={`${name} spin back`} caption="SPIN BACK" disabled={disabled || !report.playing} onClick={() => set("spinback", state.brakeSeconds)} />
+            <label className="dj-brake-time">
+              <span className="visually-hidden">{name} brake and spin-back time</span>
+              <input
+                type="range"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={state.brakeSeconds}
+                aria-valuetext={`${state.brakeSeconds.toFixed(1)} seconds`}
+                onChange={(event) => onState({ brakeSeconds: Number(event.target.value) })}
+              />
+              <span className="num dj-hw-caption">{state.brakeSeconds.toFixed(1)} S</span>
+            </label>
           </div>
-          {editingCues && (
-            <div className="dj-cue-names">
-              {state.hotCues.map(
-                (hot, index) =>
-                  hot && (
-                    <label key={index} className="field-inline">
-                      {HOT_CUE_NAMES[index]}
-                      <input
-                        type="text"
-                        value={hot.label}
-                        maxLength={24}
-                        onChange={(event) =>
-                          onState({
-                            hotCues: state.hotCues.map((c, at) => (at === index && c ? { ...c, label: event.target.value } : c)),
-                          })
-                        }
-                      />
-                    </label>
-                  ),
-              )}
-            </div>
-          )}
-
-          <fieldset className="dj-group">
-            <legend>Loop {loopBeats !== null && <span className="num">· {beatsLabel(Math.round(loopBeats * 32) / 32)} beats</span>}</legend>
-            <div className="row">
-              <select
-                aria-label={`${name} loop size`}
-                value={state.loopBeats}
-                onChange={(event) => onState({ loopBeats: Number(event.target.value) })}
-              >
-                {LOOP_BEATS.map((beats) => (
-                  <option key={beats} value={beats}>
-                    {beatsLabel(beats)}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn-sm" disabled={disabled || report.bpm <= 0} onClick={() => set("autoLoop", state.loopBeats)}>
-                <Repeat size={14} aria-hidden />
-                Loop
-              </button>
-              <button type="button" className="btn-sm" disabled={disabled} onClick={() => set("loopIn", report.position)}>
-                In
-              </button>
-              <button type="button" className="btn-sm" disabled={disabled} onClick={() => set("loopOut", report.position)}>
-                Out
-              </button>
-              <button type="button" className="btn-sm" aria-label={`Halve ${name}'s loop`} disabled={!report.loop} onClick={() => set("resizeLoop", 0.5)}>
-                ½
-              </button>
-              <button type="button" className="btn-sm" aria-label={`Double ${name}'s loop`} disabled={!report.loop} onClick={() => set("resizeLoop", 2)}>
-                ×2
-              </button>
-              <button
-                type="button"
-                className="btn-sm"
-                disabled={disabled}
-                onClick={() => set(report.loop ? "exitLoop" : "reloop", 1)}
-              >
-                {report.loop ? "Exit" : "Reloop"}
-              </button>
-            </div>
-          </fieldset>
-
-          <fieldset className="dj-group">
-            <legend>Beat Jump</legend>
-            <div className="row">
-              <button type="button" className="btn-sm" aria-label={`${name} jump back ${state.jumpBeats} beats`} disabled={disabled || report.bpm <= 0} onClick={() => set("beatJump", -state.jumpBeats)}>
-                ◀
-              </button>
-              <select aria-label={`${name} Beat Jump size`} value={state.jumpBeats} onChange={(event) => onState({ jumpBeats: Number(event.target.value) })}>
-                {BEAT_JUMPS.map((beats) => (
-                  <option key={beats} value={beats}>
-                    {beats} {beats === 1 ? "beat" : "beats"}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn-sm" aria-label={`${name} jump forward ${state.jumpBeats} beats`} disabled={disabled || report.bpm <= 0} onClick={() => set("beatJump", state.jumpBeats)}>
-                ▶
-              </button>
-              {toggle("Q", report.quantize, "quantize", "Quantize")}
-            </div>
-          </fieldset>
-
-          <fieldset className="dj-group">
-            <legend>Beat Grid</legend>
-            <div className="row">
-              <button
-                type="button"
-                className="btn-sm"
-                disabled={disabled}
-                onClick={() => {
-                  const bpm = tap.current.tap(performance.now());
-                  if (bpm) set("gridBpm", bpm);
-                }}
-              >
-                Tap
-              </button>
-              <button type="button" className="btn-sm" disabled={disabled || report.bpm <= 0} onClick={() => set("gridBpm", report.bpm / 2)}>
-                ÷2
-              </button>
-              <button type="button" className="btn-sm" disabled={disabled || report.bpm <= 0} onClick={() => set("gridBpm", report.bpm * 2)}>
-                ×2
-              </button>
-              <button type="button" className="btn-sm" aria-label={`Move ${name}'s grid earlier`} disabled={disabled} onClick={() => set("gridOffset", report.firstBeat - 0.01)}>
-                ◀ Grid
-              </button>
-              <button type="button" className="btn-sm" aria-label={`Move ${name}'s grid later`} disabled={disabled} onClick={() => set("gridOffset", report.firstBeat + 0.01)}>
-                Grid ▶
-              </button>
-              <button type="button" className="btn-sm" disabled={disabled} onClick={() => set("gridOffset", report.position)}>
-                Beat 1 here
-              </button>
-            </div>
-          </fieldset>
         </div>
 
-        <div className="dj-right">
-          <div className="row">
-            <button
-              type="button"
-              className="dj-toggle dj-sync"
-              aria-pressed={report.sync}
-              aria-keyshortcuts={["E", "P", "D", "L"][deck]}
+        <div className="dj-hw-column dj-deck-right">
+          <div className="dj-hw-pair">
+            <HwButton
+              label={`${name} Beat Sync`}
+              caption="BEAT SYNC"
+              pressed={report.sync}
+              tone="blue"
               disabled={disabled || report.bpm <= 0}
               onClick={() => set("sync", report.sync ? 0 : 1)}
-            >
-              BEAT SYNC
-            </button>
-            <button
-              type="button"
-              className="dj-toggle"
-              aria-pressed={syncMaster}
+            />
+            <HwButton
+              label={`Make ${name} the Sync Master`}
+              caption="MASTER"
+              pressed={syncMaster}
+              tone="amber"
               disabled={disabled || report.bpm <= 0}
               onClick={() => set("syncMaster", 1)}
-            >
-              MASTER
-            </button>
+            />
           </div>
-          <div className="row">
-            {toggle("MASTER TEMPO", report.masterTempo, "masterTempo", "(key lock)")}
-          </div>
-          <div className="row dj-key">
-            <button type="button" className="btn-sm" aria-label={`${name} key down a semitone`} disabled={disabled} onClick={() => set("keyShift", report.keyShift - 1)}>
-              ♭
-            </button>
-            <span className="num">KEY {report.keyShift > 0 ? "+" : ""}{report.keyShift}</span>
-            <button type="button" className="btn-sm" aria-label={`${name} key up a semitone`} disabled={disabled} onClick={() => set("keyShift", report.keyShift + 1)}>
-              ♯
-            </button>
-            <button
-              type="button"
-              className="btn-sm"
+          <div className="dj-hw-pair">
+            <HwButton
+              label={`${name} Key Sync`}
+              caption="KEY SYNC"
+              tone="green"
               disabled={disabled || !baseKey || !masterKey}
               onClick={() => baseKey && masterKey && set("keyShift", keySyncShift(baseKey, masterKey))}
-            >
-              KEY SYNC
-            </button>
+            />
+            <HwButton label={`${name} reset the key`} caption="KEY 0" disabled={disabled || report.keyShift === 0} onClick={() => set("keyShift", 0)} />
           </div>
+          <div className="dj-hw-stepper" role="group" aria-label={`${name} Key Shift`}>
+            <HwButton label={`${name} key down a semitone`} caption="♭" disabled={disabled} onClick={() => set("keyShift", report.keyShift - 1)} />
+            <span className="num dj-hw-value" aria-label={`${name} Key Shift`}>
+              {report.keyShift > 0 ? "+" : ""}
+              {report.keyShift}
+            </span>
+            <HwButton label={`${name} key up a semitone`} caption="♯" disabled={disabled} onClick={() => set("keyShift", report.keyShift + 1)} />
+          </div>
+          {toggle("MASTER TEMPO", report.masterTempo, "masterTempo", "Master Tempo (key lock)", "red")}
+          <HwButton
+            label={`${name} tempo range, ${TEMPO_RANGES[rangeIndex]?.label ?? ""}: press for the next`}
+            caption={`TEMPO ${TEMPO_RANGES[rangeIndex]?.label ?? ""}`}
+            onClick={() => onState({ range: TEMPO_RANGES[(rangeIndex + 1) % TEMPO_RANGES.length]!.id })}
+          />
           <div className="dj-tempo">
+            <div className="dj-tempo-scale" aria-hidden>
+              <span>−</span>
+              <span>0</span>
+              <span>+</span>
+            </div>
             <input
               type="range"
               className="dj-tempo-fader"
@@ -583,45 +622,23 @@ export function DeckPanel(props: DeckPanelProps) {
               disabled={disabled || report.sync}
               onChange={(event) => set("tempo", Number(event.target.value))}
             />
-            <div className="dj-tempo-side">
-              <select aria-label={`${name} tempo range`} value={state.range} onChange={(event) => onState({ range: event.target.value as TempoRangeId })}>
-                {TEMPO_RANGES.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              <span className="num">{formatTempo(report.tempo)}</span>
-              <button type="button" className="btn-sm" disabled={disabled || report.sync} onClick={() => set("tempo", 0)}>
-                Reset
-              </button>
-              <button
-                type="button"
-                className="btn-sm"
-                aria-label={`${name} bend slower`}
-                disabled={disabled}
-                onPointerDown={() => set("bend", -BEND)}
-                onPointerUp={() => set("bend", 0)}
-                onPointerLeave={() => set("bend", 0)}
-                onKeyDown={(event) => (event.key === " " || event.key === "Enter") && !event.repeat && set("bend", -BEND)}
-                onKeyUp={() => set("bend", 0)}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                className="btn-sm"
-                aria-label={`${name} bend faster`}
-                disabled={disabled}
-                onPointerDown={() => set("bend", BEND)}
-                onPointerUp={() => set("bend", 0)}
-                onPointerLeave={() => set("bend", 0)}
-                onKeyDown={(event) => (event.key === " " || event.key === "Enter") && !event.repeat && set("bend", BEND)}
-                onKeyUp={() => set("bend", 0)}
-              >
-                +
-              </button>
-            </div>
+          </div>
+          <span className="num dj-hw-value">{formatTempo(report.tempo)}</span>
+          <HwButton
+            label={`${name} tempo reset`}
+            caption="TEMPO RESET"
+            light={report.tempo === 0 && loaded ? "on" : undefined}
+            tone="green"
+            disabled={disabled || report.sync}
+            onClick={() => set("tempo", 0)}
+          />
+          <div className="dj-hw-pair">
+            <button type="button" className="dj-hw-button" aria-label={`${name} bend slower`} disabled={disabled} {...hold(-BEND)}>
+              −
+            </button>
+            <button type="button" className="dj-hw-button" aria-label={`${name} bend faster`} disabled={disabled} {...hold(BEND)}>
+              +
+            </button>
           </div>
         </div>
       </div>

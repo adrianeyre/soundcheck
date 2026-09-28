@@ -1,8 +1,8 @@
-import { FilePlus2, ListMusic } from "lucide-react";
+import { FilePlus2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { camelotName, formatBpm, formatTime, keyName } from "./dj-logic";
-import { type LibraryTrack, titleOf } from "./dj-state";
+import { DJ_TRACK_DRAG_TYPE, type LibraryTrack, titleOf } from "./dj-state";
 
 type Column = "title" | "bpm" | "key" | "length";
 
@@ -45,7 +45,7 @@ export interface TrackBrowserProps {
 }
 
 /**
- * The Track browser: every file the DJ has added, with its BPM, key (in
+ * The Track browser's loaded list: every file the DJ has added, with its BPM, key (in
  * Camelot notation too) and length once a Deck has analysed it, sortable by
  * any column. A row loads onto a Deck by its buttons, or is dragged onto one.
  */
@@ -55,9 +55,8 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBro
   const sorted = sortTracks(tracks, sort.column, sort.ascending);
 
   return (
-    <section
-      className="dj-browser panel"
-      aria-labelledby="dj-browser-heading"
+    <div
+      className="dj-loaded"
       onDragOver={(event) => event.dataTransfer.types.includes("Files") && event.preventDefault()}
       onDrop={(event) => {
         if (event.dataTransfer.files.length === 0) return;
@@ -65,11 +64,7 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBro
         onAdd([...event.dataTransfer.files]);
       }}
     >
-      <div className="panel-head">
-        <h2 id="dj-browser-heading">
-          <ListMusic size={18} aria-hidden />
-          Track browser
-        </h2>
+      <div className="row">
         <input
           ref={input}
           type="file"
@@ -120,7 +115,7 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBro
                 <tr
                   key={track.id}
                   draggable
-                  onDragStart={(event) => event.dataTransfer.setData("application/x-soundcheck-dj-track", track.id)}
+                  onDragStart={(event) => event.dataTransfer.setData(DJ_TRACK_DRAG_TYPE, track.id)}
                 >
                   <th scope="row">{titleOf(track.name)}</th>
                   <td className="num">{track.analysis ? formatBpm(track.analysis.bpm) : "—"}</td>
@@ -150,6 +145,6 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBro
           </table>
         </div>
       )}
-    </section>
+    </div>
   );
 }

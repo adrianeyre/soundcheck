@@ -1,8 +1,12 @@
 import { encode_mp3, encode_wav } from "@engine";
 import { Power } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AudioOutput } from "../audio/audio-output";
+import type { LibraryStorage } from "../preset/library-storage";
+import type { SampleTarget } from "../samples/SampleBrowser";
+import { lastName, type SampleRef, type SampleSource } from "../samples/sample-source";
+import { DjBrowser } from "./DjBrowser";
 import { DeckPanel } from "./DeckPanel";
 import { type MusicalKey, shiftKey } from "./dj-logic";
 import { EMPTY_REPORT, readDjReport } from "./dj-report";
@@ -19,7 +23,14 @@ import {
 } from "./dj-state";
 import { MixerPanel } from "./MixerPanel";
 import type { DjRecordingSaver, RecordingKind } from "./recording-saver";
-import { TrackBrowser } from "./TrackBrowser";
+import { WaveformStack } from "./WaveformStack";
+
+/** The BROWSE button: the Track browser brought into view and focused. */
+function browse() {
+  const browser = document.getElementById("dj-browser");
+  browser?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  browser?.focus({ preventScroll: true });
+}
 
 /** How often the page reads the engine's report: often enough for a smooth platter. */
 const REPORT_MS = 40;
@@ -48,6 +59,10 @@ export interface DjPageProps {
   /** Whether the page is the one showing, so its keyboard shortcuts apply. */
   active: boolean;
   saver: DjRecordingSaver;
+  /** The sample folders the Editor's Samples Widget reads, for the Track browser's tree; null where there are none. */
+  samples?: SampleSource | null;
+  /** The app-level library, where those folders are remembered. */
+  library?: LibraryStorage | null;
 }
 
 /**
@@ -56,7 +71,7 @@ export interface DjPageProps {
  * the DJ does and draws what the engine reports; nothing here is the
  * Project's, and none of it is undone.
  */
-export function DjPage({ output, onStart, starting = false, active, saver }: DjPageProps) {
+export function DjPage({ output, onStart, starting = false, active, saver, samples = null, library: folderLibrary = null }: DjPageProps) {
   const dj = output?.dj ?? null;
   const [layout, setLayout] = useState<2 | 4>(2);
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
@@ -67,6 +82,7 @@ export function DjPage({ output, onStart, starting = false, active, saver }: DjP
   const [format, setFormat] = useState<RecordingKind>("wav");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [span, setSpan] = useState(4);
   const recorded = useRef<Float32Array[]>([]);
   const nextId = useRef(0);
 
@@ -149,6 +165,39 @@ export function DjPage({ output, onStart, starting = false, active, saver }: DjP
       changeDeck(deck, { loading: false, error: `${titleOf(track.name)} couldn't be loaded: ${String(reason)}` });
     }
   };
+
+  // A file from the folder tree: read once, kept in the loaded list, and loaded onto the Deck.
+  const latestLoad = useRef({ loadTrack, library });
+  useEffect(() => {
+    latestLoad.current = { loadTrack, library };
+  });
+  const useSample = useCallback(
+    async (sample: SampleRef, deck: number) => {
+      if (!samples) return;
+      const from = `${sample.folder.id}\u0000${sample.path}`;
+      let track = latestLoad.current.library.find((t) => t.from === from);
+      if (!track) {
+        try {
+          const bytes = await samples.readBytes(sample);
+          track = { id: `track-${nextId.current++}`, name: lastName(sample.path), bytes, analysis: null, from };
+        } catch (reason) {
+          setMessage(`${sample.path} couldn't be read: ${String(reason instanceof Error ? reason.message : reason)}`);
+          return;
+        }
+        const added = track;
+        setLibrary((all) => [...all, added]);
+      }
+      await latestLoad.current.loadTrack(track, deck);
+    },
+    [samples],
+  );
+  const deckCount = layout;
+  const targets = useMemo<SampleTarget[]>(
+    () => (dj ? Array.from({ length: deckCount }, (_, deck) => ({ id: `deck:${deck}`, label: `Deck ${deck + 1}` })) : []),
+    [dj, deckCount],
+  );
+  const onUse = useCallback((sample: SampleRef, target: string) => void useSample(sample, Number(target.split(":")[1])), [useSample]);
+  const onBrowseError = useCallback((error: string) => setMessage(error), []);
 
   const record = async (on: boolean) => {
     if (on) {
@@ -250,6 +299,8 @@ export function DjPage({ output, onStart, starting = false, active, saver }: DjP
           const dropped = library.find((t) => t.id === trackId);
           if (dropped) void loadTrack(dropped, deck);
         }}
+        onDropSample={(sample) => void useSample(sample, deck)}
+        onBrowse={browse}
         onEject={() => {
           dj?.unload(deck);
           changeDeck(deck, { ...newDeck(), vinyl: state.vinyl, range: state.range });
@@ -291,6 +342,21 @@ export function DjPage({ output, onStart, starting = false, active, saver }: DjP
           {message}
         </p>
       )}
+      <WaveformStack
+        span={span}
+        onSpan={setSpan}
+        lanes={Array.from({ length: layout }, (_, deck) => {
+          const track = library.find((t) => t.id === decks[deck]?.trackId) ?? null;
+          return {
+            deck,
+            report: report.decks[deck]!,
+            analysis: track?.analysis ?? null,
+            hotCues: decks[deck]!.hotCues,
+            title: track ? titleOf(track.name) : null,
+            syncMaster: report.syncMaster === deck,
+          };
+        })}
+      />
       <div className="dj-stage" data-layout={layout}>
         <div className="dj-decks dj-decks-left">
           {deckPanel(0)}
@@ -314,7 +380,13 @@ export function DjPage({ output, onStart, starting = false, active, saver }: DjP
           {layout === 4 && deckPanel(3)}
         </div>
       </div>
-      <TrackBrowser
+      <DjBrowser
+        source={samples}
+        library={folderLibrary}
+        canAudition={output !== null}
+        targets={targets}
+        onUse={onUse}
+        onError={onBrowseError}
         tracks={library}
         decks={layout}
         canLoad={dj !== null}

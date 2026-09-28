@@ -8,6 +8,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 
 import type { AudioOutput, DjAnalysis, EngineCommand } from "../audio/audio-output";
+import { memoryLibraryStorage } from "../preset/library-storage";
+import { SAMPLE_DRAG_TYPE } from "../samples/sample-drag";
+import type { SampleSource } from "../samples/sample-source";
 import { DjPage } from "./DjPage";
 import { DECK_FIELDS, DJ_REPORT_LEN, GLOBAL_FIELDS } from "./dj-report";
 import type { DjRecordingSaver } from "./recording-saver";
@@ -112,11 +115,11 @@ test("the Deck's controls and the keyboard reach the engine", async () => {
   expect(fake.dj("cueDown")).toHaveLength(1);
   expect(fake.dj("cueUp")).toHaveLength(1);
 
-  fireEvent.click(within(deck).getByRole("button", { name: "Loop" }));
+  fireEvent.click(within(deck).getByRole("button", { name: "Deck 1 4 beat loop" }));
   expect(fake.dj("autoLoop").at(-1)).toMatchObject({ value: 4 });
   fireEvent.click(within(deck).getByRole("button", { name: "Deck 1 jump forward 4 beats" }));
   expect(fake.dj("beatJump").at(-1)).toMatchObject({ value: 4 });
-  fireEvent.click(within(deck).getByRole("button", { name: /^BEAT SYNC/ }));
+  fireEvent.click(within(deck).getByRole("button", { name: "Deck 1 Beat Sync" }));
   expect(fake.dj("sync").at(-1)).toMatchObject({ value: 1 });
 
   fireEvent.click(within(deck).getByRole("button", { name: "Set Hot Cue A" }));
@@ -148,8 +151,9 @@ test("the mixer's knobs and faders reach the engine, by mouse or keys", () => {
   expect(fake.dj("crossfader").at(-1)).toMatchObject({ value: -0.5 });
   fireEvent.click(within(mixer).getByRole("radio", { name: "Dub Echo" }));
   expect(fake.dj("colourType").at(-1)).toMatchObject({ value: 1 });
-  fireEvent.change(within(mixer).getByRole("combobox", { name: "Beat FX" }), { target: { value: "5" } });
-  fireEvent.click(within(mixer).getByRole("button", { name: "ON" }));
+  for (let step = 0; step < 5; step++) fireEvent.click(within(mixer).getByRole("button", { name: /^Next Beat FX/ }));
+  expect(within(mixer).getByRole("status", { name: "Beat FX display" })).toHaveTextContent("TRANS");
+  fireEvent.click(within(mixer).getByRole("button", { name: "Beat FX on" }));
   expect(fake.dj("beatFxType").at(-1)).toMatchObject({ value: 5 });
   expect(fake.dj("beatFxOn").at(-1)).toMatchObject({ value: 1 });
   expect(within(mixer).getByRole("meter", { name: "Channel 1 level" })).toBeInTheDocument();
@@ -166,7 +170,7 @@ test("a recording of the mix is encoded and saved", async () => {
   // The engine says it is recording.
   fake.report[5] = 1;
   await act(() => new Promise((resolve) => setTimeout(resolve, 60)));
-  fireEvent.click(screen.getByRole("button", { name: "Stop and save" }));
+  fireEvent.click(screen.getByRole("button", { name: "Stop and save the recording" }));
   await waitFor(() => expect(save).toHaveBeenCalled());
   const [name, kind, bytes] = save.mock.calls[0]!;
   expect(name).toMatch(/^Mix /);
@@ -181,4 +185,53 @@ test("without audio the page offers to start it", () => {
   fireEvent.click(screen.getByRole("button", { name: "Start audio for mixing" }));
   expect(onStart).toHaveBeenCalled();
   expect(screen.getAllByText("Start audio to load a Deck.")).toHaveLength(2);
+});
+
+function fakeSamples() {
+  const readBytes = vi.fn<SampleSource["readBytes"]>(async () => new Uint8Array([1, 2, 3]));
+  const source: SampleSource = {
+    chooseFolder: async () => null,
+    listAudio: async () => ["Set/Night Drive.mp3"],
+    readBytes,
+    audition: async () => {},
+    stopAudition: async () => {},
+  };
+  return { source, readBytes };
+}
+
+test("a file dragged from the folder tree onto a Deck is read and loaded, and its waveform joins the stack", async () => {
+  const fake = fakeOutput();
+  const { source, readBytes } = fakeSamples();
+  render(<DjPage output={fake.output} active saver={saver()} samples={source} library={memoryLibraryStorage()} />);
+  // The Track browser opens on the folder tree, with the Decks to put a file on.
+  expect(screen.getByRole("tab", { name: "Folders" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("heading", { name: "Folders" })).toBeInTheDocument();
+
+  const sample = { folder: { id: "music", label: "Music" }, path: "Set/Night Drive.mp3" };
+  const deck = screen.getByRole("region", { name: "Deck 2" });
+  fireEvent.drop(deck, {
+    dataTransfer: {
+      types: [SAMPLE_DRAG_TYPE],
+      files: [],
+      getData: (type: string) => (type === SAMPLE_DRAG_TYPE ? JSON.stringify(sample) : ""),
+    },
+  });
+  await waitFor(() => expect(fake.load).toHaveBeenCalledWith(1, expect.any(Uint8Array)));
+  expect(readBytes).toHaveBeenCalledWith(sample);
+  const stack = screen.getByRole("region", { name: "Waveforms" });
+  await waitFor(() => expect(within(stack).getByRole("img", { name: /Deck 2 waveform around the playhead/ })).toBeInTheDocument());
+  expect(within(stack).getByText("Deck 1 is empty")).toBeInTheDocument();
+  fireEvent.click(within(stack).getByRole("button", { name: "Zoom the waveforms in" }));
+  expect(within(stack).getByLabelText("Showing 4 seconds")).toBeInTheDocument();
+
+  // The loaded list has it, a tab away.
+  fireEvent.click(screen.getByRole("tab", { name: /Loaded tracks/ }));
+  expect(screen.getByRole("tab", { name: "Loaded tracks (1)" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("without sample folders the Track browser says so and offers the loaded list", () => {
+  render(<DjPage output={fakeOutput().output} active saver={saver()} />);
+  expect(screen.getByRole("tab", { name: /Loaded tracks/ })).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(screen.getByRole("tab", { name: "Folders" }));
+  expect(screen.getByText(/can't list folders/)).toBeInTheDocument();
 });

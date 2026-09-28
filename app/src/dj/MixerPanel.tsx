@@ -1,4 +1,3 @@
-import { Circle, Headphones, Square } from "lucide-react";
 import { useRef, useState } from "react";
 
 import {
@@ -8,8 +7,6 @@ import {
   BEAT_FX_TARGETS,
   beatsLabel,
   COLOUR_FX,
-  CROSSFADER_CURVES,
-  FADER_CURVES,
   formatBpm,
   formatTime,
   meterFraction,
@@ -39,7 +36,7 @@ export function LevelMeter({ label, level }: { label: string; level: number }) {
   }
   const fraction = meterFraction(level);
   const peak = meterFraction(Math.max(level, held.level));
-  const segments = 15;
+  const segments = 18;
   const lit = Math.round(fraction * segments);
   return (
     <div
@@ -59,7 +56,7 @@ export function LevelMeter({ label, level }: { label: string; level: number }) {
           className="dj-meter-segment"
           data-lit={index < lit}
           data-peak={index === Math.max(0, Math.round(peak * segments) - 1) && peak > 0}
-          data-zone={index >= segments - 1 ? "clip" : index >= segments - 4 ? "hot" : "ok"}
+          data-zone={index >= segments - 2 ? "clip" : index >= segments - 6 ? "hot" : "ok"}
         />
       )).toReversed()}
     </div>
@@ -82,322 +79,422 @@ export interface MixerPanelProps {
   onRecord: (on: boolean) => void;
 }
 
+/** A switch of two or three labelled positions, as a mixer's curve and assign switches. */
+function Switch({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="dj-switch" role="radiogroup" aria-label={label}>
+      {options.map((option, index) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={value === index}
+          className="dj-switch-position"
+          onClick={() => onChange(index)}
+          onKeyDown={(event) => {
+            const by = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
+            if (by === undefined) return;
+            event.preventDefault();
+            onChange(Math.min(options.length - 1, Math.max(0, value + by)));
+          }}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The fader curves' names as the switch prints them. */
+const CURVE_CAPTIONS = ["SOFT", "LIN", "CUT"] as const;
+const XF_CAPTIONS = ["SMOOTH", "POWER", "CUT"] as const;
+
 /**
- * The DJM-V10 / A9 mixer: a channel for each Deck (trim, four-band EQ or
- * isolator, compressor, Colour FX, cue, meter, fader and crossfader assign),
- * the Colour FX and Beat FX sections, the Master and booth, the headphones,
- * recording, and the crossfader. Knobs turn with the arrow keys, and every
- * fader is a slider.
+ * The mixer, drawn as a club's four-channel mixer: for each Deck a channel
+ * strip (trim; high, high-mid, low-mid and low EQ, or isolator, each with a
+ * kill; the compressor; the Colour FX knob; the lit CUE button; an LED meter
+ * beside a long channel fader; the fader-curve switch and the crossfader
+ * assign), the Master, booth and headphone knobs and the stereo meter top
+ * right, the Colour FX and Beat FX sections with the Beat FX's own display,
+ * recording, and the crossfader along the bottom. Knobs turn with the arrow
+ * keys, faders are sliders, and switches move with the arrows.
  */
 export function MixerPanel(props: MixerPanelProps) {
   const { channels, mixer, report, count, headphones, canPlay, onChannel, onMixer, recording } = props;
   const tap = useRef(new TapTempo());
   const division = BEAT_DIVISIONS.indexOf(mixer.beatFxDivision);
+  const fx = BEAT_FX[mixer.beatFxType] ?? BEAT_FX[0];
 
   return (
-    <section className="dj-mixer" aria-label="Mixer">
-      <div className="dj-channels" style={{ gridTemplateColumns: `repeat(${count}, minmax(84px, 1fr)) minmax(200px, 1.4fr)` }}>
-        {channels.slice(0, count).map((channel, index) => {
-          const deck = report.decks[index]!;
-          const name = `Channel ${index + 1}`;
-          const set = (change: Partial<ChannelState>) => onChannel(index, change);
-          return (
-            <fieldset key={index} className="dj-channel" aria-label={name}>
-              <legend className="dj-channel-number">{index + 1}</legend>
-              <span className="num dj-channel-bpm" aria-label={`${name} BPM`}>
-                {formatBpm(deck.effectiveBpm)}
-              </span>
-              <Knob
-                label={`${name} trim`}
-                caption="TRIM"
-                value={channel.trimDb}
-                min={-24}
-                max={12}
-                centre={0}
-                step={0.5}
-                format={db}
-                onChange={(trimDb) => set({ trimDb })}
-              />
-              {EQ_BANDS.map((band) => {
-                const value = channel.eq[band.index];
-                const killed = value <= EQ_MIN_DB;
-                return (
-                  <div key={band.name} className="dj-eq">
-                    <Knob
-                      label={`${name} ${band.label} EQ`}
-                      caption={band.caption}
-                      value={value}
-                      min={EQ_MIN_DB}
-                      max={EQ_MAX_DB}
-                      centre={0}
-                      step={0.5}
-                      format={(v) => (v <= EQ_MIN_DB && mixer.isolator ? "KILL" : db(v))}
-                      tone={killed ? "var(--record)" : undefined}
-                      onChange={(v) => {
-                        const eq = [...channel.eq] as ChannelState["eq"];
-                        eq[band.index] = v;
-                        set({ eq });
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="dj-kill"
-                      aria-pressed={killed}
-                      aria-label={`Kill ${name} ${band.label}`}
-                      onClick={() => {
-                        const eq = [...channel.eq] as ChannelState["eq"];
-                        eq[band.index] = killed ? 0 : EQ_MIN_DB;
-                        set({ eq });
-                      }}
-                    >
-                      KILL
-                    </button>
-                  </div>
-                );
-              })}
-              <Knob
-                label={`${name} compressor`}
-                caption="COMP"
-                value={channel.compression}
-                min={0}
-                max={1}
-                step={0.05}
-                format={(v) => (v === 0 ? "OFF" : percent(v))}
-                onChange={(compression) => set({ compression })}
-              />
-              <span className="hint num" aria-label={`${name} gain reduction`}>
-                {deck.gainReduction > 0.1 ? `−${deck.gainReduction.toFixed(1)} dB` : " "}
-              </span>
-              <Knob
-                label={`${name} Colour FX, ${COLOUR_FX[mixer.colourType]?.label ?? ""}`}
-                caption="COLOR"
-                value={channel.colour}
-                min={-1}
-                max={1}
-                centre={0}
-                step={0.05}
-                format={(v) => (Math.abs(v) < 0.02 ? "OFF" : `${v < 0 ? "L" : "R"} ${percent(Math.abs(v))}`)}
-                tone="var(--warning)"
-                onChange={(colour) => set({ colour })}
-              />
-              <button
-                type="button"
-                className="dj-toggle dj-cue-button"
-                aria-pressed={channel.cue}
-                aria-label={`Cue ${name} in the headphones`}
-                onClick={() => set({ cue: !channel.cue })}
-              >
-                <Headphones size={14} aria-hidden />
-                CUE
-              </button>
-              <div className="dj-fader-row">
-                <LevelMeter label={`${name} level`} level={deck.level} />
-                <input
-                  type="range"
-                  className="dj-channel-fader"
-                  aria-label={`${name} fader`}
-                  aria-valuetext={percent(channel.fader)}
+    <section className="dj-mixer dj-hw" aria-label="Mixer" style={{ "--channels": count } as React.CSSProperties}>
+      <header className="dj-mixer-head">
+        <h2 className="dj-hw-title">Mixer</h2>
+        <Switch
+          label="EQ mode"
+          options={["EQ", "ISOLATOR"]}
+          value={mixer.isolator ? 1 : 0}
+          onChange={(value) => onMixer({ isolator: value === 1 })}
+        />
+      </header>
+      <div className="dj-mixer-body">
+        <div className="dj-channels">
+          {channels.slice(0, count).map((channel, index) => {
+            const deck = report.decks[index]!;
+            const name = `Channel ${index + 1}`;
+            const set = (change: Partial<ChannelState>) => onChannel(index, change);
+            return (
+              <fieldset key={index} className="dj-channel" data-deck={index} aria-label={name}>
+                <legend className="dj-channel-number">{index + 1}</legend>
+                <span className="num dj-channel-bpm" aria-label={`${name} BPM`}>
+                  {formatBpm(deck.effectiveBpm)}
+                </span>
+                <Knob
+                  label={`${name} trim`}
+                  caption="TRIM"
+                  value={channel.trimDb}
+                  min={-24}
+                  max={12}
+                  centre={0}
+                  step={0.5}
+                  format={db}
+                  size={36}
+                  onChange={(trimDb) => set({ trimDb })}
+                />
+                <div className="dj-channel-eq">
+                  {EQ_BANDS.map((band) => {
+                    const value = channel.eq[band.index];
+                    const killed = value <= EQ_MIN_DB;
+                    return (
+                      <div key={band.name} className="dj-eq">
+                        <Knob
+                          label={`${name} ${band.label} EQ`}
+                          caption={band.caption}
+                          value={value}
+                          min={EQ_MIN_DB}
+                          max={EQ_MAX_DB}
+                          centre={0}
+                          step={0.5}
+                          size={36}
+                          format={(v) => (v <= EQ_MIN_DB && mixer.isolator ? "KILL" : db(v))}
+                          tone={killed ? "var(--record)" : "var(--dj-knob-arc)"}
+                          onChange={(v) => {
+                            const eq = [...channel.eq] as ChannelState["eq"];
+                            eq[band.index] = v;
+                            set({ eq });
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="dj-kill"
+                          aria-pressed={killed}
+                          aria-label={`Kill ${name} ${band.label}`}
+                          onClick={() => {
+                            const eq = [...channel.eq] as ChannelState["eq"];
+                            eq[band.index] = killed ? 0 : EQ_MIN_DB;
+                            set({ eq });
+                          }}
+                        >
+                          KILL
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Knob
+                  label={`${name} compressor`}
+                  caption="COMP"
+                  value={channel.compression}
                   min={0}
                   max={1}
-                  step={0.01}
-                  value={channel.fader}
-                  onChange={(event) => set({ fader: Number(event.target.value) })}
+                  step={0.05}
+                  size={36}
+                  format={(v) => (v === 0 ? "OFF" : percent(v))}
+                  onChange={(compression) => set({ compression })}
                 />
-              </div>
-              <select aria-label={`${name} fader curve`} value={channel.curve} onChange={(event) => set({ curve: Number(event.target.value) })}>
-                {FADER_CURVES.map((curve, value) => (
-                  <option key={curve} value={value}>
-                    {curve}
-                  </option>
-                ))}
-              </select>
-              <div className="dj-assign" role="radiogroup" aria-label={`${name} crossfader assign`}>
-                {ASSIGNS.map((side, value) => (
-                  <button
-                    key={side}
-                    type="button"
-                    role="radio"
-                    aria-checked={channel.assign === value}
-                    className="dj-assign-button"
-                    onClick={() => set({ assign: value })}
-                  >
-                    {side}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          );
-        })}
+                <span className="num dj-gr" aria-label={`${name} gain reduction`}>
+                  {deck.gainReduction > 0.1 ? `GR −${deck.gainReduction.toFixed(1)}` : " "}
+                </span>
+                <Knob
+                  label={`${name} Colour FX, ${COLOUR_FX[mixer.colourType]?.label ?? ""}`}
+                  caption="COLOR"
+                  value={channel.colour}
+                  min={-1}
+                  max={1}
+                  centre={0}
+                  step={0.05}
+                  size={40}
+                  format={(v) => (Math.abs(v) < 0.02 ? "OFF" : `${v < 0 ? "L" : "R"} ${percent(Math.abs(v))}`)}
+                  tone="var(--dj-amber)"
+                  onChange={(colour) => set({ colour })}
+                />
+                <button
+                  type="button"
+                  className="dj-hw-button dj-cue-button"
+                  aria-pressed={channel.cue}
+                  data-light={channel.cue ? "on" : undefined}
+                  data-tone="amber"
+                  aria-label={`Cue ${name} in the headphones`}
+                  onClick={() => set({ cue: !channel.cue })}
+                >
+                  CUE
+                </button>
+                <div className="dj-fader-row">
+                  <LevelMeter label={`${name} level`} level={deck.level} />
+                  <div className="dj-fader-slot">
+                    <input
+                      type="range"
+                      className="dj-channel-fader"
+                      aria-label={`${name} fader`}
+                      aria-valuetext={percent(channel.fader)}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={channel.fader}
+                      onChange={(event) => set({ fader: Number(event.target.value) })}
+                    />
+                  </div>
+                </div>
+                <Switch label={`${name} fader curve`} options={CURVE_CAPTIONS} value={channel.curve} onChange={(curve) => set({ curve })} />
+                <Switch label={`${name} crossfader assign`} options={ASSIGNS} value={channel.assign} onChange={(assign) => set({ assign })} />
+              </fieldset>
+            );
+          })}
+        </div>
 
-        <div className="dj-master-section">
-          <fieldset className="dj-group">
-            <legend>Master</legend>
-            <div className="row dj-master-row">
-              <Knob label="DJ master level" caption="MASTER" value={mixer.master} min={0} max={2} centre={1} step={0.02} format={gain} onChange={(master) => onMixer({ master })} />
-              <Knob label="DJ booth level" caption="BOOTH" value={mixer.booth} min={0} max={2} centre={1} step={0.02} format={gain} onChange={(booth) => onMixer({ booth })} />
-              <LevelMeter label="DJ master level, left" level={report.master[0]} />
-              <LevelMeter label="DJ master level, right" level={report.master[1]} />
+        <div className="dj-mixer-side">
+          <div className="dj-hw-section" role="group" aria-label="Master">
+            <span className="dj-hw-caption">MASTER</span>
+            <div className="dj-master-row">
+              <Knob label="DJ master level" caption="MASTER" value={mixer.master} min={0} max={2} centre={1} step={0.02} format={gain} size={40} onChange={(master) => onMixer({ master })} />
+              <Knob label="DJ booth level" caption="BOOTH" value={mixer.booth} min={0} max={2} centre={1} step={0.02} format={gain} size={40} onChange={(booth) => onMixer({ booth })} />
+              <div className="dj-master-meters">
+                <LevelMeter label="DJ master level, left" level={report.master[0]} />
+                <LevelMeter label="DJ master level, right" level={report.master[1]} />
+                <span className="dj-meter-lr" aria-hidden>
+                  <span>L</span>
+                  <span>R</span>
+                </span>
+              </div>
             </div>
-            <label className="field-inline">
-              <input type="checkbox" checked={mixer.isolator} onChange={(event) => onMixer({ isolator: event.target.checked })} />
-              EQ as isolator (full kill)
-            </label>
-          </fieldset>
+          </div>
 
-          <fieldset className="dj-group">
-            <legend>Colour FX</legend>
-            <div className="dj-fx-buttons" role="radiogroup" aria-label="Colour FX">
-              {COLOUR_FX.map((fx, value) => (
-                <button key={fx.id} type="button" role="radio" aria-checked={mixer.colourType === value} className="dj-fx-button" onClick={() => onMixer({ colourType: value })}>
-                  {fx.label}
+          <div className="dj-hw-section" role="group" aria-label="Headphones">
+            <span className="dj-hw-caption">HEADPHONES</span>
+            <div className="dj-master-row">
+              <Knob
+                label="Headphones cue and master mix"
+                caption="MIXING"
+                value={mixer.headphoneMix}
+                min={0}
+                max={1}
+                centre={0.5}
+                step={0.05}
+                size={36}
+                format={(v) => `CUE ${percent(1 - v)} · MST ${percent(v)}`}
+                onChange={(headphoneMix) => onMixer({ headphoneMix })}
+              />
+              <Knob label="Headphones level" caption="LEVEL" value={mixer.headphoneLevel} min={0} max={2} centre={0.8} step={0.02} format={gain} size={36} onChange={(headphoneLevel) => onMixer({ headphoneLevel })} />
+            </div>
+            <p className="dj-hw-note">
+              {headphones
+                ? "The cue plays out of outputs 3 and 4."
+                : "The cue needs outputs 3 and 4 of an audio interface; this output has two."}
+            </p>
+          </div>
+
+          <div className="dj-hw-section" role="group" aria-label="Colour FX">
+            <span className="dj-hw-caption">COLOR FX</span>
+            <div className="dj-fx-buttons" role="radiogroup" aria-label="Colour FX type">
+              {COLOUR_FX.map((colour, value) => (
+                <button
+                  key={colour.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={mixer.colourType === value}
+                  aria-label={colour.label}
+                  className="dj-hw-button dj-fx-button"
+                  data-light={mixer.colourType === value ? "on" : undefined}
+                  data-tone="amber"
+                  onClick={() => onMixer({ colourType: value })}
+                >
+                  {colour.label.toUpperCase()}
                 </button>
               ))}
             </div>
             <Knob
               label="Colour FX parameter"
-              caption="PARAM"
+              caption="PARAMETER"
               value={mixer.colourParameter}
               min={0}
               max={1}
               step={0.05}
+              size={36}
               format={percent}
               onChange={(colourParameter) => onMixer({ colourParameter })}
             />
-          </fieldset>
+          </div>
 
-          <fieldset className="dj-group dj-beat-fx">
-            <legend>Beat FX</legend>
-            <div className="row">
-              <select aria-label="Beat FX" value={mixer.beatFxType} onChange={(event) => onMixer({ beatFxType: Number(event.target.value) })}>
-                {BEAT_FX.map((fx, value) => (
-                  <option key={fx.id} value={value}>
-                    {fx.label}
-                  </option>
-                ))}
-              </select>
-              <select aria-label="Beat FX channel" value={mixer.beatFxTarget} onChange={(event) => onMixer({ beatFxTarget: Number(event.target.value) })}>
-                {BEAT_FX_TARGETS.map((target, value) => (
-                  <option key={target} value={value}>
-                    {target}
-                  </option>
-                ))}
-              </select>
+          <div className="dj-hw-section dj-beat-fx" role="group" aria-label="Beat FX">
+            <span className="dj-hw-caption">BEAT FX</span>
+            <div className="dj-fx-display" role="status" aria-label="Beat FX display">
+              <span className="dj-fx-name">{fx.label.toUpperCase()}</span>
+              <span className="num dj-fx-division">{beatsLabel(mixer.beatFxDivision)}</span>
+              <span className="num dj-fx-bpm">
+                {formatBpm(report.masterBpm)} BPM {mixer.bpm > 0 ? "TAP" : "AUTO"}
+              </span>
+              <span className="dj-fx-target">{BEAT_FX_TARGETS[mixer.beatFxTarget]}</span>
             </div>
-            <div className="row">
+            <div className="dj-hw-row">
               <button
                 type="button"
-                className="btn-sm"
+                className="dj-hw-button"
+                aria-label="Previous Beat FX"
+                onClick={() => onMixer({ beatFxType: (mixer.beatFxType + BEAT_FX.length - 1) % BEAT_FX.length })}
+              >
+                FX ◀
+              </button>
+              <button
+                type="button"
+                className="dj-hw-button"
+                aria-label={`Next Beat FX, after ${fx.label}`}
+                onClick={() => onMixer({ beatFxType: (mixer.beatFxType + 1) % BEAT_FX.length })}
+              >
+                FX ▶
+              </button>
+              <button
+                type="button"
+                className="dj-hw-button"
                 aria-label="Shorter Beat FX division"
                 disabled={division <= 0}
                 onClick={() => onMixer({ beatFxDivision: BEAT_DIVISIONS[division - 1]! })}
               >
-                ◀
+                ◀ BEAT
               </button>
-              <span className="num dj-division" aria-label="Beat FX division">
-                {beatsLabel(mixer.beatFxDivision)}
-              </span>
               <button
                 type="button"
-                className="btn-sm"
+                className="dj-hw-button"
                 aria-label="Longer Beat FX division"
                 disabled={division >= BEAT_DIVISIONS.length - 1}
                 onClick={() => onMixer({ beatFxDivision: BEAT_DIVISIONS[division + 1]! })}
               >
-                ▶
-              </button>
-              <Knob label="Beat FX level and depth" caption="LEVEL" value={mixer.beatFxLevel} min={0} max={1} step={0.05} format={percent} onChange={(beatFxLevel) => onMixer({ beatFxLevel })} />
-              <button type="button" className="dj-toggle dj-fx-on" aria-pressed={mixer.beatFxOn} onClick={() => onMixer({ beatFxOn: !mixer.beatFxOn })}>
-                ON
+                BEAT ▶
               </button>
             </div>
-            <div className="row">
-              <span className="num" aria-label="Beat FX BPM">
-                {formatBpm(report.masterBpm)} BPM {mixer.bpm > 0 ? "(tapped)" : "(auto)"}
-              </span>
+            <div className="dj-fx-targets" role="radiogroup" aria-label="Beat FX channel">
+              {BEAT_FX_TARGETS.map((target, value) => (
+                <button
+                  key={target}
+                  type="button"
+                  role="radio"
+                  aria-checked={mixer.beatFxTarget === value}
+                  className="dj-switch-position"
+                  onClick={() => onMixer({ beatFxTarget: value })}
+                >
+                  {target}
+                </button>
+              ))}
+            </div>
+            <div className="dj-master-row">
+              <Knob label="Beat FX level and depth" caption="LEVEL/DEPTH" value={mixer.beatFxLevel} min={0} max={1} step={0.05} size={40} format={percent} onChange={(beatFxLevel) => onMixer({ beatFxLevel })} />
               <button
                 type="button"
-                className="btn-sm"
-                onClick={() => {
-                  const bpm = tap.current.tap(performance.now());
-                  if (bpm) onMixer({ bpm });
-                }}
+                className="dj-fx-lever"
+                aria-label="Beat FX on"
+                aria-pressed={mixer.beatFxOn}
+                data-light={mixer.beatFxOn ? "blink" : undefined}
+                onClick={() => onMixer({ beatFxOn: !mixer.beatFxOn })}
               >
-                Tap
+                ON/OFF
               </button>
-              <button type="button" className="btn-sm" disabled={mixer.bpm === 0} onClick={() => onMixer({ bpm: 0 })}>
-                Auto
-              </button>
+              <div className="dj-hw-column">
+                <button
+                  type="button"
+                  className="dj-hw-button"
+                  aria-label="Tap the Beat FX BPM"
+                  onClick={() => {
+                    const bpm = tap.current.tap(performance.now());
+                    if (bpm) onMixer({ bpm });
+                  }}
+                >
+                  TAP
+                </button>
+                <button type="button" className="dj-hw-button" aria-label="Beat FX BPM from the Sync Master" disabled={mixer.bpm === 0} onClick={() => onMixer({ bpm: 0 })}>
+                  AUTO
+                </button>
+              </div>
             </div>
-          </fieldset>
+          </div>
 
-          <fieldset className="dj-group">
-            <legend>Headphones</legend>
-            <div className="row">
-              <Knob label="Headphones cue and master mix" caption="MIX" value={mixer.headphoneMix} min={0} max={1} centre={0.5} step={0.05} format={(v) => `CUE ${percent(1 - v)} · MST ${percent(v)}`} onChange={(headphoneMix) => onMixer({ headphoneMix })} />
-              <Knob label="Headphones level" caption="LEVEL" value={mixer.headphoneLevel} min={0} max={2} centre={0.8} step={0.02} format={gain} onChange={(headphoneLevel) => onMixer({ headphoneLevel })} />
-            </div>
-            <p className="hint">
-              {headphones
-                ? "The headphone cue plays out of outputs 3 and 4."
-                : "The headphone cue plays out of outputs 3 and 4 of an audio interface that has them; this output has two."}
-            </p>
-          </fieldset>
-
-          <fieldset className="dj-group">
-            <legend>Record</legend>
-            <div className="row">
+          <div className="dj-hw-section" role="group" aria-label="Record">
+            <span className="dj-hw-caption">REC</span>
+            <div className="dj-hw-row">
               <button
                 type="button"
-                className="btn-record"
+                className="dj-hw-button dj-rec"
+                aria-label={recording.on ? "Stop and save the recording" : "Record the mix"}
                 aria-pressed={recording.on}
+                data-light={recording.on ? "blink" : undefined}
+                data-tone="red"
                 disabled={!canPlay || recording.saving}
                 onClick={() => props.onRecord(!recording.on)}
               >
-                {recording.on ? <Square size={14} aria-hidden /> : <Circle size={14} fill="currentColor" aria-hidden />}
-                {recording.on ? "Stop and save" : "Record the mix"}
+                {recording.on ? "STOP & SAVE" : "● REC"}
               </button>
-              <select
-                aria-label="Recording format"
-                value={recording.format}
-                disabled={recording.on}
-                onChange={(event) => props.onRecordFormat(event.target.value as "wav" | "mp3")}
-              >
-                <option value="wav">WAV</option>
-                <option value="mp3">MP3</option>
-              </select>
-              <span className="num" role="timer" aria-label="Recording time">
-                {recording.saving ? "Saving…" : formatTime(recording.seconds)}
+              <Switch
+                label="Recording format"
+                options={["WAV", "MP3"]}
+                value={recording.format === "wav" ? 0 : 1}
+                onChange={(value) => !recording.on && props.onRecordFormat(value === 0 ? "wav" : "mp3")}
+              />
+              <span className="num dj-hw-value" role="timer" aria-label="Recording time">
+                {recording.saving ? "SAVING…" : formatTime(recording.seconds)}
               </span>
             </div>
-          </fieldset>
+          </div>
         </div>
       </div>
 
       <div className="dj-crossfader">
-        <span aria-hidden>A</span>
-        <input
-          type="range"
-          aria-label="Crossfader"
-          aria-valuetext={mixer.crossfader === 0 ? "centre" : `${percent(Math.abs(mixer.crossfader))} to ${mixer.crossfader < 0 ? "A" : "B"}`}
-          min={-1}
-          max={1}
-          step={0.01}
-          value={mixer.crossfader}
-          onChange={(event) => onMixer({ crossfader: Number(event.target.value) })}
-          onDoubleClick={() => onMixer({ crossfader: 0 })}
-        />
-        <span aria-hidden>B</span>
-        <select aria-label="Crossfader curve" value={mixer.crossfaderCurve} onChange={(event) => onMixer({ crossfaderCurve: Number(event.target.value) })}>
-          {CROSSFADER_CURVES.map((curve, value) => (
-            <option key={curve} value={value}>
-              {curve}
-            </option>
-          ))}
-        </select>
-        <label className="field-inline">
-          <input type="checkbox" checked={mixer.crossfaderReverse} onChange={(event) => onMixer({ crossfaderReverse: event.target.checked })} />
-          Reverse
-        </label>
+        <Switch label="Crossfader curve" options={XF_CAPTIONS} value={mixer.crossfaderCurve} onChange={(crossfaderCurve) => onMixer({ crossfaderCurve })} />
+        <div className="dj-crossfader-slot">
+          <span className="dj-hw-caption" aria-hidden>
+            A
+          </span>
+          <input
+            type="range"
+            aria-label="Crossfader"
+            aria-valuetext={mixer.crossfader === 0 ? "centre" : `${percent(Math.abs(mixer.crossfader))} to ${mixer.crossfader < 0 ? "A" : "B"}`}
+            min={-1}
+            max={1}
+            step={0.01}
+            value={mixer.crossfader}
+            onChange={(event) => onMixer({ crossfader: Number(event.target.value) })}
+            onDoubleClick={() => onMixer({ crossfader: 0 })}
+          />
+          <span className="dj-hw-caption" aria-hidden>
+            B
+          </span>
+        </div>
+        <button
+          type="button"
+          className="dj-hw-button"
+          aria-label="Reverse the crossfader"
+          aria-pressed={mixer.crossfaderReverse}
+          data-light={mixer.crossfaderReverse ? "on" : undefined}
+          onClick={() => onMixer({ crossfaderReverse: !mixer.crossfaderReverse })}
+        >
+          REVERSE
+        </button>
       </div>
     </section>
   );

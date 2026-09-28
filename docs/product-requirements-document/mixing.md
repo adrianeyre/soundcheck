@@ -28,35 +28,36 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 
 1. As a DJ, **Menu → Mixing** opens the Mixing page, as Settings opens. The Editor's song stops while it is open, and going back leaves my **Decks** as they were.
 2. As a DJ, I choose a layout of two or four **Decks** around the mixer.
-3. As a DJ, a **Track browser** lists the files I've loaded, with title, BPM, key (in Camelot notation too) and length, sortable by any column. I load a file onto any **Deck** from it, by button or by drag and drop, or straight from my disk.
+3. As a DJ, the **Track browser** has two tabs. **Folders** is the Editor's sample folder tree: I browse my audio folders, audition a file, and put it on any **Deck** from its "Put on" list or by dragging it onto the Deck. **Loaded tracks** lists the files I've loaded, with title, BPM, key (in Camelot notation too) and length, sortable by any column. I can also load a file straight from my disk with a Deck's SOURCE button or by dropping it on the Deck. Where the platform has no sample folders, the Folders tab says so and the page opens on Loaded tracks.
 4. As a DJ, keyboard shortcuts play, cue and sync each **Deck**, and every drag (jog wheel, faders, knobs, waveform) has a keyboard alternative, meeting WCAG 2.2 AA as the rest of the app does.
 
 ### Decks (CDJ-3000)
 
 5. As a DJ, a loaded **Deck** shows the title, elapsed and remaining time, BPM (the file's and at the current tempo), key and tempo change. The remaining time flashes near the track's end.
 6. As a DJ, I see an overview of the whole track as a waveform coloured by its low, mid and high energy, with the playhead, cues and loop. Clicking it moves the playhead there (Needle Search).
-7. As a DJ, I see a zoomable waveform scrolling past a fixed playhead, with the **Beat Grid**'s beats and bars drawn on it, and a count of beats to the next cue.
-8. As a DJ, **Play/Pause** and **Cue** work as on a CDJ. Paused, Cue sets the cue point at the playhead. Playing, Cue returns to it and pauses. Holding Cue while paused plays from it until I let go.
-9. As a DJ, the jog wheel turns with the track, with its cue and **Hot Cues** marked around the ring. In vinyl mode, dragging the platter scratches. In CDJ mode, dragging its edge bends the pitch to nudge the beat. Vinyl brake and spin-back stop and start the **Deck** as a turntable does, at a speed I set.
-10. As a DJ, eight **Hot Cues** per **Deck**, each in its own colour and with a name, are set, jumped to and cleared with one press each. With **Quantize** on, they land on the nearest beat.
-11. As a DJ, loops: auto-loops of 1/32 to 512 beats, loop in and out, halve, double, reloop and exit, drawn on both waveforms. With **Quantize** on, they snap to the **Beat Grid**.
-12. As a DJ, **Beat Jump** moves the playhead by 1, 4, 16 or 32 beats either way, in time.
-13. As a DJ, **Slip** mode keeps the track running silently underneath a loop, scratch, reverse or Hot Cue, and returns to where it would have been when I let go.
-14. As a DJ, **Reverse** plays the track backwards.
-15. As a DJ, the tempo fader has ranges of ±6, ±10, ±16 and WIDE (±100%), a reset, and a readout to 0.01%. **Master Tempo** (key lock) keeps the pitch where it is while the tempo changes.
-16. As a DJ, **Sync** matches a **Deck**'s tempo to the **Sync Master**'s and lines its beats up with the Master's, and keeps them lined up. One **Deck** is the Master, marked, and I can make another the Master.
-17. As a DJ, **Key Shift** moves a **Deck**'s pitch in semitones, and **Key Sync** moves it to the key nearest the Master's that mixes with it. Keys that mix well with the Master (the same key, a fifth either way, or its relative minor or major on the Camelot wheel) are highlighted.
-18. As a DJ, **Tap** tempo and grid nudges put the **Beat Grid** right where the analysis got it wrong.
+7. As a DJ, across the top of the page, above the **Decks** and the mixer, a waveform stack shows one lane per loaded **Deck**. Each lane is a coloured waveform scrolling past a fixed centre playhead, with the **Beat Grid**'s beats and bars on it and the Deck's number, BPM, key and remaining time beside it. The lanes share one zoom, so the beats line up visibly between Decks. Each Deck's display shows a count of beats to the next cue.
+8. As a DJ, each **Deck** and the mixer look and work like the club hardware they model, on a dark metal panel with the controls where the hardware has them: big lit CUE and PLAY buttons that blink as on a player, a jog wheel with a centre display, lit pads and buttons, LED meters and long faders. No maker's name or logo is printed on them. BROWSE jumps to the Track browser, and a time-mode button switches the jog's display between elapsed and remaining time.
+9. As a DJ, **Play/Pause** and **Cue** work as on a CDJ. Paused, Cue sets the cue point at the playhead. Playing, Cue returns to it and pauses. Holding Cue while paused plays from it until I let go.
+10. As a DJ, the jog wheel turns with the track, with its cue and **Hot Cues** marked around the ring. In vinyl mode, dragging the platter scratches. In CDJ mode, dragging its edge bends the pitch to nudge the beat. Vinyl brake and spin-back stop and start the **Deck** as a turntable does, at a speed I set.
+11. As a DJ, eight **Hot Cues** per **Deck**, each in its own colour and with a name, are set, jumped to and cleared with one press each. With **Quantize** on, they land on the nearest beat.
+12. As a DJ, loops: auto-loops of 1/32 to 512 beats, loop in and out, halve, double, reloop and exit, drawn on both waveforms. With **Quantize** on, they snap to the **Beat Grid**.
+13. As a DJ, **Beat Jump** moves the playhead by 1, 4, 16 or 32 beats either way, in time.
+14. As a DJ, **Slip** mode keeps the track running silently underneath a loop, scratch, reverse or Hot Cue, and returns to where it would have been when I let go.
+15. As a DJ, **Reverse** plays the track backwards.
+16. As a DJ, the tempo fader has ranges of ±6, ±10, ±16 and WIDE (±100%), a reset, and a readout to 0.01%. **Master Tempo** (key lock) keeps the pitch where it is while the tempo changes.
+17. As a DJ, **Sync** matches a **Deck**'s tempo to the **Sync Master**'s and lines its beats up with the Master's, and keeps them lined up. One **Deck** is the Master, marked, and I can make another the Master.
+18. As a DJ, **Key Shift** moves a **Deck**'s pitch in semitones, and **Key Sync** moves it to the key nearest the Master's that mixes with it. Keys that mix well with the Master (the same key, a fifth either way, or its relative minor or major on the Camelot wheel) are highlighted.
+19. As a DJ, **Tap** tempo and grid nudges put the **Beat Grid** right where the analysis got it wrong.
 
 ### Mixer (DJM-V10 / A9)
 
-19. As a DJ, each channel has a trim, a four-band EQ (high, high-mid, low-mid, low) that switches between EQ curves (+6 to −26 dB) and isolator mode (a full kill), a per-channel compressor knob, a Colour FX knob, a channel fader with a curve I choose, a crossfader assign (A, THRU, B), a cue button, a peak meter with peak hold, and its BPM.
-20. As a DJ, Colour FX (Space, Dub Echo, Sweep, Noise, Crush and Filter) is chosen once for the mixer and turned per channel: left of centre does one thing, right of centre another, and centre is off.
-21. As a DJ, Beat FX are Delay, Echo, Ping Pong, Spiral, Reverb, Trans, Filter, Flanger, Phaser, Pitch, Slip Roll, Roll, Vinyl Brake and Helix. Each is timed to the Master's BPM by a beat division from 1/16 of a beat to 16 bars, applied to a channel, a crossfader side or the Master, with a level/depth and an on/off. I can tap its BPM.
-22. As a DJ, the **Crossfader** blends side A with side B on a curve I choose (smooth, constant power or a sharp cut), and can be reversed.
-23. As a DJ, the Master has a level, a booth level, and a stereo meter with peak hold and a clip indicator.
-24. As a DJ, the headphone section mixes the cued channels with the Master, at its own level, out of outputs 3 and 4 of an audio interface with four or more outputs (see [Platforms](#platforms)).
-25. As a DJ, **Record** captures the Master output as I hear it and saves it as WAV or MP3.
+20. As a DJ, each channel has a trim, a four-band EQ (high, high-mid, low-mid, low) that switches between EQ curves (+6 to −26 dB) and isolator mode (a full kill), a per-channel compressor knob, a Colour FX knob, a channel fader with a curve I choose, a crossfader assign (A, THRU, B), a cue button, a peak meter with peak hold, and its BPM.
+21. As a DJ, Colour FX (Space, Dub Echo, Sweep, Noise, Crush and Filter) is chosen once for the mixer and turned per channel: left of centre does one thing, right of centre another, and centre is off.
+22. As a DJ, Beat FX are Delay, Echo, Ping Pong, Spiral, Reverb, Trans, Filter, Flanger, Phaser, Pitch, Slip Roll, Roll, Vinyl Brake and Helix. Each is timed to the Master's BPM by a beat division from 1/16 of a beat to 16 bars, applied to a channel, a crossfader side or the Master, with a level/depth and an on/off. I can tap its BPM.
+23. As a DJ, the **Crossfader** blends side A with side B on a curve I choose (smooth, constant power or a sharp cut), and can be reversed.
+24. As a DJ, the Master has a level, a booth level, and a stereo meter with peak hold and a clip indicator.
+25. As a DJ, the headphone section mixes the cued channels with the Master, at its own level, out of outputs 3 and 4 of an audio interface with four or more outputs (see [Platforms](#platforms)).
+26. As a DJ, **Record** captures the Master output as I hear it and saves it as WAV or MP3.
 
 ## Platforms
 

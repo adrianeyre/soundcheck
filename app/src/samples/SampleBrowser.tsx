@@ -68,6 +68,10 @@ export interface SampleBrowserProps {
   /** Put `sample` on the target with id `target`. */
   onUse: (sample: SampleRef, target: string) => void;
   onError: (message: string) => void;
+  /** Its heading: "Samples", unless another page calls it something else. */
+  title?: string;
+  /** What "Put on" says when there is nowhere to put a file. */
+  noTargets?: string;
 }
 
 type Listing = { files: string[] } | { error: string };
@@ -99,12 +103,14 @@ const fileKey = (folder: SampleFolder, path: string) => `f\n${folder.id}\n${path
  * Project. The folders are remembered app-wide, in the library.
  */
 export function SampleBrowser(props: SampleBrowserProps) {
+  // The Mixing page draws one too, so the heading's id is this one's own.
+  const heading = useId();
   return (
-    <section aria-labelledby="samples-heading" className="panel sample-browser">
+    <section aria-labelledby={heading} className="panel sample-browser">
       <div className="panel-head">
-        <h2 id="samples-heading">
+        <h2 id={heading}>
           <FolderTree size={18} aria-hidden />
-          Samples
+          {props.title ?? "Samples"}
         </h2>
       </div>
       {props.source ? (
@@ -116,7 +122,7 @@ export function SampleBrowser(props: SampleBrowserProps) {
   );
 }
 
-function Browser({ source, library, canAudition, targets, onUse, onError }: SampleBrowserProps & { source: SampleSource }) {
+function Browser({ source, library, canAudition, targets, onUse, onError, noTargets }: SampleBrowserProps & { source: SampleSource }) {
   const id = useId();
   // Null until the library has been read, so nothing added meanwhile is lost.
   const [folders, setFolders] = useState<readonly SampleFolder[] | null>(null);
@@ -532,7 +538,7 @@ function Browser({ source, library, canAudition, targets, onUse, onError }: Samp
                 disabled={targets.length === 0}
                 onChange={(event) => event.target.value && onUse(selected, event.target.value)}
               >
-                <option value="">{targets.length === 0 ? "No Audio Track or Pad" : "Choose…"}</option>
+                <option value="">{targets.length === 0 ? (noTargets ?? "No Audio Track or Pad") : "Choose…"}</option>
                 {targets.map((target) => (
                   <option key={target.id} value={target.id}>
                     {target.label}

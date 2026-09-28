@@ -59,7 +59,7 @@ import {
   type InstrumentTrack,
   type PatternClip,
 } from "../project/model";
-import { barTicks, beatTicks, signatureAt, tempoMapOf } from "../project/time";
+import { barStart, barTicks, beatTicks, signatureAt, tempoMapOf } from "../project/time";
 import { ClipExportPanel } from "../export/ClipExportPanel";
 import { ExportPanel } from "../export/ExportPanel";
 import { defaultLayout, setWidgetHidden, type WidgetId, type WidgetLayout } from "../grid/layout";
@@ -90,7 +90,7 @@ import { useMenuShortcuts } from "../ui/menu-shortcuts";
 import { AudioSettings } from "../settings/AudioSettings";
 import { type AudioPreferences, readAudioPreferences, writeAudioPreferences } from "../settings/audio-preferences";
 import { TransportBar } from "../transport/TransportBar";
-import { DEFAULT_TRANSPORT, type TransportSettings, transportCommands } from "../transport/transport-settings";
+import { DEFAULT_TRANSPORT, playRange, type TransportSettings, transportCommands } from "../transport/transport-settings";
 import { UpdateNotice } from "../update/UpdateNotice";
 import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
@@ -290,6 +290,8 @@ export function SongPage({
   const [position, setPosition] = useState<number | null>(null);
   const [meters, setMeters] = useState<Meters | null>(null);
   const [transport, setTransport] = useState<TransportSettings>(DEFAULT_TRANSPORT);
+  // The Section selected on the timeline's Section Lane, which is what Play plays; none plays the whole song.
+  const [playSectionId, setPlaySectionId] = useState<string | null>(null);
   const [stepTicks, setStepTicks] = useState(DEFAULT_STEP_TICKS);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -476,14 +478,33 @@ export function SongPage({
     }
   }, [project, samples, waveforms]);
 
+  // What Play plays: the selected Section, the ruler's region, or the whole song. With Loop on it loops;
+  // with Loop off, playback stops at its end.
+  const songMap = tempoMapOf(project);
+  const playSection = project.sections.find((section) => section.id === playSectionId) ?? null;
+  const range = playRange(
+    transport,
+    songMap,
+    songEndTick(project),
+    playSection && {
+      name: playSection.name,
+      start: barStart(songMap, playSection.startBar),
+      end: barStart(songMap, playSection.startBar + playSection.bars),
+    },
+  );
+
   // Loop and metronome are the transport bar's own; tempo and time signature
   // are the Project's.
   useEffect(() => {
     if (!output) return;
-    for (const command of transportCommands({ ...transport, timeSignature: project.timeSignature })) {
+    const commands = transportCommands(
+      { ...transport, timeSignature: project.timeSignature },
+      { start: range.start, end: range.end },
+    );
+    for (const command of commands) {
       if (command.type !== "setTempo" && command.type !== "setTimeSignature") output.send(command);
     }
-  }, [output, transport, project.timeSignature]);
+  }, [output, transport, project.timeSignature, range.start, range.end]);
 
   // Live notes play through the Track being recorded onto.
   useEffect(() => {
@@ -1161,7 +1182,7 @@ export function SongPage({
           exporter={exporter}
           project={project}
           samples={samples}
-          loop={{ start: transport.loopStart, end: transport.loopEnd }}
+          loop={{ start: range.start, end: range.end }}
         />
       </Dialog>
       <Dialog
@@ -1265,6 +1286,7 @@ export function SongPage({
                   <span className="divider" aria-hidden />
                   <TransportBar
                     settings={{ ...transport, ...projectTiming() }}
+                    range={range}
                     tempoMap={tempoMapOf(project)}
                     onChange={changeTransport}
                     send={send}
@@ -1392,7 +1414,7 @@ export function SongPage({
                   project={project}
                   selectedClipId={selectedClipId}
                   position={position}
-                  loop={{ start: transport.loopStart, end: transport.loopEnd, enabled: transport.loop }}
+                  loop={{ start: range.start, end: range.end, enabled: transport.loop }}
                   clipBars={CLIP_BARS}
                   onSelectClip={(clipId) => {
                     const track = tracks.find((candidate) => candidate.clips.some((clip) => clip.id === clipId));
@@ -1402,7 +1424,12 @@ export function SongPage({
                     else setSelectedClipId(clipId);
                   }}
                   onCommands={execute}
-                  onLoopRegion={(loopStart, loopEnd) => setTransport({ ...transport, loop: true, loopStart, loopEnd })}
+                  onLoopRegion={(loopStart, loopEnd) => {
+                    // A region dragged on the ruler is what plays, in place of a Section.
+                    setPlaySectionId(null);
+                    setTransport({ ...transport, loop: true, loopStart, loopEnd, loopRegionSet: true });
+                  }}
+                  onSelectSection={setPlaySectionId}
                   waveforms={waveformsByPath}
                   absentAudio={absentAudio}
                   clipMenuItems={clipMenuItems}
@@ -1618,6 +1645,8 @@ export function SongPage({
             starting={starting}
             active={view === "mixing"}
             saver={djRecordings}
+            samples={sampleSource}
+            library={library}
           />
         )}
       </div>

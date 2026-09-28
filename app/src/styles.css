@@ -4250,54 +4250,74 @@ button[data-clipping="true"] {
 }
 
 /* ---- The Mixing page (DJ Mixer, ADR 0013) ----
-   CDJ-style Decks around a DJM-style mixer. Text uses the shared tokens, so it
-   keeps their contrast in every theme and palette; the waveform's band colours
-   are graphics only, never text. */
+   Decks drawn as club players and a four-channel club mixer, on panels that are always dark, as the
+   hardware is, with tokens of their own (`.dj-hw`), so every label keeps AA contrast in every theme and
+   palette. The look is the hardware's in general, never a maker's: no names or logos are printed. */
 
 :root {
   --dj-low: rgb(255 77 94 / 0.85);
   --dj-mid: rgb(61 220 151 / 0.7);
   --dj-high: rgb(90 168 255 / 0.75);
-  --dj-screen: #070910;
+  --dj-screen: #05070c;
   --dj-screen-ink: #eef0fa;
   --dj-screen-muted: #a9b0cd;
 }
 
-.dj-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.dj-toolbar {
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.dj-layout,
-.dj-assign,
-.dj-fx-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.dj-assign-button,
-.dj-fx-button {
-  padding: 4px 10px;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+/* The hardware's own palette. Text is #eef0f6 or #b4bacb on panels no lighter than #2b303a: 9:1 and 6:1. */
+.dj-hw {
+  color-scheme: dark;
+  --bg: #07080b;
+  --surface: #1d2028;
+  --surface-2: #272b35;
+  --surface-3: #333845;
+  --border: #3b4150;
+  --control-border: #7c849b;
+  --text: #eef0f6;
+  --text-muted: #b4bacb;
+  --primary: #9d8fff;
+  --on-primary: #0b0d17;
+  --focus: #7dd3fc;
+  --play: #3ddc97;
+  --on-play: #06140e;
+  --warning: #fbbf24;
+  --on-warning: #1a1204;
+  --record: #ff6b6b;
+  --on-record: #1a0606;
+  --meter-low: #3ddc97;
+  --meter-clip: #ff5c5c;
+  --lane-line: #3b4150;
+  --dj-amber: #ffa630;
+  --dj-knob-arc: #e8ecf5;
+  --dj-light: #bcd4ff;
+  --deck: #4aa8ff;
+  position: relative;
+  border: 1px solid #07080a;
+  border-radius: 14px;
   color: var(--text);
-  font-size: 0.75rem;
-  font-weight: 600;
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #2c3039 0%, #1e2128 45%, #16181d 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    inset 0 -1px 0 rgb(0 0 0 / 0.6),
+    0 10px 30px rgb(0 0 0 / 0.35);
 }
 
-.dj-assign-button[aria-checked="true"],
-.dj-fx-button[aria-checked="true"] {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
+[data-deck="1"] {
+  --deck: #ff7a3d;
+}
+
+[data-deck="2"] {
+  --deck: #3ddc97;
+}
+
+[data-deck="3"] {
+  --deck: #c28bff;
+}
+
+.dj-hw :focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* Never wider than the window: whatever doesn't fit wraps, or scrolls inside itself, so the page (and the
@@ -4307,13 +4327,334 @@ button[data-clipping="true"] {
      outside the page's scroll area, stretching the whole window: a second scroll bar that squeezes
      the footer. */
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   min-width: 0;
   max-width: 100%;
 }
 
-/* Wide enough, the Decks stand either side of the mixer, as on a club's booth; narrower, they stand side
-   by side above it; on a phone, one above the other. The mixer's width is bounded, so it never takes the
-   Decks' room. */
+.dj-toolbar {
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.dj-layout {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dj-assign-button {
+  padding: 4px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dj-assign-button[aria-checked="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+/* The hardware's small-caps labels. */
+.dj-hw-caption,
+.dj-hw-title,
+.dj-readout-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dj-hw-title {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+.dj-hw-note {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.dj-hw-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ---- Buttons, lit as the hardware's are ---- */
+
+.dj-hw-button {
+  --light: var(--dj-light);
+  position: relative;
+  min-height: 30px;
+  padding: 5px 6px;
+  border: 1px solid #050608;
+  border-radius: 5px;
+  background: linear-gradient(#3b404c, #262a33);
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 2px 3px rgb(0 0 0 / 0.55);
+  transition: box-shadow 80ms;
+}
+
+.dj-hw-button:hover:not(:disabled) {
+  background: linear-gradient(#444a57, #2b303a);
+}
+
+.dj-hw-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6);
+}
+
+.dj-hw-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dj-hw-button[data-tone="amber"] {
+  --light: var(--dj-amber);
+}
+
+.dj-hw-button[data-tone="green"] {
+  --light: #3ddc97;
+}
+
+.dj-hw-button[data-tone="red"] {
+  --light: #ff6b6b;
+}
+
+.dj-hw-button[data-tone="blue"] {
+  --light: #4aa8ff;
+}
+
+/* Pressed, a button stays dark: only its light says so, as on the hardware. */
+.dj-hw-button[aria-pressed="true"] {
+  background: linear-gradient(#2a2f3b, #1b1e26);
+}
+
+.dj-hw-button[data-light],
+.dj-cue[data-light],
+.dj-play[data-light],
+.dj-fx-lever[data-light] {
+  border-color: var(--light);
+  color: var(--light);
+  box-shadow:
+    0 0 0 1px var(--light),
+    0 0 12px color-mix(in srgb, var(--light) 55%, transparent),
+    inset 0 0 6px color-mix(in srgb, var(--light) 18%, transparent);
+}
+
+[data-light="blink"] {
+  animation: dj-blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes dj-blink {
+  50% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--light) 35%, transparent);
+    border-color: color-mix(in srgb, var(--light) 45%, #050608);
+  }
+}
+
+.dj-hw-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dj-hw-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dj-hw-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.dj-hw-stepper {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.dj-hw-button[data-wide] {
+  width: 100%;
+}
+
+.dj-hw-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid #0b0c10;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.18);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.dj-hw-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+}
+
+.dj-hw-step,
+.dj-switch-position {
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 1px solid #050608;
+  border-radius: 4px;
+  background: #16181d;
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.dj-hw-step[aria-checked="true"],
+.dj-switch-position[aria-checked="true"] {
+  background: #e8ecf5;
+  color: #0b0d12;
+}
+
+.dj-switch {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 5px;
+  background: #050608;
+}
+
+.dj-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.dj-badge[data-kind="master"] {
+  background: var(--dj-amber);
+  color: #1a1204;
+}
+
+.dj-badge[data-kind="sync"] {
+  background: #4aa8ff;
+  color: #04111f;
+}
+
+.dj-badge[data-kind="mt"] {
+  background: #ff6b6b;
+  color: #1a0606;
+}
+
+/* ---- The waveforms across the top ---- */
+
+.dj-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+}
+
+.dj-stack-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dj-stack-lane {
+  display: grid;
+  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
+  border-left: 4px solid var(--deck);
+  border-radius: 4px;
+  background: var(--dj-screen);
+}
+
+.dj-stack-label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  min-width: 0;
+  color: var(--dj-screen-ink);
+}
+
+.dj-stack-facts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.dj-stack-facts .dj-badge {
+  margin-left: 4px;
+}
+
+.dj-stack-title {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-stack-remain {
+  color: var(--dj-screen-muted);
+}
+
+.dj-stack-lane .dj-zoom {
+  height: 64px;
+  border-radius: 0 4px 4px 0;
+}
+
+.dj-stack-empty {
+  display: grid;
+  place-items: center;
+  height: 64px;
+  font-size: 0.72rem;
+  color: var(--dj-screen-muted);
+}
+
+.dj-stack-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.dj-stack-lane[data-playing="true"] .dj-deck-number {
+  box-shadow: 0 0 10px var(--deck);
+}
+
+/* ---- The stage: Decks either side of the mixer ---- */
+
 .dj-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -4322,6 +4663,13 @@ button[data-clipping="true"] {
     "mixer mixer";
   gap: var(--space-3);
   align-items: start;
+  min-width: 0;
+}
+
+.dj-decks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -4336,22 +4684,28 @@ button[data-clipping="true"] {
 .dj-stage > .dj-mixer {
   grid-area: mixer;
   justify-self: center;
-  width: min(100%, 720px);
+  width: min(100%, 600px);
   min-width: 0;
-  overflow-x: auto;
+}
+
+.dj-stage[data-layout="4"] > .dj-mixer {
+  width: min(100%, 760px);
 }
 
 @media (min-width: 1500px) {
   .dj-stage {
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 480px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(520px, 600px) minmax(0, 1fr);
     grid-template-areas: "left mixer right";
   }
 
   .dj-stage[data-layout="4"] {
-    grid-template-columns: minmax(0, 1fr) minmax(480px, 620px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(600px, 700px) minmax(0, 1fr);
   }
 
-  .dj-stage > .dj-mixer {
+  /* Stretched, never sized to its content: a size container has none of its own. */
+  .dj-stage > .dj-mixer,
+  .dj-stage[data-layout="4"] > .dj-mixer {
+    justify-self: stretch;
     width: auto;
   }
 }
@@ -4366,124 +4720,136 @@ button[data-clipping="true"] {
   }
 }
 
-.dj-decks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
-}
+/* ---- A Deck ---- */
 
 .dj-deck {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  gap: 10px;
+  padding: 12px;
   min-width: 0;
 }
 
 .dj-deck[data-playing="true"] {
-  border-color: var(--play);
+  border-color: #000;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 0 0 1px color-mix(in srgb, var(--deck) 60%, transparent),
+    0 10px 30px rgb(0 0 0 / 0.35);
 }
 
-.dj-deck-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+.dj-deck-top {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 78px;
+  gap: 10px;
+  align-items: start;
 }
 
-.dj-deck-head h2 {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: 1rem;
-  min-width: 0;
+.dj-deck-source .dj-hw-button,
+.dj-deck-grid .dj-hw-button {
+  width: 100%;
+}
+
+.dj-deck-grid {
+  align-items: stretch;
+  text-align: center;
 }
 
 .dj-deck-number {
   display: inline-grid;
+  flex: none;
   place-items: center;
   width: 1.6em;
   height: 1.6em;
-  border-radius: 50%;
-  background: var(--primary);
-  color: var(--on-primary);
-  font-weight: 700;
+  border-radius: 4px;
+  background: var(--deck);
+  color: #07080b;
+  font-weight: 900;
 }
 
-.dj-deck-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dj-badge {
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.dj-badge[data-kind="master"] {
-  background: var(--warning);
-  color: var(--on-warning);
-}
-
-.dj-badge[data-kind="sync"] {
-  background: var(--focus);
-  color: var(--on-primary);
-}
-
-/* The CDJ's touch display: always dark, so its colours read the same in every theme. */
+/* The touch display: always dark, so its colours read the same in every theme. */
 .dj-screen {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
+  min-width: 0;
+  padding: 8px;
+  border: 2px solid #000;
+  border-radius: 6px;
   background: var(--dj-screen);
   color: var(--dj-screen-ink);
+  box-shadow:
+    inset 0 0 18px rgb(74 168 255 / 0.08),
+    0 0 0 1px #3b4150;
 }
 
-.dj-screen .hint {
-  color: var(--dj-screen-muted);
+.dj-screen-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.dj-deck-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-screen-error {
+  margin: 0;
+  color: #ff9d9d;
+  font-size: 0.75rem;
 }
 
 .dj-readouts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 4px;
 }
 
 .dj-readout {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 4px 6px;
-  border: 1px solid #2c3150;
-  border-radius: 4px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid #262b3d;
+  border-radius: 3px;
+  background: #0b0e17;
 }
 
-.dj-readout-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
+.dj-readout .dj-readout-label {
+  font-size: 0.58rem;
   color: var(--dj-screen-muted);
 }
 
+.dj-readout-sub {
+  overflow: hidden;
+  font-size: 0.66rem;
+  color: var(--dj-screen-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-readout[data-main="true"] .dj-time {
+  color: #fff;
+  font-size: 1.15rem;
+}
+
 .dj-time {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .dj-bpm {
-  font-size: 1.3rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
 }
 
 .dj-readout[data-warn="true"] {
@@ -4501,45 +4867,32 @@ button[data-clipping="true"] {
 
 @keyframes dj-warn {
   from {
-    background: rgb(255 92 92 / 0.35);
+    background: rgb(255 92 92 / 0.4);
   }
   to {
-    background: transparent;
+    background: #0b0e17;
   }
 }
 
 .dj-empty {
-  padding: var(--space-3);
+  margin: 0;
+  padding: 14px 8px;
   text-align: center;
+  font-size: 0.78rem;
+  color: var(--dj-screen-muted);
 }
 
 .dj-overview,
 .dj-zoom {
   display: block;
   width: 100%;
-  border-radius: 4px;
-  background: #0d101c;
+  border-radius: 3px;
+  background: #0b0e17;
 }
 
 .dj-overview {
-  height: 48px;
+  height: 44px;
   cursor: pointer;
-}
-
-.dj-zoom {
-  height: 96px;
-}
-
-.dj-zoom-row {
-  display: flex;
-  gap: 4px;
-  align-items: stretch;
-}
-
-.dj-zoom-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .dj-bands path {
@@ -4547,7 +4900,7 @@ button[data-clipping="true"] {
 }
 
 .dj-played {
-  fill: rgb(7 9 16 / 0.55);
+  fill: rgb(5 7 12 / 0.55);
 }
 
 .dj-loop {
@@ -4571,7 +4924,7 @@ button[data-clipping="true"] {
 }
 
 .dj-bar-line {
-  stroke: rgb(255 92 92 / 0.8);
+  stroke: rgb(255 92 92 / 0.85);
   stroke-width: 1.5;
 }
 
@@ -4580,74 +4933,145 @@ button[data-clipping="true"] {
   fill: #eef0fa;
 }
 
-.dj-deck-body {
-  display: grid;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(150px, 180px);
-  gap: var(--space-3);
-}
-
-@media (max-width: 900px) {
-  .dj-deck-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.dj-left,
-.dj-centre,
-.dj-right {
+/* The Hot Cue pads: rubber, lit in each cue's own colour. */
+.dj-pads-row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 6px;
+}
+
+.dj-hot-cues {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dj-hot-cue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 2px;
+  border: 1px solid #050608;
+  border-radius: 6px;
+  background: linear-gradient(#30343e, #22252d);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 2px 3px rgb(0 0 0 / 0.5);
+}
+
+.dj-hot-cue[data-set="true"] {
+  background: var(--pad);
+  color: #07080b;
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--pad) 55%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.dj-hot-cue:disabled {
+  opacity: 0.55;
+}
+
+.dj-hot-cue-letter {
+  font-weight: 900;
+}
+
+.dj-hot-cue-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-cue-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dj-cue-name {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.dj-cue-name input {
+  width: 8em;
+  background: #0b0e17;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+}
+
+.dj-deck-body {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) 128px;
+  gap: 10px;
+  align-items: start;
+}
+
+.dj-loop-size {
+  margin-left: 4px;
+  color: var(--dj-amber);
+}
+
+.dj-transport {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.dj-cue,
+.dj-play {
+  --light: var(--dj-amber);
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  border: 4px solid #4a4f5b;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, #464b58, #1b1e25 70%);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 3px 6px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.15);
+}
+
+.dj-play {
+  --light: #3ddc97;
+}
+
+.dj-play[aria-pressed="true"],
+.dj-fx-lever[aria-pressed="true"] {
+  background: radial-gradient(circle at 50% 30%, #464b58, #1b1e25 70%);
+}
+
+.dj-cue:disabled,
+.dj-play:disabled {
+  opacity: 0.5;
+}
+
+.dj-deck-jog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
   min-width: 0;
 }
 
 .dj-jog {
   width: 100%;
-  max-width: 220px;
+  max-width: 300px;
   aspect-ratio: 1;
   touch-action: none;
   user-select: none;
   cursor: grab;
-}
-
-.dj-jog-ring {
-  fill: var(--surface-3);
-  stroke: var(--control-border);
-  stroke-width: 2;
-}
-
-.dj-jog-platter {
-  fill: #11141f;
-  stroke: #2c3150;
-}
-
-.dj-jog-label {
-  fill: #1b1f33;
-}
-
-.dj-jog-groove {
-  fill: none;
-  stroke: rgb(255 255 255 / 0.06);
-}
-
-.dj-jog-mark {
-  stroke: #ffffff;
-  stroke-width: 4;
-  stroke-linecap: round;
-}
-
-.dj-jog[data-playing="true"] .dj-jog-mark {
-  stroke: var(--play);
-}
-
-.dj-jog-cue {
-  stroke: #fbbf24;
-  stroke-width: 4;
-}
-
-.dj-jog-hub {
-  fill: var(--surface-2);
-  stroke: var(--control-border);
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.55));
 }
 
 .dj-jog:focus-visible {
@@ -4656,153 +5080,279 @@ button[data-clipping="true"] {
   border-radius: 50%;
 }
 
-.dj-toggle {
-  padding: 4px 10px;
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 0.75rem;
+.dj-jog-ring {
+  fill: #3a3f4b;
+  stroke: #0a0b0e;
+  stroke-width: 2;
+}
+
+.dj-jog-track {
+  fill: none;
+  stroke: #0b0d12;
+  stroke-width: 6;
+}
+
+.dj-jog-progress {
+  fill: none;
+  stroke: var(--deck);
+  stroke-width: 6;
+}
+
+.dj-jog-platter {
+  fill: #15181e;
+  stroke: #000;
+  stroke-width: 1.5;
+}
+
+.dj-jog-groove {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.07);
+}
+
+.dj-jog-mark {
+  stroke: #eef0f6;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.dj-jog[data-playing="true"] .dj-jog-mark {
+  stroke: var(--deck);
+}
+
+.dj-jog-cue {
+  stroke: #fbbf24;
+  stroke-width: 4;
+}
+
+.dj-jog-display {
+  fill: #05070c;
+  stroke: #3b4150;
+  stroke-width: 2;
+}
+
+.dj-jog-caption,
+.dj-jog-time,
+.dj-jog-bpm {
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.dj-jog-caption {
+  font-size: 9px;
   font-weight: 700;
+  letter-spacing: 0.12em;
+  fill: #b4bacb;
 }
 
-.dj-toggle[aria-pressed="true"] {
-  background: var(--focus);
-  border-color: var(--focus);
-  color: var(--on-primary);
-}
-
-.dj-transport {
-  gap: var(--space-3);
-}
-
-.dj-cue,
-.dj-play {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 3px solid var(--control-border);
-  background: var(--surface-2);
-  color: var(--text);
+.dj-jog-time {
+  font-size: 17px;
   font-weight: 800;
+  fill: #ffffff;
 }
 
-.dj-cue[data-lit="true"] {
-  border-color: var(--warning);
-  color: var(--warning);
-}
-
-.dj-play[aria-pressed="true"] {
-  border-color: var(--play);
-  color: var(--play);
-}
-
-.dj-hot-cues {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.dj-hot-cue {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-height: 42px;
-  padding: 4px 6px;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-muted);
-  text-align: left;
-}
-
-.dj-hot-cue[data-set="true"] {
-  background: var(--surface-3);
-}
-
-.dj-hot-cue-letter {
-  font-weight: 800;
-}
-
-.dj-hot-cue-label {
-  max-width: 100%;
-  overflow: hidden;
-  font-size: 0.7rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dj-cue-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.dj-cue-names input {
-  width: 9em;
-}
-
-.dj-group {
-  margin: 0;
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.dj-group > legend {
-  padding: 0 4px;
-  font-size: 0.75rem;
+.dj-jog-bpm {
+  font-size: 10px;
   font-weight: 700;
+  fill: var(--dj-amber);
 }
 
-.dj-key {
+.dj-jog-modes,
+.dj-brakes {
+  justify-content: center;
+}
+
+.dj-brake-time {
+  display: inline-flex;
   gap: 4px;
+  align-items: center;
+}
+
+.dj-brake-time input {
+  width: 72px;
+  accent-color: var(--dj-amber);
+}
+
+.dj-deck-right {
+  align-items: stretch;
+}
+
+.dj-deck-right > .dj-hw-button {
+  width: 100%;
 }
 
 .dj-tempo {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 4px;
+  justify-items: center;
+}
+
+.dj-tempo-scale {
   display: flex;
-  gap: var(--space-2);
-  align-items: stretch;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 240px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+/* The long faders: a dark slot, and a flat metal cap to slide. */
+.dj-tempo-fader,
+.dj-channel-fader,
+.dj-crossfader input[type="range"] {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 .dj-tempo-fader,
 .dj-channel-fader {
   writing-mode: vertical-lr;
-  direction: rtl;
-  width: 28px;
-  accent-color: var(--primary);
+  width: 36px;
 }
 
 .dj-tempo-fader {
-  height: 220px;
-  /* A CDJ's fader: faster towards you. */
-  direction: ltr;
+  height: 240px;
 }
 
-.dj-tempo-side {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.dj-channel-fader {
+  height: 150px;
+  direction: rtl;
+}
+
+.dj-tempo-fader::-webkit-slider-runnable-track,
+.dj-channel-fader::-webkit-slider-runnable-track {
+  width: 8px;
+  border-radius: 4px;
+  background: #030406;
+  box-shadow: inset 0 0 0 1px #000, 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.dj-tempo-fader::-webkit-slider-thumb,
+.dj-channel-fader::-webkit-slider-thumb {
+  appearance: none;
+  width: 34px;
+  height: 18px;
+  margin-left: -13px;
+  border: 1px solid #07080a;
+  border-radius: 3px;
+  background: linear-gradient(#eef0f6, #a1a8ba 44%, #3b404c 50%, #a1a8ba 56%, #d5d9e3);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.6);
+}
+
+.dj-tempo-fader::-moz-range-track,
+.dj-channel-fader::-moz-range-track {
+  width: 8px;
+  border-radius: 4px;
+  background: #030406;
+}
+
+.dj-tempo-fader::-moz-range-thumb,
+.dj-channel-fader::-moz-range-thumb {
+  width: 34px;
+  height: 18px;
+  border: 1px solid #07080a;
+  border-radius: 3px;
+  background: linear-gradient(#eef0f6, #a1a8ba 44%, #3b404c 50%, #a1a8ba 56%, #d5d9e3);
+}
+
+.dj-tempo-fader:disabled {
+  opacity: 0.5;
+}
+
+/* A Deck too narrow for three columns: the jog wheel on top, its buttons either side below. */
+@container (max-width: 500px) {
+  .dj-deck-top {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "screen screen"
+      "source grid";
+  }
+
+  .dj-screen {
+    grid-area: screen;
+  }
+
+  .dj-deck-source {
+    grid-area: source;
+  }
+
+  .dj-deck-grid {
+    grid-area: grid;
+  }
+
+  .dj-deck-source,
+  .dj-deck-grid {
+    flex-flow: row wrap;
+  }
+
+  .dj-deck-source .dj-hw-button,
+  .dj-deck-grid .dj-hw-button {
+    width: auto;
+    flex: 1 0 auto;
+  }
+
+  .dj-hot-cues {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dj-deck-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "jog jog"
+      "left right";
+  }
+
+  .dj-deck-jog {
+    grid-area: jog;
+  }
+
+  .dj-deck-left {
+    grid-area: left;
+  }
+
+  .dj-deck-right {
+    grid-area: right;
+  }
+
+  .dj-transport {
+    flex-direction: row;
+    justify-content: center;
+  }
 }
 
 /* ---- The mixer ---- */
 
 .dj-mixer {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: linear-gradient(var(--surface-2), var(--surface));
+  gap: 10px;
+  padding: 12px;
+}
+
+.dj-mixer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #0b0c10;
+}
+
+.dj-mixer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 210px);
+  gap: 10px;
 }
 
 .dj-channels {
   display: grid;
-  gap: var(--space-2);
-  align-items: start;
+  grid-template-columns: repeat(var(--channels, 2), minmax(64px, 120px));
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .dj-channel {
@@ -4810,32 +5360,56 @@ button[data-clipping="true"] {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   margin: 0;
-  padding: var(--space-2) 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  padding: 6px 2px 8px;
+  border: 1px solid #0b0c10;
+  border-top: 3px solid var(--deck);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.2);
 }
 
 .dj-channel-number {
+  float: none;
   display: grid;
   place-items: center;
   width: 1.6em;
   height: 1.6em;
-  border-radius: 50%;
-  background: var(--surface-3);
-  font-weight: 800;
+  padding: 0;
+  border-radius: 4px;
+  background: var(--deck);
+  color: #07080b;
+  font-weight: 900;
 }
 
 .dj-channel-bpm {
-  font-size: 0.75rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--dj-screen);
+  color: #fbbf24;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.dj-channel-eq {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+  border-block: 1px solid #0b0c10;
+}
+
+.dj-gr {
+  min-height: 1em;
+  font-size: 0.6rem;
+  color: var(--dj-amber);
 }
 
 .dj-knob {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 0;
 }
 
 .dj-knob svg {
@@ -4850,13 +5424,14 @@ button[data-clipping="true"] {
 }
 
 .dj-knob-body {
-  fill: var(--surface-3);
-  stroke: var(--control-border);
+  fill: #2a2e37;
+  stroke: #050608;
+  stroke-width: 1.5;
 }
 
 .dj-knob-track {
   fill: none;
-  stroke: var(--lane-line);
+  stroke: #0b0d12;
   stroke-width: 3;
 }
 
@@ -4867,19 +5442,21 @@ button[data-clipping="true"] {
 }
 
 .dj-knob-pointer {
-  stroke: var(--text);
+  stroke: #ffffff;
   stroke-width: 2.5;
   stroke-linecap: round;
 }
 
 .dj-knob-label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .dj-knob-value {
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -4891,47 +5468,49 @@ button[data-clipping="true"] {
 }
 
 .dj-kill {
-  padding: 0 6px;
-  border: 1px solid var(--control-border);
-  border-radius: 4px;
-  background: var(--surface-2);
+  padding: 0 5px;
+  border: 1px solid #050608;
+  border-radius: 3px;
+  background: #16181d;
   color: var(--text-muted);
-  font-size: 0.6rem;
-  font-weight: 700;
+  font-size: 0.55rem;
+  font-weight: 800;
 }
 
 .dj-kill[aria-pressed="true"] {
-  background: var(--record);
-  border-color: var(--record);
-  color: var(--on-record);
+  background: #ff6b6b;
+  color: #1a0606;
 }
 
-.dj-cue-button[aria-pressed="true"] {
-  background: var(--warning);
-  border-color: var(--warning);
-  color: var(--on-warning);
+.dj-cue-button {
+  width: 100%;
+  max-width: 64px;
 }
 
 .dj-fader-row {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: stretch;
   height: 150px;
 }
 
-.dj-channel-fader {
-  height: 150px;
+.dj-fader-slot {
+  display: grid;
+  place-items: center;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(0deg, transparent 0 14px, rgb(255 255 255 / 0.08) 14px 15px);
 }
 
 .dj-meter {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 10px;
+  width: 9px;
   padding: 2px;
-  border: 1px solid var(--control-border);
-  border-radius: 3px;
-  background: var(--bg);
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #050608;
 }
 
 .dj-meter[data-clipping="true"] {
@@ -4941,65 +5520,245 @@ button[data-clipping="true"] {
 .dj-meter-segment {
   flex: 1;
   border-radius: 1px;
-  background: var(--lane-line);
+  background: #1c1f26;
 }
 
 .dj-meter-segment[data-lit="true"][data-zone="ok"],
 .dj-meter-segment[data-peak="true"][data-zone="ok"] {
-  background: var(--meter-low);
+  background: #3ddc97;
+  box-shadow: 0 0 4px rgb(61 220 151 / 0.6);
 }
 
 .dj-meter-segment[data-lit="true"][data-zone="hot"],
 .dj-meter-segment[data-peak="true"][data-zone="hot"] {
-  background: var(--warning);
+  background: #fbbf24;
+  box-shadow: 0 0 4px rgb(251 191 36 / 0.6);
 }
 
 .dj-meter-segment[data-lit="true"][data-zone="clip"],
 .dj-meter-segment[data-peak="true"][data-zone="clip"] {
-  background: var(--meter-clip);
+  background: #ff5c5c;
+  box-shadow: 0 0 4px rgb(255 92 92 / 0.7);
 }
 
-.dj-master-section {
+.dj-channel .dj-switch {
+  width: 100%;
+}
+
+.dj-channel .dj-switch-position {
+  padding: 2px 1px;
+  font-size: 0.5rem;
+}
+
+.dj-mixer-side {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 8px;
+  min-width: 0;
 }
 
 .dj-master-row {
-  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-around;
 }
 
-.dj-master-row .dj-meter {
-  height: 110px;
+.dj-master-meters {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 3px;
 }
 
-.dj-division {
-  min-width: 4.5em;
+.dj-master-meters .dj-meter {
+  height: 96px;
+}
+
+.dj-meter-lr {
+  display: contents;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: var(--text-muted);
   text-align: center;
-  font-weight: 700;
 }
 
-.dj-fx-on[aria-pressed="true"] {
-  background: var(--record);
-  border-color: var(--record);
-  color: var(--on-record);
+.dj-fx-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+
+.dj-fx-button {
+  font-size: 0.55rem;
+  padding: 4px 2px;
+}
+
+.dj-fx-display {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 6px;
+  padding: 6px 8px;
+  border: 2px solid #000;
+  border-radius: 4px;
+  background: var(--dj-screen);
+  color: var(--dj-screen-ink);
+  font-size: 0.7rem;
+}
+
+.dj-fx-name {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #7dd3fc;
+}
+
+.dj-fx-division {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  text-align: right;
+}
+
+.dj-fx-bpm,
+.dj-fx-target {
+  color: var(--dj-screen-muted);
+}
+
+.dj-fx-target {
+  text-align: right;
+}
+
+.dj-fx-targets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+}
+
+.dj-fx-lever {
+  --light: #ff6b6b;
+  width: 52px;
+  height: 52px;
+  border: 3px solid #4a4f5b;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 30%, #464b58, #1b1e25 70%);
+  color: var(--text);
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.dj-rec[aria-pressed="true"] {
+  color: #ff9d9d;
 }
 
 .dj-crossfader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #0b0c10;
+}
+
+.dj-crossfader-slot {
   display: flex;
-  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  font-weight: 800;
+  min-width: 0;
 }
 
 .dj-crossfader input[type="range"] {
   width: min(320px, 100%);
-  accent-color: var(--primary);
+  height: 36px;
+}
+
+.dj-crossfader input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #030406;
+  box-shadow: inset 0 0 0 1px #000, 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.dj-crossfader input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 34px;
+  margin-top: -13px;
+  border: 1px solid #07080a;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #eef0f6, #a1a8ba 44%, #3b404c 50%, #a1a8ba 56%, #d5d9e3);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.6);
+}
+
+.dj-crossfader input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #030406;
+}
+
+.dj-crossfader input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 34px;
+  border: 1px solid #07080a;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #eef0f6, #a1a8ba 44%, #3b404c 50%, #a1a8ba 56%, #d5d9e3);
+}
+
+/* A narrow mixer: the Master, FX and recording sections go under the channels, two to a row. */
+@container (max-width: 560px) {
+  .dj-mixer-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dj-mixer-side {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .dj-crossfader {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
 }
 
 /* ---- The Track browser ---- */
+
+.dj-browser:focus {
+  outline: none;
+}
+
+.dj-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.dj-tab {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dj-tab[aria-selected="true"] {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.dj-browser .sample-browser {
+  border: none;
+  padding: 0;
+  background: none;
+}
 
 .dj-browser-scroll {
   max-height: 320px;
@@ -5031,9 +5790,19 @@ button[data-clipping="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dj-readout[data-warn="true"] {
+  .dj-readout[data-warn="true"],
+  [data-light="blink"] {
     animation: none;
-    background: rgb(255 92 92 / 0.35);
+  }
+
+  .dj-readout[data-warn="true"] {
+    background: rgb(255 92 92 / 0.4);
+  }
+
+  .dj-hw-button,
+  .dj-hw-button:active:not(:disabled) {
+    transition: none;
+    transform: none;
   }
 }
 
@@ -5053,4 +5822,52 @@ button[data-clipping="true"] {
 
 .pr-key[data-playable="true"] {
   cursor: pointer;
+}
+
+/* The Synth's pictures as controls: handles to drag. */
+.synth-visual[data-interactive="true"] > svg {
+  touch-action: none;
+}
+
+.synth-handle {
+  cursor: grab;
+}
+
+.synth-handle:active {
+  cursor: grabbing;
+}
+
+.synth-handle-target {
+  fill: transparent;
+}
+
+.synth-handle-dot {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.synth-handle:hover .synth-handle-dot,
+.synth-handle:focus-visible .synth-handle-dot {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.synth-handle:focus-visible {
+  outline: none;
+}
+
+.synth-handle:focus-visible .synth-handle-target {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+.synth-visuals-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* A handle on a picture's edge shows whole. */
+.synth-visual[data-interactive="true"] > svg {
+  overflow: visible;
 }
