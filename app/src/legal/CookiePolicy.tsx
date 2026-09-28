@@ -1,5 +1,6 @@
 import { BROWSER_KEY } from "../assistant/key-store";
-import { GRID_KEY } from "../grid/layout";
+import { GRID_KEY, gridKey } from "../grid/layout";
+import { HEADPHONES_KEY } from "../dj/HeadphonePicker";
 import { OFFSET_KEY } from "../song/AudioRecordPanel";
 import { PALETTE_KEY, THEME_KEY } from "../settings/theme";
 import { CONSENT_KEY } from "./consent";
@@ -26,6 +27,16 @@ const STORED = [
     name: GRID_KEY,
     type: "Functional",
     purpose: "Remembers where you put the Editor's widgets, their sizes, which are pinned and which are hidden.",
+  },
+  {
+    name: gridKey("mixing"),
+    type: "Functional",
+    purpose: "Remembers the same for the Mixer page's widgets: the waveforms, the Decks, the mixer and the Track browser.",
+  },
+  {
+    name: HEADPHONES_KEY,
+    type: "Functional",
+    purpose: "Remembers which audio device the Mixer page's headphone cue plays out of.",
   },
   {
     name: OFFSET_KEY,

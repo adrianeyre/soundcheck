@@ -4,6 +4,9 @@ import {
   defaultLayout,
   fitToContent,
   GRID,
+  GRID_KEY,
+  gridKey,
+  MIXING_WIDGETS,
   moveWidget,
   parseLayout,
   pinWidget,
@@ -11,6 +14,7 @@ import {
   rowsFor,
   serialiseLayout,
   setWidgetHidden,
+  specsOf,
   unfitted,
   WIDGETS,
   widgetSpec,
@@ -50,6 +54,25 @@ test("every Widget starts shown, in the page, inside the Grid and clear of the o
   for (const spec of WIDGETS) expect(layout[spec.id].x + layout[spec.id].w).toBeLessThanOrEqual(GRID.columns);
   expectNoOverlaps(layout);
   expectNoEmptyRows(layout);
+});
+
+test("the Mixer page's Widgets start clear of each other, in a layout of their own", () => {
+  const layout = defaultLayout("mixing");
+  expect(specsOf(layout).map((spec) => spec.id)).toEqual(MIXING_WIDGETS.map((spec) => spec.id));
+  expect(Object.keys(layout)).not.toContain("transport");
+  for (const spec of MIXING_WIDGETS) expect(layout[spec.id].x + layout[spec.id].w).toBeLessThanOrEqual(GRID.columns);
+  expectNoOverlaps(layout);
+  expectNoEmptyRows(layout);
+  // Each page is kept under a key of its own; the Editor's keeps the one it always had.
+  expect(gridKey("editor")).toBe(GRID_KEY);
+  expect(gridKey("mixing")).not.toBe(GRID_KEY);
+  // Moving one page's Widget never touches the other page's layout.
+  const moved = moveWidget(layout, "djMixer", 0, 0);
+  expect(Object.keys(moved).toSorted()).toEqual(Object.keys(layout).toSorted());
+  expectNoOverlaps(moved);
+  // A saved Mixing layout comes back, and one saved wrongly falls back to the starting places.
+  expect(parseLayout(serialiseLayout(moved), "mixing")).toEqual(moved);
+  expect(parseLayout("not json", "mixing")).toEqual(layout);
 });
 
 test("a Widget dropped onto others pushes them down, and the rest stay put", () => {
