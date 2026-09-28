@@ -86,10 +86,10 @@ test("a Widget dropped onto others pushes them down, and the rest stay put", () 
   expect(after.samples.y).toBeGreaterThanOrEqual(before.samples.y);
 });
 
-test("no Zone keeps a row with nothing in it, though a gap beside a Widget stays", () => {
+test("the rows a change frees close up by themselves, though a gap beside a Widget stays", () => {
   const layout = defaultLayout();
-  // Moved down past the end, the last Widget stays under the last row.
-  expect(moveWidget(layout, "eq", 0, 200).eq.y).toBe(layout.eq.y);
+  // Moved down past the end, the last Widget stays where it was dropped: the blank space is the musician's.
+  expect(moveWidget(layout, "eq", 0, 200).eq.y).toBe(200);
   // Shorter, the Transport's rows close up under it.
   const short = resizeWidget(layout, "transport", 24, 4);
   expect(short.assistant.y).toBe(4);
@@ -183,7 +183,8 @@ test("a saved layout comes back as it was, and anything wrong in it falls back",
   // Saved on top of the Transport, the Tracks are settled clear of it, and the rows left empty close.
   expectNoOverlaps(broken);
   expectNoEmptyRows(broken);
-  expectNoEmptyRows(parseLayout(JSON.stringify({ version: 1, widgets: { mixer: { ...defaultLayout().mixer, y: 200 } } })));
+  // Blank rows the musician left above a Widget are theirs, and are kept.
+  expect(parseLayout(JSON.stringify({ version: 1, widgets: { mixer: { ...defaultLayout().mixer, y: 200 } } })).mixer.y).toBe(200);
 });
 
 test("Widgets that were away come back where they were kept, pushing down what moved into their rows", () => {
@@ -260,14 +261,16 @@ test("a Widget the musician makes taller keeps its height, blank space and all, 
   expectNoEmptyRows(fitToContent(sized, { samples: 8 }));
 });
 
-test("a change made as drawn is kept with each Widget's own height, but the one resized", () => {
+test("a change made as drawn is kept at the heights drawn, with the most each takes beside them, but the one resized", () => {
   const layout = defaultLayout();
   const drawn = fitToContent(layout, { transport: 4, tracks: 5, timeline: 6 });
   // The Assistant is moved above the Transport, as drawn.
   const kept = unfitted(moveWidget(drawn, "assistant", 0, 0), layout, null);
   expect(kept.assistant.y).toBe(0);
-  expect(kept.transport.h).toBe(layout.transport.h);
-  expect(kept.tracks.h).toBe(layout.tracks.h);
+  expect(kept.transport).toMatchObject({ h: 4, room: layout.transport.h });
+  expect(kept.tracks).toMatchObject({ h: 5, room: layout.tracks.h });
+  // Drawn again with more to show, each grows back into its room, and no further.
+  expect(fitToContent(kept, { transport: 100 }).transport.h).toBe(layout.transport.h);
   expectNoOverlaps(kept);
   expectNoEmptyRows(kept);
   // Resized, a Widget keeps the height it was given.
@@ -302,4 +305,33 @@ test("a change made while the Assistant has grown keeps it at its own height, to
   expectNoEmptyRows(kept);
   // Resized, it keeps the height it was given, as any Widget does.
   expect(unfitted(resizeWidget(drawn, "assistant", 24, 8), layout, "assistant").assistant.h).toBe(8);
+});
+
+test("on the Mixer page, the Track browser fits under a Deck shorter than the mixer beside it, with blank space between if wanted", () => {
+  const layout = defaultLayout("mixing");
+  // The Decks' content is 30 rows, the mixer's 40: each is drawn no taller.
+  const needed = { djWaveforms: 6, deck1: 30, djMixer: 40, deck2: 30, djBrowser: 14 };
+  const drawn = fitToContent(withoutWidgets(layout, ["deck3", "deck4"]), needed);
+  const under = drawn.deck1.y + drawn.deck1.h;
+  expect(under).toBeLessThan(drawn.djMixer.y + drawn.djMixer.h);
+
+  // Dropped right under Deck 1, as wide as it, beside the taller mixer.
+  const moved = moveWidget(resizeWidget(drawn, "djBrowser", 8, 14), "djBrowser", 0, under);
+  const kept = unfitted(moved, layout, null);
+  expect(kept.djBrowser).toMatchObject({ x: 0, y: under });
+  expectNoOverlaps(kept);
+  // Drawn again, it is still there, and so are the Decks and the mixer.
+  const again = fitToContent(withoutWidgets(kept, ["deck3", "deck4"]), needed);
+  expect(again.djBrowser).toMatchObject({ x: 0, y: under });
+  expect(again.djMixer.y).toBe(drawn.djMixer.y);
+
+  // Dropped lower, with blank space between it and Deck 1, it stays there too.
+  const lower = unfitted(moveWidget(again, "djBrowser", 0, under + 3), kept, null);
+  expect(fitToContent(withoutWidgets(lower, ["deck3", "deck4"]), needed).djBrowser.y).toBe(under + 3);
+
+  // If Deck 1's content grows back into its room, it pushes the browser down rather than overlapping it.
+  const grown = fitToContent(withoutWidgets(lower, ["deck3", "deck4"]), { ...needed, deck1: 40 });
+  expect(grown.deck1.h).toBe(40);
+  expect(grown.djBrowser.y).toBe(grown.deck1.y + 40);
+  expectNoOverlaps(grown);
 });
