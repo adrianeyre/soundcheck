@@ -97,12 +97,112 @@ export interface DelaySettings {
   mix: number;
 }
 
+/** The shapes the Saturator bends the signal with, as the engine lists them. */
+export const SATURATOR_SHAPES = ["soft", "hard", "tube", "fold"] as const;
+
+export interface SaturatorSettings {
+  driveDb: number;
+  /** Soft (tanh), hard (a clipper), tube (lopsided, for even harmonics) or fold (a wavefolder). */
+  shape: (typeof SATURATOR_SHAPES)[number];
+  /** The high-cut after the shaper. */
+  toneHz: number;
+  outputDb: number;
+  /** 0..1: 0 is only the dry signal, 1 only the saturated one. */
+  mix: number;
+}
+
+export interface ChorusSettings {
+  rateHz: number;
+  depthMs: number;
+  delayMs: number;
+  feedback: number;
+  /** 0..1: how far apart the sides swing, up to half a cycle. */
+  width: number;
+  mix: number;
+}
+
+/** How many all-pass stages the Phaser runs, as the engine lists them. */
+export const PHASER_STAGES = ["2", "4", "6", "8", "12"] as const;
+
+export interface PhaserSettings {
+  rateHz: number;
+  depth: number;
+  centreHz: number;
+  feedback: number;
+  stages: (typeof PHASER_STAGES)[number];
+  mix: number;
+}
+
+/** The Auto Filter's modes, as the engine lists them. */
+export const FILTER_MODES = ["low-pass", "high-pass", "band-pass", "notch"] as const;
+
+export interface FilterSettings {
+  mode: (typeof FILTER_MODES)[number];
+  cutoffHz: number;
+  /** The filter's Q. */
+  resonance: number;
+  lfoRateHz: number;
+  /** How far the LFO moves the cutoff either way, in octaves. */
+  lfoDepth: number;
+  driveDb: number;
+  mix: number;
+}
+
+export interface GateSettings {
+  thresholdDb: number;
+  /** How far a closed gate turns the signal down: -80 dB is silence. */
+  rangeDb: number;
+  /** Milliseconds. */
+  attack: number;
+  /** Milliseconds the gate stays open after the signal falls below the threshold. */
+  hold: number;
+  /** Milliseconds. */
+  release: number;
+}
+
+export interface LimiterSettings {
+  inputGainDb: number;
+  /** The level nothing leaving the Limiter goes past. */
+  ceilingDb: number;
+  /** Milliseconds. */
+  release: number;
+  /** Milliseconds the signal is held back so each peak is seen coming. */
+  lookahead: number;
+}
+
+export interface BitcrusherSettings {
+  /** 1 to 24, whole. */
+  bits: number;
+  /** How many samples each is held for, 1 to 64, whole. */
+  downsample: number;
+  mix: number;
+}
+
+export interface UtilitySettings {
+  gainDb: number;
+  /** 0 is mono, 1 as it is, 2 twice as wide. */
+  width: number;
+  /** A balance, -1 (left) to 1 (right). */
+  pan: number;
+  invertLeft: OnOff;
+  invertRight: OnOff;
+  mono: OnOff;
+}
+
 /** Each kind of Effect, with the settings it keeps. */
 export interface EffectSettingsByType {
   eq: EqSettings;
   compressor: CompressorSettings;
   reverb: ReverbSettings;
   delay: DelaySettings;
+  saturator: SaturatorSettings;
+  chorus: ChorusSettings;
+  phaser: PhaserSettings;
+  filter: FilterSettings;
+  gate: GateSettings;
+  limiter: LimiterSettings;
+  bitcrusher: BitcrusherSettings;
+  utility: UtilitySettings;
 }
 
 export type EffectType = keyof EffectSettingsByType;
@@ -139,6 +239,20 @@ function q<S>(name: keyof S & string, label: string): EffectParam<S> {
 
 function onOff<S>(name: keyof S & string, label: string): EffectParam<S> {
   return { name, label, unit: "", min: 0, max: 1, default: 0, step: 1, choices: ["off", "on"] };
+}
+
+function number<S>(
+  name: keyof S & string,
+  label: string,
+  unit: string,
+  [min, max, value]: [number, number, number],
+  step = 0,
+): EffectParam<S> {
+  return { name, label, unit, min, max, default: value, step, choices: [] };
+}
+
+function pick<S>(name: keyof S & string, label: string, choices: readonly string[], value: number): EffectParam<S> {
+  return { name, label, unit: "", min: 0, max: choices.length - 1, default: value, step: 1, choices };
 }
 
 function amount<S>(name: keyof S & string, label: string, value: number): EffectParam<S> {
@@ -200,10 +314,81 @@ export const EFFECT_PARAMS: { readonly [T in EffectType]: readonly EffectParam<E
     onOff("pingPong", "Ping-pong"),
     amount("mix", "Mix", 0.3),
   ],
+  saturator: [
+    number("driveDb", "Drive", "dB", [0, 36, 6]),
+    pick("shape", "Shape", SATURATOR_SHAPES, 0),
+    number("toneHz", "Tone", "Hz", [500, 20000, 12000]),
+    number("outputDb", "Output", "dB", [-24, 12, 0]),
+    amount("mix", "Mix", 1),
+  ],
+  chorus: [
+    number("rateHz", "Rate", "Hz", [0.05, 8, 0.8]),
+    number("depthMs", "Depth", "ms", [0, 10, 3]),
+    number("delayMs", "Delay", "ms", [1, 30, 12]),
+    number("feedback", "Feedback", "", [0, 0.9, 0]),
+    amount("width", "Width", 1),
+    amount("mix", "Mix", 0.5),
+  ],
+  phaser: [
+    number("rateHz", "Rate", "Hz", [0.05, 8, 0.5]),
+    amount("depth", "Depth", 0.7),
+    number("centreHz", "Centre", "Hz", [100, 8000, 800]),
+    number("feedback", "Feedback", "", [0, 0.9, 0.5]),
+    pick("stages", "Stages", PHASER_STAGES, 1),
+    amount("mix", "Mix", 0.5),
+  ],
+  filter: [
+    pick("mode", "Mode", FILTER_MODES, 0),
+    number("cutoffHz", "Cutoff", "Hz", [20, 20000, 2000]),
+    number("resonance", "Resonance", "Q", [0.5, 18, 0.7]),
+    number("lfoRateHz", "LFO rate", "Hz", [0.05, 20, 1]),
+    number("lfoDepth", "LFO depth", "oct", [0, 4, 0]),
+    number("driveDb", "Drive", "dB", [0, 24, 0]),
+    amount("mix", "Mix", 1),
+  ],
+  gate: [
+    number("thresholdDb", "Threshold", "dB", [-80, 0, -40]),
+    number("rangeDb", "Range", "dB", [-80, 0, -80]),
+    number("attack", "Attack", "ms", [0.1, 50, 1]),
+    number("hold", "Hold", "ms", [0, 500, 20]),
+    number("release", "Release", "ms", [5, 2000, 100]),
+  ],
+  limiter: [
+    number("inputGainDb", "Input gain", "dB", [0, 24, 0]),
+    number("ceilingDb", "Ceiling", "dB", [-12, 0, -0.3]),
+    number("release", "Release", "ms", [1, 1000, 50]),
+    number("lookahead", "Lookahead", "ms", [0, 10, 3]),
+  ],
+  bitcrusher: [
+    number("bits", "Bits", "bit", [1, 24, 8], 1),
+    number("downsample", "Downsample", "x", [1, 64, 1], 1),
+    amount("mix", "Mix", 1),
+  ],
+  utility: [
+    number("gainDb", "Gain", "dB", [-36, 36, 0]),
+    number("width", "Width", "", [0, 2, 1]),
+    number("pan", "Pan", "", [-1, 1, 0]),
+    onOff("invertLeft", "Invert left"),
+    onOff("invertRight", "Invert right"),
+    onOff("mono", "Mono"),
+  ],
 };
 
 /** Every kind of Effect, in the order the UI offers them. */
-export const EFFECT_TYPES: readonly EffectType[] = ["eq", "compressor", "reverb", "delay"];
+export const EFFECT_TYPES: readonly EffectType[] = [
+  "eq",
+  "compressor",
+  "reverb",
+  "delay",
+  "saturator",
+  "chorus",
+  "phaser",
+  "filter",
+  "gate",
+  "limiter",
+  "bitcrusher",
+  "utility",
+];
 
 /** What the UI calls each kind of Effect. */
 export const EFFECT_NAMES: { readonly [T in EffectType]: string } = {
@@ -211,6 +396,14 @@ export const EFFECT_NAMES: { readonly [T in EffectType]: string } = {
   compressor: "Compressor",
   reverb: "Reverb",
   delay: "Delay",
+  saturator: "Saturator",
+  chorus: "Chorus",
+  phaser: "Phaser",
+  filter: "Auto Filter",
+  gate: "Gate",
+  limiter: "Limiter",
+  bitcrusher: "Bitcrusher",
+  utility: "Utility",
 };
 
 /** Each setting of `type`'s table, looked at without its settings' type. */

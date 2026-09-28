@@ -132,6 +132,11 @@ const MIGRATIONS: Record<number, (project: Record<string, unknown>) => Record<st
   // song is unchanged; the new version keeps an older Soundcheck, which
   // would open the base alone and lose every Change, from opening one.
   16: (project) => project,
+  // 17 -> 18: eight more built-in Effects: the Saturator, Chorus, Phaser,
+  // Auto Filter, Gate, Limiter, Bitcrusher and Utility. A schema 17 song has
+  // none; the new version keeps an older Soundcheck, which doesn't know them,
+  // from opening one.
+  17: (project) => project,
 };
 
 function migrateAudioClip(clip: unknown, tempo: unknown): unknown {

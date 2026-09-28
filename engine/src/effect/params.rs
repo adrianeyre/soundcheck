@@ -35,6 +35,11 @@ impl<S> Clone for Param<S> {
 impl<S> Copy for Param<S> {}
 
 impl<S> Param<S> {
+    /// The same setting, taking only whole multiples of `step`.
+    pub const fn stepped(self, step: f32) -> Self {
+        Self { step, ..self }
+    }
+
     pub fn get(&self, settings: &S) -> f32 {
         (self.get)(settings)
     }
@@ -121,6 +126,17 @@ pub const fn choice<S>(
         get,
         set,
     }
+}
+
+/// A switch's value: 1 for on, 0 for off.
+pub fn on(value: bool) -> f32 {
+    f32::from(u8::from(value))
+}
+
+/// The coefficient of a one-pole smoother that covers 63% of the way to its
+/// target in `ms` milliseconds.
+pub fn time_coefficient(ms: f32, sample_rate: f32) -> f32 {
+    (-1.0 / (ms / 1_000.0 * sample_rate).max(1.0)).exp()
 }
 
 /// Settings made from a table: the defaults and the flat form come from it.

@@ -1009,7 +1009,7 @@ test("an argument that is missing, unknown or out of range changes nothing", () 
     ["set_track_mute", { trackId: "keys", mute: "yes" }],
     ["set_track_solo", { trackId: "keys", solo: 1 }],
     ["set_master_volume", { volume: 2.5 }],
-    ["add_effect", { channel: "keys", effect: "chorus" }],
+    ["add_effect", { channel: "keys", effect: "vocoder" }],
     ["add_effect", { channel: "guitar", effect: "eq" }],
     ["add_effect", { channel: "keys", effect: "eq", index: 3 }],
     ["add_effect", { channel: "keys", effect: "eq", settings: { band1GainDb: 30 } }],
@@ -1221,7 +1221,7 @@ test("a Compressor or Reverb setting outside the range its Effect declares is re
 test("the model is told it can add a Compressor or a Reverb, and every one of their settings", () => {
   const add = TOOL_DEFINITIONS.find((tool) => tool.name === "add_effect")!;
   expect((add.input_schema as unknown as { properties: { effect: { description: string } } }).properties.effect.description).toContain(
-    "eq, compressor, reverb, delay, or plugin:<id> for one of the installed Plugins",
+    "eq, compressor, reverb, delay, saturator, chorus, phaser, filter, gate, limiter, bitcrusher, utility, or plugin:<id> for one of the installed Plugins",
   );
   for (const description of [add.description, TOOL_DEFINITIONS.find((tool) => tool.name === "set_effect_settings")!.description]) {
     expect(description).toContain(
@@ -1268,7 +1268,7 @@ test("a Delay's preset, note value and feedback are checked against what it offe
     "The Delay has no preset called \"Tape\". Its presets are: Slapback, Quarter echo, Dotted-eighth ping-pong.",
   );
   expect(() => plan("add_effect", { channel: "master", effect: "eq", preset: "Slapback" })).toThrow(
-    "The EQ has no preset called \"Slapback\". It has none.",
+    "The EQ has no preset called \"Slapback\". Its presets are: Vocal presence, Low-end cleanup, Kick punch, Telephone.",
   );
   expect(() => plan("add_effect", { channel: "master", effect: "delay", settings: { note: "1/3" } })).toThrow(
     "The Delay's note must be one of 1/16 triplet, 1/16,",
@@ -1466,7 +1466,9 @@ test("load_preset loads a factory Preset too, and refuses what it can't load", (
   expect(() => plan("load_preset", { trackId: "keys", preset: "Glass Keys" })).toThrow(
     /The Synth has no preset called "Glass Keys". Its presets are: Sub Bass/,
   );
-  expect(() => plan("load_preset", { effectId: "keys-eq", preset: "Huge Hall" })).toThrow("It has none.");
+  expect(() => plan("load_preset", { effectId: "keys-eq", preset: "Huge Hall" })).toThrow(
+    'The EQ has no preset called "Huge Hall". Its presets are: Vocal presence',
+  );
   expect(() => plan("load_preset", { preset: "Warm Pad" })).toThrow("one of them");
   expect(() => plan("load_preset", { trackId: "keys", effectId: "keys-eq", preset: "Warm Pad" })).toThrow("one of them");
   expect(() => plan("load_preset", { trackId: "drums", preset: "Warm Pad" })).toThrow("set_instrument");
