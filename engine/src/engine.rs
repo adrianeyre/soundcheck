@@ -135,7 +135,7 @@ pub struct Engine {
     /// The audio files Audio Clips play, decoded, by the number the host
     /// gave each. A native host keeps its own and hands clips in ready-made.
     audio_files: HashMap<u32, Arc<AudioFile>>,
-    /// The Mixing page's DJ Mixer (ADR 0013), once it is first used: added
+    /// The Mixer page's DJ Mixer (ADR 0013), once it is first used: added
     /// to the output after the song's Master is metered, so no meter,
     /// analysis or export of the song hears it.
     dj: Option<Box<DjMixer>>,
@@ -1032,7 +1032,7 @@ impl Engine {
         true
     }
 
-    /// Where everything on the Mixing page is, as `app/src/dj/dj-report.ts`
+    /// Where everything on the Mixer page is, as `app/src/dj/dj-report.ts`
     /// reads it.
     pub fn dj_report(&self) -> Vec<f64> {
         let mut out = vec![0.0; DJ_REPORT_LEN];

@@ -96,6 +96,7 @@ import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
 import { useUpdates } from "../update/useUpdates";
 import { DjPage } from "../dj/DjPage";
+import type { HeadphoneOutput } from "../dj/headphone-output";
 import { browserRecordingSaver, type DjRecordingSaver } from "../dj/recording-saver";
 import { AudioEditor } from "./AudioEditor";
 import { NoteTools } from "./NoteTools";
@@ -137,8 +138,10 @@ export interface SongPageProps {
   storage?: FileStorage | null;
   /** Exports the mix as a WAV file; null where it can't. */
   exporter?: MixExporter | null;
-  /** Saves a recording of the Mixing page's DJ mix; the browser's way without one. */
+  /** Saves a recording of the Mixer page's DJ mix; the browser's way without one. */
   djRecordings?: DjRecordingSaver;
+  /** Where the Mixer page's headphone cue can play: a second output device, or null where the platform can't choose one. */
+  headphones?: HeadphoneOutput | null;
   /** Where the Assistant's API key lives; no key store, no Assistant. */
   keyStore?: KeyStore;
   /** How the Assistant's requests go out; the global fetch unless the platform says otherwise. */
@@ -210,6 +213,13 @@ export interface SongPageProps {
     /** Told which Widgets have nothing to show whenever that changes, so the Grid menu can say so. */
     onEmpty?: (empty: readonly WidgetId[]) => void;
   };
+  /** Where the Mixer page's Widgets sit, as `grid` is the Editor's. */
+  mixingGrid?: {
+    layout: WidgetLayout;
+    onLayout: (layout: WidgetLayout) => void;
+    pinned?: WidgetGridProps["pinned"];
+    onEmpty?: (empty: readonly WidgetId[]) => void;
+  };
 }
 
 export type SongView = "editor" | "settings" | "mixing";
@@ -244,6 +254,7 @@ export function SongPage({
   storage = null,
   exporter = null,
   djRecordings = browserRecordingSaver(),
+  headphones,
   stems: stemSeparator = null,
   updater = null,
   keyStore,
@@ -270,6 +281,7 @@ export function SongPage({
   header,
   menu,
   grid,
+  mixingGrid,
 }: SongPageProps) {
   const [ownLayout, setOwnLayout] = useState(defaultLayout);
   const layout = grid?.layout ?? ownLayout;
@@ -542,12 +554,12 @@ export function SongPage({
 
   useEffect(() => () => void outputRef.current?.close(), []);
 
-  // The Editor's song stops while the Mixing page is open, so only the DJ
+  // The Editor's song stops while the Mixer page is open, so only the DJ
   // mix is heard (ADR 0013).
   useEffect(() => {
     if (view === "mixing") output?.send({ type: "stop" });
   }, [view, output]);
-  // The Mixing page is drawn once it is first opened, and kept, so its
+  // The Mixer page is drawn once it is first opened, and kept, so its
   // Decks stay as the DJ left them.
   const [mixingOpened, setMixingOpened] = useState(view === "mixing");
   if (view === "mixing" && !mixingOpened) setMixingOpened(true);
@@ -1636,7 +1648,7 @@ export function SongPage({
 
       <div id={viewPanelId("mixing")} className="page dj-page-wrap" hidden={view !== "mixing"} aria-labelledby="mixing-title">
         <h1 id="mixing-title" className="page-title">
-          Mixing
+          Mixer
         </h1>
         {mixingOpened && (
           <DjPage
@@ -1645,8 +1657,10 @@ export function SongPage({
             starting={starting}
             active={view === "mixing"}
             saver={djRecordings}
+            headphones={headphones}
             samples={sampleSource}
             library={library}
+            grid={mixingGrid}
           />
         )}
       </div>

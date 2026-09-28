@@ -1,5 +1,5 @@
 /**
- * What the Mixing page keeps of the DJ's session: the files loaded, each
+ * What the Mixer page keeps of the DJ's session: the files loaded, each
  * Deck's cues and display settings, and the mixer's knobs as last set. None
  * of it is the Project's (ADR 0013); it lasts as long as the page is open.
  * The engine is told every knob as it moves, and all of them again when a

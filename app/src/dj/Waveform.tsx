@@ -54,6 +54,8 @@ export interface OverviewProps {
   loop: { start: number; end: number } | null;
   /** Needle Search: move the playhead to `seconds`. */
   onSeek: (seconds: number) => void;
+  /** Its name, when the Deck's own overview already has "Deck N needle search". */
+  label?: string;
 }
 
 const OVERVIEW_WIDTH = 600;
@@ -65,14 +67,14 @@ const OVERVIEW_HEIGHT = 44;
  * dimmed. Clicking it moves the playhead there (Needle Search); with the
  * keyboard, the arrow keys move it by five seconds.
  */
-export function Overview({ deck, analysis, position, cue, hotCues, loop, onSeek }: OverviewProps) {
+export function Overview({ deck, analysis, position, cue, hotCues, loop, onSeek, label }: OverviewProps) {
   const columns = useMemo(() => columnsOf(analysis, 0, analysis.seconds, 300), [analysis]);
   const x = (seconds: number) => (seconds / Math.max(0.001, analysis.seconds)) * OVERVIEW_WIDTH;
   return (
     <svg
       role="slider"
       tabIndex={0}
-      aria-label={`Deck ${deck + 1} needle search`}
+      aria-label={label ?? `Deck ${deck + 1} needle search`}
       aria-valuemin={0}
       aria-valuemax={Math.round(analysis.seconds)}
       aria-valuenow={Math.round(position)}
@@ -117,17 +119,21 @@ export interface ZoomProps {
   cue: number;
   hotCues: readonly (HotCue | null)[];
   loop: { start: number; end: number } | null;
+  /** The pixels it is shown at; a stretched 800 by 90 without. */
+  size?: { width: number; height: number };
 }
 
-const ZOOM_WIDTH = 800;
-const ZOOM_HEIGHT = 90;
+const DEFAULT_ZOOM = { width: 800, height: 90 };
 
 /**
  * The waveform close up, scrolling past a playhead fixed in the middle, with
  * the Beat Grid's beats drawn over it, each bar's first beat bold and
  * numbered, and the cue, Hot Cues and loop.
  */
-export function Zoom({ deck, analysis, position, span, bpm, firstBeat, cue, hotCues, loop }: ZoomProps) {
+export function Zoom({ deck, analysis, position, span, bpm, firstBeat, cue, hotCues, loop, size = DEFAULT_ZOOM }: ZoomProps) {
+  // Drawn at the size it is shown, where that is known, so its numbers aren't stretched.
+  const ZOOM_WIDTH = Math.max(1, Math.round(size.width));
+  const ZOOM_HEIGHT = Math.max(1, Math.round(size.height));
   const from = position - span;
   const to = position + span;
   // Columns fixed to the file's own time, so the waveform doesn't shimmer as it scrolls.

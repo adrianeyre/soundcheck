@@ -1259,3 +1259,32 @@ fn soundcheck_engine_test_wav() -> Vec<u8> {
     out.extend(data);
     out
 }
+
+#[test]
+fn the_headphone_cue_reaches_a_second_devices_ring_and_a_fake_device_plays_it() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let prepared = PreparedDjTrack::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put(0, prepared);
+    controller.send(dj("deck", 0, "play", 1.0));
+    controller.send(dj("channel", 0, "cue", 1.0));
+    controller.send(dj("channel", 0, "fader", 0.0));
+    controller.send(dj("mixer", 0, "headphoneLevel", 1.0));
+    let (producer, consumer) = crate::headphones::ring(RATE);
+    controller.set_headphones(Some(producer));
+    // The main output is stereo: no outputs 3 and 4, so the ring is the only way to hear the cue.
+    let main = play(&mut renderer, 4_096, 256);
+    assert_eq!(
+        peak(&main),
+        0.0,
+        "the fader is down, so the Master is silent"
+    );
+    // The "second device": a reader at 44.1 kHz, as a headset might run.
+    let mut reader = crate::headphones::DriftReader::new(consumer, RATE, 44_100);
+    let mut heard = vec![0.0f32; 2 * 1_500];
+    reader.fill(&mut heard, 2, |s| s);
+    assert!(peak(&heard) > 0.1, "the cue plays on the second device");
+
+    // Taking the ring away hands it back to be dropped off the audio thread.
+    controller.set_headphones(None);
+    play(&mut renderer, 256, 256);
+}

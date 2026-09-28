@@ -22,7 +22,7 @@ import {
   rowsFor,
   setWidgetHidden,
   unfitted,
-  WIDGETS,
+  specsOf,
   widgetSpec,
   widgetsIn,
   withoutWidgets,
@@ -52,6 +52,12 @@ export interface WidgetGridProps {
    * one, a Zone is drawn in place.
    */
   pinned?: Partial<Record<"top" | "bottom", HTMLElement | null>>;
+}
+
+/** Whether two measurements of the Widgets' rows are the same, Widget for Widget: those of this Grid's page. */
+function sameRows(a: Partial<Record<WidgetId, number>>, b: Partial<Record<WidgetId, number>>): boolean {
+  const ids = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<WidgetId>;
+  return [...ids].every((id) => a[id] === b[id]);
 }
 
 /** How far the pointer must go before a press becomes a drag, so a click stays a click. */
@@ -89,7 +95,7 @@ const describe = (title: string, cell: Cell) =>
   `${title}: column ${cell.x + 1}, row ${cell.y + 1}, ${cell.w} wide by ${cell.h} tall.`;
 
 /**
- * The Editor's Widgets on their Grid (ADR 0004). Each is dragged by its bar
+ * A page's Widgets on their Grid (ADR 0004): the Editor's, or the Mixer page's. Each is dragged by its bar
  * and resized by its corner, snapping to whole cells; from the keyboard, its
  * grip moves it with the arrow keys and resizes it with Shift and the arrow
  * keys. Pinned Widgets are full-width bands under the title bar or above
@@ -100,7 +106,9 @@ export function WidgetGrid({ layout: given, onLayout: save, widgets, pinned, emp
   const present = (id: WidgetId) => widgets[id] !== undefined;
   // A Widget this page leaves out, or with nothing to show, takes no rows on it, and keeps whether
   // the musician hid it for when it is drawn.
-  const absent = WIDGETS.map((spec) => spec.id).filter((id) => !present(id) || empty.includes(id));
+  // This page's Widgets are the ones its layout holds.
+  const specs = specsOf(given);
+  const absent = specs.map((spec) => spec.id).filter((id) => !present(id) || empty.includes(id));
   const kept = withoutWidgets(given, absent);
   // How many rows each Widget's content needs, measured as it is drawn: none is drawn taller.
   const [needed, setNeeded] = useState<Partial<Record<WidgetId, number>>>({});
@@ -155,7 +163,8 @@ export function WidgetGrid({ layout: given, onLayout: save, widgets, pinned, emp
         if (!body || !frame || !zone || host.offsetHeight === 0) continue;
         next[id] = rowsFor(frame.offsetHeight - body.clientHeight + host.offsetHeight, zone);
       }
-      setNeeded((current) => (WIDGETS.every((spec) => current[spec.id] === next[spec.id]) ? current : next));
+      // The Widgets measured are this Grid's own, so the measurements are compared on theirs.
+      setNeeded((before) => (sameRows(before, next) ? before : next));
     };
     observer.current = new ResizeObserver(measure);
     return () => observer.current?.disconnect();
@@ -319,7 +328,8 @@ export function WidgetGrid({ layout: given, onLayout: save, widgets, pinned, emp
       scroller?.removeEventListener("scroll", onScroll);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [isDragging]);
+    // The refs are the same objects for the Grid's life; listed, the effect still runs only when a drag starts or ends.
+  }, [isDragging, gesture, latest]);
   const [actions] = useState<FrameActions>(() => ({
     begin: (event, id, kind) => latest.current.begin(event, id, kind),
     track: (event) => latest.current.track(event),
@@ -415,7 +425,7 @@ export function WidgetGrid({ layout: given, onLayout: save, widgets, pinned, emp
       <p className="visually-hidden" aria-live="polite">
         {announcement}
       </p>
-      {WIDGETS.filter((spec) => present(spec.id)).map((spec) => createPortal(widgets[spec.id], hostFor(spec.id), spec.id))}
+      {specs.filter((spec) => present(spec.id)).map((spec) => createPortal(widgets[spec.id], hostFor(spec.id), spec.id))}
     </>
   );
 }

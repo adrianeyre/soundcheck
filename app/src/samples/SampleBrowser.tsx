@@ -103,7 +103,7 @@ const fileKey = (folder: SampleFolder, path: string) => `f\n${folder.id}\n${path
  * Project. The folders are remembered app-wide, in the library.
  */
 export function SampleBrowser(props: SampleBrowserProps) {
-  // The Mixing page draws one too, so the heading's id is this one's own.
+  // The Mixer page draws one too, so the heading's id is this one's own.
   const heading = useId();
   return (
     <section aria-labelledby={heading} className="panel sample-browser">

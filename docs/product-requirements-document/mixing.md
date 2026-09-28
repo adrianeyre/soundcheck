@@ -1,4 +1,4 @@
-# PRD: The Mixing page (DJ Mixer)
+# PRD: The Mixer page (DJ Mixer)
 
 Terms in **bold** are defined in [`CONTEXT.md`](../../CONTEXT.md). Where the DJ Mixer runs, and how its sound reaches the audio output beside the song, is settled in [ADR 0013](../architectural-decision-record/0013-the-dj-mixer-runs-in-the-audio-engine.md); this doc covers what is built on it. It ships in one pull request with the Editor's new Widgets.
 
@@ -26,7 +26,7 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 
 ### The page
 
-1. As a DJ, **Menu → Mixing** opens the Mixing page, as Settings opens. The Editor's song stops while it is open, and going back leaves my **Decks** as they were.
+1. As a DJ, **Menu → Mixer** opens the Mixer page, as Settings opens. The Editor's song stops while it is open, and going back leaves my **Decks** as they were.
 2. As a DJ, I choose a layout of two or four **Decks** around the mixer.
 3. As a DJ, the **Track browser** has two tabs. **Folders** is the Editor's sample folder tree: I browse my audio folders, audition a file, and put it on any **Deck** from its "Put on" list or by dragging it onto the Deck. **Loaded tracks** lists the files I've loaded, with title, BPM, key (in Camelot notation too) and length, sortable by any column. I can also load a file straight from my disk with a Deck's SOURCE button or by dropping it on the Deck. Where the platform has no sample folders, the Folders tab says so and the page opens on Loaded tracks.
 4. As a DJ, keyboard shortcuts play, cue and sync each **Deck**, and every drag (jog wheel, faders, knobs, waveform) has a keyboard alternative, meeting WCAG 2.2 AA as the rest of the app does.
@@ -56,12 +56,13 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 22. As a DJ, Beat FX are Delay, Echo, Ping Pong, Spiral, Reverb, Trans, Filter, Flanger, Phaser, Pitch, Slip Roll, Roll, Vinyl Brake and Helix. Each is timed to the Master's BPM by a beat division from 1/16 of a beat to 16 bars, applied to a channel, a crossfader side or the Master, with a level/depth and an on/off. I can tap its BPM.
 23. As a DJ, the **Crossfader** blends side A with side B on a curve I choose (smooth, constant power or a sharp cut), and can be reversed.
 24. As a DJ, the Master has a level, a booth level, and a stereo meter with peak hold and a clip indicator.
-25. As a DJ, the headphone section mixes the cued channels with the Master, at its own level, out of outputs 3 and 4 of an audio interface with four or more outputs (see [Platforms](#platforms)).
+25. As a DJ, the headphone section mixes the cued channels with the Master, at its own level, out of a second audio device I pick, such as my headphones, so I hear what is coming up while the Master plays out of the main output; or out of outputs 3 and 4 of an audio interface with four or more outputs. The device I picked is remembered, and the page says when it can't be used or has been unplugged (see [Platforms](#platforms)).
 26. As a DJ, **Record** captures the Master output as I hear it and saves it as WAV or MP3.
 
 ## Platforms
 
-- **Desktop App and Browser Version:** everything above, in both. The headphone cue plays out of outputs 3 and 4 wherever the output device has four or more channels. On a two-channel output it can't be heard, and the headphone section says so; no second device is opened. A recording is saved through the system's save dialog on the desktop, and through the browser's save picker, or as a download, in the Browser Version.
+- **Desktop App and Browser Version:** everything above, in both, with one exception below. The headphone cue plays out of a second output device the DJ picks, and out of outputs 3 and 4 wherever the output device has four or more channels.
+- **Browser Version without `setSinkId`** (Firefox, Safari): no second headphone device; outputs 3 and 4 still work. The headphone section says so, and Settings lists it in `desktop-only.ts`. Chrome and Edge have it. A recording is saved through the system's save dialog on the desktop, and through the browser's save picker, or as a download, in the Browser Version.
 
 ## Decisions made while building
 

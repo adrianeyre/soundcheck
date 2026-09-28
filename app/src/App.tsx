@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { renderOffline } from "./audio/offline-render";
 import { loadEngine } from "./engine";
-import { setWidgetHidden, WIDGETS, type WidgetId } from "./grid/layout";
+import { PAGE_WIDGETS, setWidgetHidden, type WidgetId } from "./grid/layout";
 import { useWidgetLayout } from "./grid/useWidgetLayout";
 import { AccessibilityStatement } from "./legal/AccessibilityStatement";
 import { acknowledgeCookies, hasAcknowledgedCookies } from "./legal/consent";
@@ -23,7 +23,7 @@ import type { MenuItem } from "./ui/Menu";
 /** The dialogs about the app itself. */
 type Policy = "cookies" | "accessibility" | "credits";
 
-const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixing", settings: "Settings" };
+const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixer", settings: "Settings" };
 
 /** The page the address asks for, so Settings can be linked to directly. */
 function viewFromHash(): SongView {
@@ -38,9 +38,14 @@ export function App() {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [cookieNotice, setCookieNotice] = useState(() => !hasAcknowledgedCookies());
   const [platform] = useState(currentPlatform);
-  const grid = useWidgetLayout();
+  // Each page with a Grid keeps its own layout; the Grid menu shows the open page's.
+  const editorGrid = useWidgetLayout("editor");
+  const mixingGrid = useWidgetLayout("mixing");
+  const gridPage = view === "mixing" ? "mixing" : view === "editor" ? "editor" : null;
+  const grid = gridPage === "mixing" ? mixingGrid : editorGrid;
   // The Widgets with nothing to show just now, which the Grid keeps off the page until they have something.
   const [emptyWidgets, setEmptyWidgets] = useState<readonly WidgetId[]>([]);
+  const [emptyMixingWidgets, setEmptyMixingWidgets] = useState<readonly WidgetId[]>([]);
   // Where the Editor draws its pinned Widgets: flush against the title bar and the footer, outside the page that scrolls.
   const [pinnedTop, setPinnedTop] = useState<HTMLElement | null>(null);
   const [pinnedBottom, setPinnedBottom] = useState<HTMLElement | null>(null);
@@ -84,6 +89,35 @@ export function App() {
     setView(next);
   };
 
+  /** The Grid menu for `page`: a checkbox for each of its Widgets, and Reset layout. */
+  const gridMenu = (page: "editor" | "mixing"): MenuItem => {
+    const empty = page === "mixing" ? emptyMixingWidgets : emptyWidgets;
+    return {
+      kind: "submenu",
+      id: "grid",
+      label: "Grid",
+      icon: <LayoutGrid size={16} />,
+      items: [
+        ...PAGE_WIDGETS[page].map((widget) => ({
+          kind: "checkbox" as const,
+          id: widget.id,
+          label: widget.title,
+          checked: !grid.layout[widget.id].hidden,
+          note: empty.includes(widget.id) ? "empty" : undefined,
+          onToggle: () => grid.setLayout(setWidgetHidden(grid.layout, widget.id, !grid.layout[widget.id].hidden)),
+        })),
+        { kind: "separator", id: "reset-separator" },
+        {
+          kind: "action",
+          id: "reset",
+          label: "Reset layout",
+          icon: <RotateCcw size={16} />,
+          onSelect: grid.reset,
+        },
+      ],
+    };
+  };
+
   const menuItems: MenuItem[] = [
     {
       kind: "choice",
@@ -96,7 +130,7 @@ export function App() {
     {
       kind: "choice",
       id: "mixing",
-      label: "Mixing",
+      label: "Mixer",
       icon: <Disc3 size={16} />,
       checked: view === "mixing",
       onSelect: () => go("mixing"),
@@ -109,31 +143,7 @@ export function App() {
       checked: view === "settings",
       onSelect: () => go("settings"),
     },
-    {
-      kind: "submenu",
-      id: "grid",
-      label: "Grid",
-      icon: <LayoutGrid size={16} />,
-      items: [
-        ...WIDGETS.map((widget) => ({
-          kind: "checkbox" as const,
-          id: widget.id,
-          label: widget.title,
-          checked: !grid.layout[widget.id].hidden,
-          note: emptyWidgets.includes(widget.id) ? "empty" : undefined,
-          onToggle: () =>
-            grid.setLayout(setWidgetHidden(grid.layout, widget.id, !grid.layout[widget.id].hidden)),
-        })),
-        { kind: "separator", id: "reset-separator" },
-        {
-          kind: "action",
-          id: "reset",
-          label: "Reset layout",
-          icon: <RotateCcw size={16} />,
-          onSelect: grid.reset,
-        },
-      ],
-    },
+    ...(gridPage ? [gridMenu(gridPage)] : []),
     { kind: "separator", id: "legal" },
     {
       kind: "action",
@@ -203,16 +213,24 @@ export function App() {
               items: menuItems,
             }}
             grid={{
-              layout: grid.layout,
-              onLayout: grid.setLayout,
-              pinned: { top: pinnedTop, bottom: pinnedBottom },
+              layout: editorGrid.layout,
+              onLayout: editorGrid.setLayout,
+              // Only the open page's pinned Widgets are drawn in the slots by the title bar and the footer.
+              pinned: view === "editor" ? { top: pinnedTop, bottom: pinnedBottom } : undefined,
               onEmpty: setEmptyWidgets,
+            }}
+            mixingGrid={{
+              layout: mixingGrid.layout,
+              onLayout: mixingGrid.setLayout,
+              pinned: view === "mixing" ? { top: pinnedTop, bottom: pinnedBottom } : undefined,
+              onEmpty: setEmptyMixingWidgets,
             }}
             openOutput={platform.openOutput}
             openMidi={platform.openMidi}
             storage={platform.storage}
             exporter={platform.exporter}
             djRecordings={platform.djRecordings}
+            headphones={platform.headphones}
             stems={platform.stems}
             updater={platform.updater}
             keyStore={platform.keyStore}

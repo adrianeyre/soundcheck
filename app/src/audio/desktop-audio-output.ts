@@ -40,7 +40,7 @@ export interface Measured {
   outputLatency: number | null;
   engine: EngineReport;
   meters: Meters;
-  /** The DJ Mixer's report, or null before the Mixing page is used. */
+  /** The DJ Mixer's report, or null before the Mixer page is used. */
   dj?: number[] | null;
 }
 
