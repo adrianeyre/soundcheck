@@ -173,7 +173,7 @@ pub struct Measured {
     pub output_latency: Option<f64>,
     pub engine: EngineReport,
     pub meters: Meters,
-    /// The DJ Mixer's report, or none before the Mixing page is used.
+    /// The DJ Mixer's report, or none before the Mixer page is used.
     pub dj: Option<Vec<f64>>,
 }
 

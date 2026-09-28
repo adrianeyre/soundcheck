@@ -68,6 +68,7 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
         monitor: None,
         dj_recording: dj_recording_out,
         dj_report: [0.0; DJ_REPORT_LEN],
+        headphones: None,
     };
     let mut controller = Controller {
         sample_rate,
@@ -484,7 +485,7 @@ impl Controller {
         }
     }
 
-    /// Build the DJ Mixer the first time the Mixing page needs it: it
+    /// Build the DJ Mixer the first time the Mixer page needs it: it
     /// allocates, so it happens here.
     fn install_dj(&mut self) {
         if !self.dj_installed {
@@ -515,6 +516,13 @@ impl Controller {
         if self.dj_installed {
             self.push(RtCommand::DjLoad { deck, track: None });
         }
+    }
+
+    /// Send the headphone cue into `ring` for a second output device to
+    /// play, replacing any ring it went to; None stops sending it.
+    pub fn set_headphones(&mut self, ring: Option<Producer<f32>>) {
+        self.collect_garbage();
+        self.push(RtCommand::SetHeadphones(ring.map(Box::new)));
     }
 
     /// The DJ mix recorded since the last call, interleaved stereo.
@@ -671,6 +679,8 @@ pub struct Renderer {
     dj_recording: Producer<f32>,
     /// The DJ Mixer's report, filled each callback without allocating.
     dj_report: [f64; DJ_REPORT_LEN],
+    /// Where the headphone cue goes for a second output device to play.
+    headphones: Option<Box<Producer<f32>>>,
 }
 
 impl Renderer {
@@ -737,6 +747,19 @@ impl Renderer {
                         frame[2] = convert(cue_l[index]);
                         frame[3] = convert(cue_r[index]);
                     }
+                }
+            }
+            // And to a second device's ring, a whole frame at a time; one
+            // that isn't keeping up loses the rest of this block.
+            if let (Some(ring), Some((cue_l, cue_r))) =
+                (&mut self.headphones, self.engine.dj_headphones())
+            {
+                for (&l, &r) in cue_l[..block].iter().zip(&cue_r[..block]) {
+                    if ring.slots() < 2 {
+                        break;
+                    }
+                    let _ = ring.push(l);
+                    let _ = ring.push(r);
                 }
             }
             for &sample in self.engine.dj_recorded() {
@@ -1007,6 +1030,11 @@ impl Renderer {
                 }
             }
             RtCommand::DjSet(control, value) => engine.dj_apply(control, value),
+            RtCommand::SetHeadphones(ring) => {
+                if let Some(old) = std::mem::replace(&mut self.headphones, ring) {
+                    self.discard(Garbage::Headphones(old));
+                }
+            }
         }
     }
 

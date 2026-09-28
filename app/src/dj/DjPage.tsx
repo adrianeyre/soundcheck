@@ -3,10 +3,13 @@ import { Power } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AudioOutput } from "../audio/audio-output";
+import { defaultLayout, type WidgetId, type WidgetLayout } from "../grid/layout";
+import { WidgetGrid, type WidgetGridProps } from "../grid/WidgetGrid";
 import type { LibraryStorage } from "../preset/library-storage";
 import type { SampleTarget } from "../samples/SampleBrowser";
 import { lastName, type SampleRef, type SampleSource } from "../samples/sample-source";
 import { DjBrowser } from "./DjBrowser";
+import type { HeadphoneOutput } from "./headphone-output";
 import { DeckPanel } from "./DeckPanel";
 import { type MusicalKey, shiftKey } from "./dj-logic";
 import { EMPTY_REPORT, readDjReport } from "./dj-report";
@@ -59,19 +62,33 @@ export interface DjPageProps {
   /** Whether the page is the one showing, so its keyboard shortcuts apply. */
   active: boolean;
   saver: DjRecordingSaver;
+  /** Where the headphone cue plays: a second output device, null where none can be chosen, absent for no picker. */
+  headphones?: HeadphoneOutput | null;
   /** The sample folders the Editor's Samples Widget reads, for the Track browser's tree; null where there are none. */
   samples?: SampleSource | null;
   /** The app-level library, where those folders are remembered. */
   library?: LibraryStorage | null;
+  /**
+   * The page's Grid (ADR 0004): its layout, kept by the app, where its pinned Widgets go, and a way
+   * to say which Widgets have nothing to show. Without one the page keeps a layout of its own.
+   */
+  grid?: {
+    layout: WidgetLayout;
+    onLayout: (layout: WidgetLayout) => void;
+    pinned?: WidgetGridProps["pinned"];
+    onEmpty?: (empty: readonly WidgetId[]) => void;
+  };
 }
 
 /**
- * The Mixing page (ADR 0013): two or four CDJ-style **Decks** around a
+ * The Mixer page (ADR 0013): two or four CDJ-style **Decks** around a
  * DJM-style mixer, and the **Track browser**. It only tells the engine what
  * the DJ does and draws what the engine reports; nothing here is the
  * Project's, and none of it is undone.
  */
-export function DjPage({ output, onStart, starting = false, active, saver, samples = null, library: folderLibrary = null }: DjPageProps) {
+export function DjPage(props: DjPageProps) {
+  const { output, onStart, starting = false, active, saver, samples = null, library: folderLibrary = null, grid, headphones } = props;
+  const [ownLayout, setOwnLayout] = useState(() => defaultLayout("mixing"));
   const dj = output?.dj ?? null;
   const [layout, setLayout] = useState<2 | 4>(2);
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
@@ -309,6 +326,14 @@ export function DjPage({ output, onStart, starting = false, active, saver, sampl
     );
   };
 
+  // With two Decks, the third and fourth have nothing to show, so they are off the Grid (ADR 0004).
+  const empty: WidgetId[] = layout === 4 ? [] : ["deck3", "deck4"];
+  const emptyKey = empty.join(" ");
+  const onEmpty = grid?.onEmpty;
+  useEffect(() => {
+    onEmpty?.(emptyKey ? (emptyKey.split(" ") as WidgetId[]) : []);
+  }, [emptyKey, onEmpty]);
+
   return (
     <div className="dj-page">
       <div className="dj-toolbar row">
@@ -342,58 +367,71 @@ export function DjPage({ output, onStart, starting = false, active, saver, sampl
           {message}
         </p>
       )}
-      <WaveformStack
-        span={span}
-        onSpan={setSpan}
-        lanes={Array.from({ length: layout }, (_, deck) => {
-          const track = library.find((t) => t.id === decks[deck]?.trackId) ?? null;
-          return {
-            deck,
-            report: report.decks[deck]!,
-            analysis: track?.analysis ?? null,
-            hotCues: decks[deck]!.hotCues,
-            title: track ? titleOf(track.name) : null,
-            syncMaster: report.syncMaster === deck,
-          };
-        })}
-      />
-      <div className="dj-stage" data-layout={layout}>
-        <div className="dj-decks dj-decks-left">
-          {deckPanel(0)}
-          {layout === 4 && deckPanel(2)}
-        </div>
-        <MixerPanel
-          channels={channels}
-          mixer={mixer}
-          report={report}
-          count={layout}
-          headphones={dj?.headphones ?? false}
-          canPlay={dj !== null}
-          onChannel={changeChannel}
-          onMixer={changeMixer}
-          recording={{ on: report.recording, seconds: report.recordingSeconds, format, saving }}
-          onRecordFormat={setFormat}
-          onRecord={(on) => void record(on)}
-        />
-        <div className="dj-decks dj-decks-right">
-          {deckPanel(1)}
-          {layout === 4 && deckPanel(3)}
-        </div>
-      </div>
-      <DjBrowser
-        source={samples}
-        library={folderLibrary}
-        canAudition={output !== null}
-        targets={targets}
-        onUse={onUse}
-        onError={onBrowseError}
-        tracks={library}
-        decks={layout}
-        canLoad={dj !== null}
-        onAdd={(files) => void addFiles(files)}
-        onLoad={(trackId, deck) => {
-          const track = library.find((t) => t.id === trackId);
-          if (track) void loadTrack(track, deck);
+      <WidgetGrid
+        layout={grid?.layout ?? ownLayout}
+        onLayout={grid?.onLayout ?? setOwnLayout}
+        pinned={grid?.pinned}
+        empty={empty}
+        widgets={{
+          djWaveforms: (
+            <WaveformStack
+                span={span}
+                onSpan={setSpan}
+                onDeck={(deck, name, value) => send("deck", deck, name, value)}
+                lanes={Array.from({ length: layout }, (_, deck) => {
+                  const track = library.find((t) => t.id === decks[deck]?.trackId) ?? null;
+                  return {
+                    deck,
+                    report: report.decks[deck]!,
+                    analysis: track?.analysis ?? null,
+                    hotCues: decks[deck]!.hotCues,
+                    title: track ? titleOf(track.name) : null,
+                    syncMaster: report.syncMaster === deck,
+                    vinyl: decks[deck]!.vinyl,
+                  };
+                })}
+              />
+          ),
+          deck1: deckPanel(0),
+          deck2: deckPanel(1),
+          // The third and fourth Decks are on the page only with four Decks; until then they step aside.
+          deck3: layout === 4 ? deckPanel(2) : null,
+          deck4: layout === 4 ? deckPanel(3) : null,
+          djMixer: (
+            <MixerPanel
+              channels={channels}
+              mixer={mixer}
+              report={report}
+              count={layout}
+              headphones={dj?.headphones ?? false}
+              canPlay={dj !== null}
+              onChannel={changeChannel}
+              onMixer={changeMixer}
+              recording={{ on: report.recording, seconds: report.recordingSeconds, format, saving }}
+              onRecordFormat={setFormat}
+              onRecord={(on) => void record(on)}
+              headphoneOutput={headphones}
+              output={output}
+            />
+          ),
+          djBrowser: (
+            <DjBrowser
+              source={samples}
+              library={folderLibrary}
+              canAudition={output !== null}
+              targets={targets}
+              onUse={onUse}
+              onError={onBrowseError}
+              tracks={library}
+              decks={layout}
+              canLoad={dj !== null}
+              onAdd={(files) => void addFiles(files)}
+              onLoad={(trackId, deck) => {
+                const track = library.find((t) => t.id === trackId);
+                if (track) void loadTrack(track, deck);
+              }}
+            />
+          ),
         }}
       />
     </div>

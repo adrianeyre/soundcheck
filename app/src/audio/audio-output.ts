@@ -165,7 +165,7 @@ export type EngineCommand =
   | { type: "setPlayRange"; startTick: number; endTick: number }
   | { type: "setMetronome"; on: boolean }
   /**
-   * A control of the Mixing page's DJ Mixer (ADR 0013): `name` of a Deck or
+   * A control of the Mixer page's DJ Mixer (ADR 0013): `name` of a Deck or
    * a mixer channel (both by `index`, from 0) or of the mixer. Mirrors
    * `DjControl::parse` in `engine/src/dj/mod.rs`; switches are 1 or 0.
    */
@@ -202,10 +202,12 @@ export interface DjHost {
   /** The mix recorded since the last call, interleaved stereo at the output's rate. */
   takeRecording(): Promise<Float32Array>;
   /**
-   * Whether the headphone cue can be heard: only the Desktop App, on an
-   * interface with outputs 3 and 4, which it plays the cue out of.
+   * Whether the headphone cue is heard out of outputs 3 and 4, on an
+   * interface that has them. A second device is `HeadphoneOutput`'s.
    */
   headphones: boolean;
+  /** The headphone cue as a stream, for the browser to play to a second device; absent elsewhere. */
+  headphoneStream?: () => MediaStream;
 }
 
 /**
@@ -304,7 +306,7 @@ export interface AudioOutputStats {
   meters: Meters | null;
   /**
    * The DJ Mixer's latest report (`DjMixer::report`), flat, or null before
-   * the Mixing page is first used; absent from a host that has none.
+   * the Mixer page is first used; absent from a host that has none.
    */
   dj?: number[] | null;
 }
@@ -335,7 +337,7 @@ export interface AudioOutput {
   /** Zero the dropout counters, e.g. once start-up is over. */
   resetCounters(): void;
   close(): Promise<void>;
-  /** The Mixing page's DJ Mixer; absent from a host that has none, such as a test's. */
+  /** The Mixer page's DJ Mixer; absent from a host that has none, such as a test's. */
   dj?: DjHost;
 }
 

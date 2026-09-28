@@ -1,5 +1,5 @@
 /**
- * The Mixing page's arithmetic, kept pure so it can be tested without an
+ * The Mixer page's arithmetic, kept pure so it can be tested without an
  * engine: keys on the Camelot wheel, Beat Grid maths, loop and Beat FX
  * sizes, tap tempo and the readouts a CDJ shows. None of it touches audio.
  */

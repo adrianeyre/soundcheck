@@ -58,6 +58,12 @@ export interface DeckPanelProps {
 
 const BEND = 0.04;
 
+/** Whether a drag carries something a Deck loads: a file from the system, the folder tree or the loaded list. */
+function loadable(transfer: DataTransfer): boolean {
+  const types = [...transfer.types];
+  return types.includes(DJ_TRACK_DRAG_TYPE) || types.includes("Files") || isSampleDrag(transfer);
+}
+
 /**
  * A lit hardware button: a small-caps label, and a light that is off, on
  * or blinking. It is a toggle when `pressed` is given.
@@ -116,6 +122,9 @@ export function DeckPanel(props: DeckPanelProps) {
   const [deleting, setDeleting] = useState(false);
   const [editingCues, setEditingCues] = useState(false);
   const [remainFirst, setRemainFirst] = useState(false);
+  // How many of the panel's elements a drag of something loadable is over: dragenter and dragleave come for
+  // each child, so the highlight goes only when the drag has left them all.
+  const [dragDepth, setDragDepth] = useState(0);
   const name = `Deck ${deck + 1}`;
   const loaded = report.loaded && analysis !== null;
   const disabled = !canPlay || !loaded;
@@ -156,15 +165,23 @@ export function DeckPanel(props: DeckPanelProps) {
       aria-label={name}
       data-deck={deck}
       data-playing={report.playing}
+      data-drop={dragDepth > 0 || undefined}
+      onDragEnter={(event) => {
+        if (loadable(event.dataTransfer)) setDragDepth((depth) => depth + 1);
+      }}
+      onDragLeave={(event) => {
+        if (loadable(event.dataTransfer)) setDragDepth((depth) => Math.max(0, depth - 1));
+      }}
       onDragOver={(event) => {
-        const types = event.dataTransfer.types;
-        if (types.includes(DJ_TRACK_DRAG_TYPE) || types.includes("Files") || isSampleDrag(event.dataTransfer)) {
+        if (loadable(event.dataTransfer)) {
           event.preventDefault();
           event.dataTransfer.dropEffect = "copy";
         }
       }}
       onDrop={(event) => {
         event.preventDefault();
+        setDragDepth(0);
+        if (!canPlay) return;
         const trackId = event.dataTransfer.getData(DJ_TRACK_DRAG_TYPE);
         const sample = droppedSample(event.dataTransfer);
         if (trackId) props.onDropTrack(trackId);
@@ -172,6 +189,11 @@ export function DeckPanel(props: DeckPanelProps) {
         else if (event.dataTransfer.files[0]) props.onLoadFile(event.dataTransfer.files[0]);
       }}
     >
+      {dragDepth > 0 && (
+        <div className="dj-drop-veil" aria-hidden>
+          {canPlay ? `Drop to load onto ${name}` : "Start audio to load a Deck"}
+        </div>
+      )}
       <div className="dj-deck-top">
         <div className="dj-hw-column dj-deck-source" role="group" aria-label={`${name} source`}>
           <input

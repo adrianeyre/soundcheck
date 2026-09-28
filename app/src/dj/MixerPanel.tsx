@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 
+import type { AudioOutput } from "../audio/audio-output";
+
 import {
   ASSIGNS,
   BEAT_DIVISIONS,
@@ -14,6 +16,8 @@ import {
 } from "./dj-logic";
 import type { DjReport } from "./dj-report";
 import { type ChannelState, EQ_BANDS, EQ_MAX_DB, EQ_MIN_DB, type MixerState } from "./dj-state";
+import type { HeadphoneOutput } from "./headphone-output";
+import { HeadphonePicker } from "./HeadphonePicker";
 import { Knob } from "./Knob";
 
 const db = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1)} dB`;
@@ -77,6 +81,13 @@ export interface MixerPanelProps {
   recording: { on: boolean; seconds: number; format: "wav" | "mp3"; saving: boolean };
   onRecordFormat: (format: "wav" | "mp3") => void;
   onRecord: (on: boolean) => void;
+  /**
+   * Plays the cue out of a second output device the DJ picks: absent while
+   * the page doesn't offer it, null where the platform can't.
+   */
+  headphoneOutput?: HeadphoneOutput | null;
+  /** The running audio output, which `headphoneOutput` plays the cue of. */
+  output?: AudioOutput | null;
 }
 
 /** A switch of two or three labelled positions, as a mixer's curve and assign switches. */
@@ -305,10 +316,18 @@ export function MixerPanel(props: MixerPanelProps) {
               />
               <Knob label="Headphones level" caption="LEVEL" value={mixer.headphoneLevel} min={0} max={2} centre={0.8} step={0.02} format={gain} size={36} onChange={(headphoneLevel) => onMixer({ headphoneLevel })} />
             </div>
+            {props.headphoneOutput && <HeadphonePicker headphones={props.headphoneOutput} output={props.output ?? null} />}
+            {props.headphoneOutput === null && (
+              <p className="dj-hw-note">
+                This browser can&apos;t choose a headphone device: the Desktop App, Chrome and Edge can.
+              </p>
+            )}
             <p className="dj-hw-note">
               {headphones
-                ? "The cue plays out of outputs 3 and 4."
-                : "The cue needs outputs 3 and 4 of an audio interface; this output has two."}
+                ? "Outputs 3 and 4 play the cue too."
+                : props.headphoneOutput
+                  ? "Or choose outputs 3 and 4 of an audio interface as the main output."
+                  : "The cue needs outputs 3 and 4 of an audio interface, or a second device; this output has two."}
             </p>
           </div>
 

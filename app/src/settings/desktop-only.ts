@@ -12,7 +12,7 @@ export interface DesktopOnly {
 }
 
 /** The parts of a platform that say what it lacks. */
-export type HasPlatformParts = Pick<Platform, "name" | "listAudioHosts" | "audioInputs" | "samples" | "storage" | "vst3">;
+export type HasPlatformParts = Pick<Platform, "name" | "listAudioHosts" | "audioInputs" | "samples" | "storage" | "vst3" | "headphones">;
 
 export function desktopOnly(platform: HasPlatformParts): DesktopOnly[] {
   if (platform.name === "desktop") return [];
@@ -41,6 +41,13 @@ export function desktopOnly(platform: HasPlatformParts): DesktopOnly[] {
       feature: "VST3 Plugins",
       detail:
         "Effects and Instruments installed on your machine, each run in a process of its own. A Project that has them opens here too, and keeps each one exactly, but bypasses an Effect and silences an Instrument. VST is a registered trademark of Steinberg Media Technologies GmbH.",
+    });
+  }
+  if (!platform.headphones) {
+    lacks.push({
+      feature: "Headphones on a second audio device",
+      detail:
+        "On the Mixer page, the headphone cue out of a device of its own while the mix plays out of the main one. This browser can't choose an output device; Chrome and Edge can, and outputs 3 and 4 of an audio interface work in any browser.",
     });
   }
   if (!platform.storage) {
