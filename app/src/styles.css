@@ -2867,10 +2867,17 @@ input.strip-name {
   cursor: pointer;
 }
 
+/* The Section that plays: filled with the accent and ringed, so it can't be mistaken for the others. */
 .section[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--on-primary);
   box-shadow:
     0 0 0 2px var(--surface),
     0 0 0 4px var(--text);
+}
+
+.section[aria-pressed="true"] .section-name::before {
+  content: "▶ ";
 }
 
 .section-name {
