@@ -32,7 +32,7 @@ export function SynthPanel({ trackName, preset, settings, onChange }: SynthPanel
           <PresetActions target="synth" label={`${trackName} Synth`} settings={settings} />
         </div>
       </div>
-      <SynthVisuals settings={settings} />
+      <SynthVisuals settings={settings} onChange={onChange} />
       <div className="param-grid">
         {SYNTH_PARAMS.map((param) => (
           <Control key={param.name} param={param} settings={settings} onChange={onChange} />
