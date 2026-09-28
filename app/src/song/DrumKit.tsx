@@ -45,7 +45,7 @@ export interface KitPiece {
  * Pad has somewhere to light up. Pieces no Pad plays are still drawn, dimmed.
  */
 export function kitPieces(pads: readonly DrumPad[]): KitPiece[] {
-  const pieces: KitPiece[] = PIECES.map(({ notes: _, ...piece }) => ({ ...piece, pads: [] }));
+  const pieces: KitPiece[] = PIECES.map(({ id, shape, x, y, r }) => ({ id, shape, x, y, r, pads: [] }));
   const extras: DrumPad[] = [];
   for (const pad of pads) {
     const index = PIECES.findIndex((piece) => piece.notes.includes(pad.note));

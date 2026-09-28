@@ -102,17 +102,19 @@ function Envelope({ label, title, shape, colour }: { label: string; title: strin
 
 const FILTER_MODES = { lowPass: "low-pass", highPass: "high-pass", bandPass: "band-pass" } as const;
 
+/** Across the filter's picture, one of its 161 points, and up it, -36 to +24 dB. */
+const filterX = (index: number) => (index / 160) * W;
+const filterY = (db: number) => H / 2 - 12 - (Math.max(-36, Math.min(24, db)) / 36) * (H / 2 - 12);
+
 function FilterResponse({ settings }: { settings: SynthSettings }) {
   const mode = FILTER_MODES[settings.filterType as keyof typeof FILTER_MODES] ?? "low-pass";
-  const x = (index: number) => (index / 160) * W;
-  const y = (db: number) => H / 2 - 12 - (Math.max(-36, Math.min(24, db)) / 36) * (H / 2 - 12);
   const curve = (cutoff: number) =>
-    path(Array.from({ length: 161 }, (_, index): [number, number] => [x(index), y(filterResponseDb(mode, cutoff, settings.resonance, 20 * 1000 ** (index / 160)))]));
+    path(Array.from({ length: 161 }, (_, index): [number, number] => [filterX(index), filterY(filterResponseDb(mode, cutoff, settings.resonance, 20 * 1000 ** (index / 160)))]));
   // The envelope moves the cutoff by its amount in octaves at its peak.
   const swept = Math.min(20_000, Math.max(20, settings.cutoffHz * 2 ** settings.filterEnvAmount));
   return (
     <Picture label={`Filter: ${mode} at ${Math.round(settings.cutoffHz)} Hz, Q ${settings.resonance.toFixed(2)}`} title="Filter">
-      <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="var(--lane-bar)" vectorEffect="non-scaling-stroke" />
+      <line x1={0} x2={W} y1={filterY(0)} y2={filterY(0)} stroke="var(--lane-bar)" vectorEffect="non-scaling-stroke" />
       {settings.filterEnvAmount !== 0 && (
         <path d={curve(swept)} fill="none" stroke="var(--warning)" strokeWidth={1.2} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
       )}

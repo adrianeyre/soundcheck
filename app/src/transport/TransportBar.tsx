@@ -40,7 +40,7 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
 
   const position = report?.position ?? 0;
   const { beat } = barBeatTick(tempoMap, position);
-  const beatsPerBar = signatureAt(tempoMap, position).beatsPerBar;
+  const beatsInBar = signatureAt(tempoMap, position).beatsPerBar;
   const seconds = secondsAt(tempoMap, Math.max(0, position));
   const clock = `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
   const loopStartBar = barsAt(tempoMap, settings.loopStart);
@@ -70,7 +70,7 @@ export function TransportBar({ settings, tempoMap, onChange, send, readReport }:
           {clock}
         </output>
         <span className="beat-lights" aria-hidden>
-          {Array.from({ length: Math.min(16, beatsPerBar) }, (_, index) => (
+          {Array.from({ length: Math.min(16, beatsInBar) }, (_, index) => (
             <span key={index} data-on={playing && index + 1 === beat} data-downbeat={index === 0} />
           ))}
         </span>
