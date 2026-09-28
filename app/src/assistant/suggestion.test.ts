@@ -276,7 +276,7 @@ test("the smaller core starts without read_automation, set_track_solo and set_ma
   await runRequest({ history, request: "turn the master down a bit", start, mode: { smallCore: true, suggestion: false } });
 
   const [one] = sent;
-  expect(one!.mode).toEqual({ smallCore: true, suggestion: false });
+  expect(one!.mode).toEqual({ smallCore: true, suggestion: false, decides: false });
   expect(one!.tools[0]).toEqual(SMALL_CORE_TOOL_DEFINITIONS.map((tool) => tool.name));
   expect(one!.results[1]![0]).toMatchObject({ isError: true, content: expect.stringContaining(`load_tools with group "routing"`) });
   expect(one!.results[2]![0]!.content).toContain("set_track_solo, set_master_volume");

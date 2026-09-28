@@ -19,7 +19,8 @@ import {
 } from "./assistant";
 import { useAssistantSettings } from "./assistant-settings";
 import { assistantModel, effortsFor, findModel, provider as providerOf, type ProviderId } from "./catalogue";
-import { chosenConnection, contextWindowFor, requestModeFor, type Connection } from "./connection";
+import { chosenConnection, contextWindowFor, readyProviders, requestModeFor, type Connection } from "./connection";
+import { jevDecide, type Decide, type JevConnection } from "./jev";
 import type { KeyStore } from "./key-store";
 import type { AssistantLibrary } from "./library";
 import { conversationsFor } from "./providers";
@@ -56,6 +57,8 @@ export interface RequestBoxProps {
   skills?: readonly Skill[];
   /** How the Assistant separates an Audio Clip into Stems, where it can. */
   stems?: AssistantStems;
+  /** How the Assistant asks Jev, once it is set up. Jev's API, through `fetch`, unless a test says otherwise. */
+  decisions?: (connection: JevConnection) => Decide;
 }
 
 /** The tallest the list of Skills a slash opens gets, and its distance from the prompt, in pixels. */
@@ -87,8 +90,12 @@ interface Transcript {
  * Where the musician types a Request, and reads what it changed.
  *
  * The provider and its API key are chosen in Settings (`AssistantSettings`)
- * and kept by the platform's key store, never in the Project. Changes apply
- * as they are made, and the whole Request undoes in one go; or, in
+ * and kept by the platform's key store, never in the Project. With more
+ * than one provider set up, the box's picker switches between them, and the
+ * next Request goes to the one picked; the Conversation carries on. With Jev
+ * set up too, the Assistant can ask it for quick bounded choices (`decide`).
+ *
+ * Changes apply as they are made, and the whole Request undoes in one go; or, in
  * Suggestion mode (a Local model's default), they are listed with Apply and
  * Discard, and nothing changes until the musician applies them, as one
  * undo step. A new Request waits until the Suggestion is one or the other.
@@ -129,9 +136,13 @@ export function RequestBox({
   onOpenSettings,
   skills = SKILLS,
   stems,
+  decisions = (connection) => jevDecide(connection, fetch),
 }: RequestBoxProps) {
-  const [{ settings, loaded }] = useAssistantSettings(keyStore);
+  const [{ settings, loaded }, store] = useAssistantSettings(keyStore);
   const connection = chosenConnection(settings);
+  // Every provider set up in Settings, to switch between here.
+  const ready = readyProviders(settings);
+  const pickerId = useId();
   const [request, setRequest] = useState("");
   const [running, setRunning] = useState(false);
   const [transcript, setTranscript] = useState<Transcript>(() => fresh(history));
@@ -186,6 +197,7 @@ export function RequestBox({
       library,
       conversation: earlier.slice(since),
       mode: requestModeFor(settings.provider, connection),
+      ...(settings.jev && { decide: decisions(settings.jev) }),
       stems,
       onSeparation: showSeparation,
       onStatus: setStatus,
@@ -335,9 +347,34 @@ export function RequestBox({
           <Sparkles size={18} aria-hidden />
           Assistant
         </h2>
-        {settings && connection && (
-          <span className="hint">
-            Using <strong>{describe(settings.provider, connection)}</strong>
+        {settings && connection && ready.length > 1 ? (
+          <label className="field-inline hint" htmlFor={pickerId}>
+            Using
+            <select
+              id={pickerId}
+              aria-label="Assistant provider"
+              value={settings.provider}
+              disabled={running || !!pending}
+              onChange={(event) => void store.choose(event.target.value as ProviderId)}
+            >
+              {ready.map((id) => (
+                <option key={id} value={id}>
+                  {describe(id, settings.connections[id]!)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          settings &&
+          connection && (
+            <span className="hint">
+              Using <strong>{describe(settings.provider, connection)}</strong>
+            </span>
+          )
+        )}
+        {settings?.jev && connection && (
+          <span className="hint" title="The Assistant can ask Jev, TypeSafe's decision model, for quick bounded choices.">
+            with Jev deciding
           </span>
         )}
         <button type="button" className="btn-ghost btn-sm" aria-haspopup="dialog" onClick={() => setSkillsOpen(true)}>

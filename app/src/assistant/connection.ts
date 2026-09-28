@@ -25,6 +25,7 @@ import {
 } from "./catalogue";
 import type { RequestMode } from "./assistant";
 import type { ClaudeOptions, Effort, ModelChoice } from "./claude";
+import type { JevConnection } from "./jev";
 
 /** One provider's connection. */
 export interface Connection {
@@ -62,10 +63,15 @@ export interface Connection {
   contextWindow?: number;
 }
 
-/** The chosen provider, and each provider's own connection, kept while another is chosen. */
+/**
+ * The chosen provider, and each provider's own connection, kept while
+ * another is chosen; and the Decision Engine's, which is no provider.
+ */
 export interface Settings {
   provider: ProviderId;
   connections: Partial<Record<ProviderId, Connection>>;
+  /** Jev's connection, where the musician set one up (`jev.ts`). */
+  jev?: JevConnection;
 }
 
 /** A header name, as HTTP defines a token. */
@@ -73,30 +79,59 @@ const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export function saveSettings(settings: Settings): string {
   const saved = Object.entries(settings.connections).filter(([, connection]) => connection);
-  if (settings.provider === "claude" && saved.every(([id]) => id === "claude")) {
+  if (settings.provider === "claude" && saved.every(([id]) => id === "claude") && !settings.jev) {
     return saveConnection(settings.connections.claude ?? { apiKey: "" });
   }
   const connections = Object.fromEntries(saved.map(([id, connection]) => [id, stored(connection!)]));
-  return JSON.stringify({ provider: settings.provider, connections });
+  return JSON.stringify({ provider: settings.provider, connections, ...(settings.jev && { jev: storedJev(settings.jev) }) });
 }
 
 export function readSettings(saved: string): Settings {
   if (saved.startsWith("{")) {
     try {
-      const parsed = JSON.parse(saved) as { provider?: unknown; connections?: unknown };
+      const parsed = JSON.parse(saved) as { provider?: unknown; connections?: unknown; jev?: unknown };
       if (isProviderId(parsed.provider) && typeof parsed.connections === "object" && parsed.connections) {
         const connections: Settings["connections"] = {};
         for (const { id } of PROVIDERS) {
           const connection = readFields(id, (parsed.connections as Record<string, unknown>)[id]);
           if (connection) connections[id] = connection;
         }
-        return { provider: parsed.provider, connections };
+        const jev = readJev(parsed.jev);
+        return { provider: parsed.provider, connections, ...(jev && { jev }) };
       }
     } catch {
       // Read it as Claude's connection, below.
     }
   }
   return { provider: "claude", connections: { claude: readConnection(saved) } };
+}
+
+/** Jev's fields worth keeping: blank ones are left out. */
+function storedJev({ apiKey, baseUrl, model }: JevConnection): JevConnection {
+  return { apiKey, ...(baseUrl?.trim() && { baseUrl: baseUrl.trim() }), ...(model?.trim() && { model: model.trim() }) };
+}
+
+function readJev(value: unknown): JevConnection | null {
+  const parsed = (typeof value === "object" && value ? value : {}) as Partial<Record<keyof JevConnection, unknown>>;
+  if (typeof parsed.apiKey !== "string" || !parsed.apiKey) return null;
+  return {
+    apiKey: parsed.apiKey,
+    ...(typeof parsed.baseUrl === "string" && parsed.baseUrl && { baseUrl: parsed.baseUrl }),
+    ...(typeof parsed.model === "string" && parsed.model && { model: parsed.model }),
+  };
+}
+
+/**
+ * The providers the musician has set up, in the catalogue's order: each
+ * with a connection saved, with a key where it needs one. The Editor's
+ * Request box lets them switch between these.
+ */
+export function readyProviders(settings: Settings | null): ProviderId[] {
+  if (!settings) return [];
+  return PROVIDERS.filter(({ id, needsKey }) => {
+    const connection = settings.connections[id];
+    return connection !== undefined && (!needsKey || connection.apiKey.trim().length > 0);
+  }).map(({ id }) => id);
 }
 
 /** The connection the chosen provider uses; unset until one is entered. */

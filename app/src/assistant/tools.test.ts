@@ -106,6 +106,7 @@ test("every tool is described to the model with a closed schema", () => {
     "analyse_audio",
     "compare_audio",
     "compare_to_reference",
+    "decide",
   ]);
   for (const tool of TOOL_DEFINITIONS) {
     expect(tool.description.length).toBeGreaterThan(0);
@@ -166,7 +167,8 @@ test("the core is reading, Tracks, Clips, the mixer basics, listening and load_t
     arrangement: ["add_section", "rename_section", "delete_section", "copy_clips", "insert_bars", "delete_bars", "duplicate_section", "move_section"],
   });
   // Every tool is in the core or in exactly one group.
-  expect([...CORE_TOOL_DEFINITIONS.map((tool) => tool.name), ...Object.values(groups).flat()].toSorted()).toEqual(
+  // decide, which only a Request that can ask Jev is offered, is in neither.
+  expect([...CORE_TOOL_DEFINITIONS.map((tool) => tool.name), ...Object.values(groups).flat(), "decide"].toSorted()).toEqual(
     TOOL_DEFINITIONS.map((tool) => tool.name).toSorted(),
   );
   for (const [group, names] of Object.entries(groups)) {
@@ -188,7 +190,7 @@ test("the core's definitions are smaller than every tool's, and loading groups a
   expect(size(CORE_TOOL_DEFINITIONS)).toBeLessThan(size(everyTool));
 
   expect(toolDefinitions([])).toEqual(CORE_TOOL_DEFINITIONS);
-  expect(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[])).toEqual(TOOL_DEFINITIONS);
+  expect(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], false, false, true)).toEqual(TOOL_DEFINITIONS);
   const loaded = toolDefinitions(["time", "notes"]).map((tool) => tool.name);
   expect(loaded.filter((name) => toolGroupOf(name) !== undefined)).toEqual([...groupToolNames("notes"), ...groupToolNames("time")]);
 });
@@ -219,7 +221,7 @@ test("the smaller core leaves read_automation, set_track_solo, set_master_volume
   ));
   expect(loadedReport("automation", true)).toContain("read_automation, set_automation, clear_automation");
   // Every tool is still there to load, whichever core a Request starts with.
-  expect(toolNames(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], true))).toEqual(toolNames(TOOL_DEFINITIONS));
+  expect(toolNames(toolDefinitions(Object.keys(TOOL_GROUPS) as ToolGroup[], true, false, true))).toEqual(toolNames(TOOL_DEFINITIONS));
   // A smaller core, sent on every turn: about a sixth less than the whole one.
   expect(JSON.stringify(SMALL_CORE_TOOL_DEFINITIONS).length).toBeLessThan(JSON.stringify(CORE_TOOL_DEFINITIONS).length * 0.85);
 });

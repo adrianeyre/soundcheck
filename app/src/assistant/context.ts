@@ -45,7 +45,7 @@ function toolGroupsText(smallCore: boolean): string {
  * Who the model is and how the Project works, for a Request in `mode`: the
  * core it starts with, and whether its changes are a Suggestion.
  */
-export function systemPrompt({ smallCore, suggestion }: RequestMode): string {
+export function systemPrompt({ smallCore, suggestion, decides }: RequestMode): string {
   const core = toolDefinitions([], smallCore).map((tool) => tool.name);
   return [
     "You are the Assistant in Soundcheck, a DAW. The musician describes a change to their song and you make it with the tools you have.",
@@ -74,6 +74,7 @@ export function systemPrompt({ smallCore, suggestion }: RequestMode): string {
     "To check a fix that changes the sound, such as clipping, loudness or a muddy band, analyse before you change anything, then after the change analyse the same Track or the whole mix over the same range again and call compare_audio, in the same turn: it says what got better and what got worse. Each analysis is kept, by its analysisId, for the rest of the Request.",
     "A Project may have a Reference Track, a finished song the musician wants theirs to sound like, named as referenceTrack in the summary. It is never in the mix, so analyse_audio doesn't hear it: compare_to_reference measures it against the mix. For a Request such as \"make my mix sound more like the reference\", compare first, change the mix where the matched band differences and the loudness say it differs, such as an EQ on the Master or a Track, then compare again to check it came closer. Without a Reference Track there is nothing to compare against: say so.",
     "Make the calls that don't depend on each other's results together, in one turn, such as analyse_audio for each of several Tracks, or the volumes of several Tracks: they are applied in the order you give them. Wait for results only when the next call needs them.",
+    ...(decides ? [DECIDE_TEXT] : []),
     `A Request has ${MAX_TURNS} turns with tools, and each turn's results say how many are left. After the last you get one more turn, without tools, to write your summary.`,
     "The musician may follow up an earlier Request in the same Conversation, such as \"make it darker\" after adding a reverb. Then the earlier Requests come first, each with your reply and the changes it made, and a follow-up is about what they did unless it says otherwise: change the reverb they added rather than adding another. The earlier Requests don't have the Project: only the latest Request does, as it stands now, after them. Each Request is its own undo step, and the musician may have undone one since, which the latest Request says: its changes are no longer in the Project.",
     suggestion
@@ -81,6 +82,10 @@ export function systemPrompt({ smallCore, suggestion }: RequestMode): string {
       : "When you are finished, say in one or two sentences what you changed. Do not ask the musician to confirm: everything you do is one undo step, so they can simply undo it.",
   ].join("\n");
 }
+
+/** What a Request that can ask Jev is told of it. */
+export const DECIDE_TEXT =
+  "You can also ask Jev, a fast and cheap decision model, with decide: it picks between options you name, scores on levels you order, or says how likely yes is, with a probability for each answer and a confidence. It can't make changes or write anything. You interpret the Request and make every change; hand Jev the many small bounded musical choices it involves, such as the chord for each bar, which of a few drum patterns fits each Section, the Instrument or Preset for a part, or the scale that suits a mood, all in one decide call where they don't depend on each other. Keep its state short and in words, then write what it picked with the other tools. Where its confidence is low, choose yourself. For one quick choice you are sure of, just decide yourself.";
 
 /** The system prompt of a Request in the full core, whose changes apply as they are made. */
 export const SYSTEM_PROMPT = systemPrompt(DIRECT);

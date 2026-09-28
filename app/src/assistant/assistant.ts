@@ -62,6 +62,7 @@ import type { Stem } from "../stems/stem-separator";
 import { audioFiles as filesNamedBy } from "../storage/project-folder";
 import type { Capabilities } from "./catalogue";
 import { analysisId, chooseAnalyses, compareAnalyses, type KeptAnalysis } from "./compare";
+import { describeDecisions, type Decide } from "./jev";
 import { type AssistantLibrary, EMPTY_LIBRARY, type LibraryContents } from "./library";
 import { compareToReference, type HearReference } from "./reference";
 import {
@@ -235,6 +236,8 @@ export interface RequestMode {
    * and the musician allows it, which is off by default. Left out, it can't.
    */
   hearsAudio?: boolean;
+  /** It can ask the Decision Engine (Jev) with `decide`. Left out, it can't. */
+  decides?: boolean;
 }
 
 /** The whole core, with changes applied as they are made. */
@@ -334,6 +337,8 @@ export interface RunRequestOptions {
   mode?: RequestMode;
   /** How it separates an Audio Clip into Stems; without it, it can't. */
   stems?: AssistantStems;
+  /** How it asks the Decision Engine (Jev); without it, `decide` isn't offered. */
+  decide?: Decide;
   /** Told when a Stem Separation starts, each time it gets further, and, with null, when it ends. */
   onSeparation?: (separation: RunningSeparation | null) => void;
   /** Told what it is doing each time that changes, so the musician can see it hasn't stalled. */
@@ -393,6 +398,7 @@ interface RequestState {
    */
   kept: KeptCall[] | null;
   stems: AssistantStems | undefined;
+  decide: Decide | undefined;
   onSeparation: ((separation: RunningSeparation | null) => void) | undefined;
   /** The musician cancelled a Stem Separation: the Request goes straight to its summary. */
   cancelled: boolean;
@@ -410,11 +416,14 @@ export async function runRequest({
   hearReference,
   library,
   conversation: finished = [],
-  mode = DIRECT,
+  mode: asked = DIRECT,
   stems,
+  decide,
   onSeparation,
   onStatus,
 }: RunRequestOptions): Promise<RequestOutcome> {
+  // The model is told of `decide`, and offered it, only where Jev can be asked.
+  const mode: RequestMode = { ...asked, decides: decide !== undefined };
   let message = "";
   let error: string | null = null;
   let usage = NO_TOKENS;
@@ -442,6 +451,7 @@ export async function runRequest({
     hearsAudio: mode.hearsAudio ?? false,
     kept: copy ? [] : null,
     stems,
+    decide,
     onSeparation,
     cancelled: false,
   };
@@ -456,7 +466,7 @@ export async function runRequest({
       if (state.cancelled) turnsLeft = 0;
       const turn = MAX_TURNS - turnsLeft + 1;
       onStatus?.({ turn, doing: { kind: "thinking" }, usage, context });
-      const reply = await conversation.next(results, turnsLeft, toolDefinitions(state.loaded, mode.smallCore, state.hearsAudio));
+      const reply = await conversation.next(results, turnsLeft, toolDefinitions(state.loaded, mode.smallCore, state.hearsAudio, mode.decides));
       usage = addUsage(usage, reply.usage);
       // Each turn is sent everything before it, so the latest holds the most.
       if (reply.usage) context = reply.usage.input + reply.usage.output;
@@ -547,6 +557,8 @@ function suggestionOf(
         hearsAudio: false,
         kept: null,
         stems,
+        // decide changes nothing, so it is never made again.
+        decide: undefined,
         // Its Stems were separated when it was worked out, so nothing is separated now.
         onSeparation: undefined,
         cancelled: false,
@@ -645,6 +657,16 @@ async function apply(
   if (plan.load) {
     loaded.add(plan.load);
     return { callId: call.id, content: loadedReport(plan.load, state.smallCore), isError: false };
+  }
+
+  if (plan.decide) {
+    if (!state.decide) return { callId: call.id, content: "Jev isn't set up here, so nothing can be decided with it.", isError: true };
+    try {
+      const decisions = await state.decide(plan.decide.state, plan.decide.questions);
+      return { callId: call.id, content: describeDecisions(decisions), isError: false };
+    } catch (reason) {
+      return { callId: call.id, content: `Jev couldn't decide: ${reasonText(reason)} Decide yourself instead.`, isError: true };
+    }
   }
 
   if (plan.reference && plan.listen) {

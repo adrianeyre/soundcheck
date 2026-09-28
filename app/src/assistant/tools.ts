@@ -128,6 +128,7 @@ import type { SampleFolder, SampleRef } from "../samples/sample-source";
 import { fileName } from "../storage/project-folder";
 import { placeStems, STEM_LABELS, STEM_TRACK_ORDER } from "../stems/place-stems";
 import { STEM_NAMES, type Stem, type StemName } from "../stems/stem-separator";
+import { MAX_LEVELS, MAX_OPTIONS, MAX_QUESTIONS, type Question } from "./jev";
 import { type AudioFileLength, EMPTY_LIBRARY, type LibraryContents } from "./library";
 import { automationDetail, channelDetail, inRange, noteIds, notesDetail, type TickRange } from "./read";
 
@@ -205,6 +206,11 @@ export interface ToolPlan {
    * `commands` is empty.
    */
   separate?: { clip: AudioClip; next: (stems: readonly Stem[], samples: LoadedSamples) => SeparatedPlan };
+  /**
+   * Questions to ask the Decision Engine, for `decide`: the Request asks
+   * Jev and reports its answers. Changes nothing.
+   */
+  decide?: { state: string; questions: Record<string, Question> };
 }
 
 /** The plan placing a separation's Stems, and their audio, by the path each Stem Clip names. */
@@ -256,6 +262,8 @@ interface Tool {
   group?: ToolGroup;
   /** For a core tool the smaller core leaves out, the group it comes with there instead. */
   smallCoreGroup?: ToolGroup;
+  /** Offered only to a Request that has the Decision Engine (Jev) to ask. */
+  decisionEngine?: true;
   description: string;
   /** JSON Schema, as sent to the model. */
   schema: {
@@ -2654,6 +2662,65 @@ const TOOLS = {
       };
     },
   },
+
+  decide: {
+    decisionEngine: true,
+    description: [
+      "Ask Jev, a fast decision model, to pick between musical options you define: which chord comes next, which drum pattern, which Instrument or Preset, which scale fits, which of several note choices sounds best for a mood. It can't write, chat or make changes: each question is a choice between named options (up to 255), a score on levels you order low to high (2 to 10), or a yes/no, and each answer comes back with a probability for every option and a confidence.",
+      "Use it for many small bounded musical choices, such as one per bar or per part, then make the changes yourself with the other tools, as its picks direct. Ask every question that doesn't depend on another's answer together, in one call: they are answered in parallel.",
+      "state is what it decides from: a short plain-words description of the musical context, only what the questions need, such as the genre and mood the musician asked for, the Song Key, the chords so far or the Track's part. Write options as names with a description of what each one is, not numbers: it reads words better than numbers and doesn't do arithmetic. Changes nothing.",
+    ].join(" "),
+    schema: {
+      type: "object",
+      properties: {
+        state: { type: "string", description: "The musical context Jev decides from, in plain words: short, and only what the questions need." },
+        questions: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_QUESTIONS,
+          description: `The questions, at most ${MAX_QUESTIONS}, each answered on its own against state.`,
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Your name for the question; its answer comes back under it." },
+              kind: {
+                type: "string",
+                enum: ["choice", "score", "yes_no"],
+                description: "choice picks one of options; score rates on levels; yes_no gives the probability of yes.",
+              },
+              question: { type: "string", description: "What to decide, exactly and literally: it reads it at face value." },
+              options: {
+                type: "object",
+                additionalProperties: { type: "string" },
+                description: `For a choice: each option's name, with a description of what it means. From 2 to ${MAX_OPTIONS}.`,
+              },
+              levels: {
+                type: "array",
+                items: { type: "string" },
+                description: `For a score: descriptions of each level, lowest first. From 2 to ${MAX_LEVELS}.`,
+              },
+            },
+            required: ["id", "kind", "question"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["state", "questions"],
+      additionalProperties: false,
+    },
+    plan(input) {
+      const state = checkText(input.state, "state", MAX_STATE);
+      if (!Array.isArray(input.questions) || input.questions.length === 0) reject("questions must be a list of at least one question");
+      if (input.questions.length > MAX_QUESTIONS) reject(`Ask at most ${MAX_QUESTIONS} questions in one call`);
+      const questions: Record<string, Question> = {};
+      for (const value of input.questions as unknown[]) {
+        const question = decisionQuestion(value);
+        if (question.id in questions) reject(`Two questions are called ${question.id}: give each its own id`);
+        questions[question.id] = question.question;
+      }
+      return { commands: [], report: "", decide: { state, questions } };
+    },
+  },
 } satisfies Record<string, Tool>;
 
 export type ToolName = keyof typeof TOOLS;
@@ -2737,13 +2804,15 @@ function groupOf(tool: Tool, smallCore: boolean): ToolGroup | undefined {
 
 /**
  * The definitions a Request with `loaded` groups sends: its core's and
- * theirs, in the fixed order. `smallCore` for the smaller core, and
+ * theirs, in the fixed order. `smallCore` for the smaller core,
  * `hearsAudio` for a Request whose model is sent audio, which alone is
- * offered `analyse_audio`'s `listen`.
+ * offered `analyse_audio`'s `listen`, and `decides` for one that has the
+ * Decision Engine to ask, which alone is offered `decide`.
  */
-export function toolDefinitions(loaded: Iterable<ToolGroup>, smallCore = false, hearsAudio = false): ToolDefinition[] {
+export function toolDefinitions(loaded: Iterable<ToolGroup>, smallCore = false, hearsAudio = false, decides = false): ToolDefinition[] {
   const groups = new Set(loaded);
   return ENTRIES.filter(([, tool]) => {
+    if (tool.decisionEngine && !decides) return false;
     const group = groupOf(tool, smallCore);
     return group === undefined || groups.has(group);
   }).map(hearsAudio ? definition : unheardDefinition);
@@ -2785,6 +2854,53 @@ export function planToolCall(call: ToolCall, project: Project, library: LibraryC
   const missing = tool.schema.required.filter((key) => input[key] === undefined);
   if (missing.length > 0) reject(`${call.name} needs ${missing.join(" and ")}`);
   return tool.plan(input, project, library);
+}
+
+/**
+ * How long `decide`'s state and each question may be, in characters: Jev
+ * is most accurate on a short state holding only what the questions need,
+ * and its request must fit in 64k tokens.
+ */
+const MAX_STATE = 8_000;
+const MAX_QUESTION = 2_000;
+
+function checkText(value: unknown, what: string, max: number): string {
+  if (typeof value !== "string" || value.trim().length === 0 || value.length > max) reject(`${what} must be 1 to ${max} characters`);
+  return value.trim();
+}
+
+/** One of `decide`'s questions, checked, as Jev is asked it. */
+function decisionQuestion(value: unknown): { id: string; question: Question } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) reject("Each question must be an object");
+  const { id, kind, question, options, levels, ...extra } = value as Record<string, unknown>;
+  if (Object.keys(extra).length > 0) reject(`A question has no field called ${Object.keys(extra).join(" or ")}`);
+  const name = checkName(id, "Each question's id");
+  const instructions = checkText(question, `Question ${name}'s question`, MAX_QUESTION);
+  switch (checkChoice(kind, ["choice", "score", "yes_no"] as const, `Question ${name}'s kind`)) {
+    case "choice": {
+      if (typeof options !== "object" || options === null || Array.isArray(options)) {
+        reject(`Question ${name} is a choice, so it needs options: each option's name with its description`);
+      }
+      const named = Object.entries(options as Record<string, unknown>);
+      if (named.length < 2 || named.length > MAX_OPTIONS) reject(`Question ${name} needs from 2 to ${MAX_OPTIONS} options`);
+      return {
+        id: name,
+        question: {
+          kind: "choice",
+          instructions,
+          options: Object.fromEntries(named.map(([option, meaning]) => [option, typeof meaning === "string" && meaning.trim() ? meaning : null])),
+        },
+      };
+    }
+    case "score": {
+      if (!Array.isArray(levels) || levels.length < 2 || levels.length > MAX_LEVELS || levels.some((level) => typeof level !== "string" || !level.trim())) {
+        reject(`Question ${name} is a score, so it needs from 2 to ${MAX_LEVELS} levels, each described, lowest first`);
+      }
+      return { id: name, question: { kind: "score", instructions, levels: levels as string[] } };
+    }
+    case "yes_no":
+      return { id: name, question: { kind: "noul", instructions } };
+  }
 }
 
 function kindName(kind: Track["kind"]): string {

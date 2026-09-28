@@ -15,6 +15,11 @@
  * - Grok: docs.x.ai/docs/models, and the reasoning efforts per model from
  *   /docs/guides/reasoning (Grok 4.5 takes up to `high`; an `xhigh` sent it
  *   is treated as `high`, so it isn't offered).
+ * - Meta AI: dev.meta.ai/docs/models, the Muse Spark models of Meta's Model
+ *   API, and the reasoning efforts from /docs/reasoning (`minimal` to
+ *   `xhigh`, and `max` on Muse Spark 1.3 only; reasoning can't be turned
+ *   off, so there is no `none`). The -contributor versions, which let Meta
+ *   train on what they are sent, are left out.
  * - Local: ollama.com/library, the tool-capable tags of its Llama, Qwen,
  *   Mistral and Gemma families.
  *
@@ -33,6 +38,10 @@
  * - Grok: each model's page at docs.x.ai/docs/models/<id> gives text and
  *   image input and function calling, and /docs/guides/function-calling
  *   several calls a turn, on by default. None takes audio.
+ * - Meta AI: dev.meta.ai/docs/models gives every Muse Spark model text,
+ *   image, video, audio and PDF input and tool calling, with parallel tool
+ *   calls. Its Chat Completions endpoint's audio input isn't documented, and
+ *   1.3's audio is "not fully supported", so none is marked as hearing audio.
  * - Local: every tag above is marked "tools" by ollama.com/library, so each
  *   uses tools. Whether it sees images or hears audio depends on how it is
  *   run (llama.cpp's server sees images only with the model's projector
@@ -42,7 +51,7 @@
  *   and gemma4 "vision", and gemma4 "audio".
  */
 
-export type ProviderId = "claude" | "openai" | "gemini" | "grok" | "local";
+export type ProviderId = "claude" | "openai" | "gemini" | "grok" | "meta" | "local";
 
 export interface ModelVersion {
   /** What the Version picker shows, such as "5.5". */
@@ -118,7 +127,8 @@ const OPENAI_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"] as cons
  * (/docs/en/build-with-claude/context-windows); each GPT-6 1,050,000
  * (developers.openai.com/api/docs/models); each Gemini model's page gives
  * an input limit of 1,048,576; each Grok model's page 500,000 for Grok 4.7,
- * 4.6 and 4.5, and 1,000,000 for Grok 4.3. A local model's is set on its server:
+ * 4.6 and 4.5, and 1,000,000 for Grok 4.3; each Muse Spark model 1,048,576
+ * (dev.meta.ai/docs/models). A local model's is set on its server:
  * Ollama gives 4k under 24 GiB of VRAM (docs.ollama.com/context-length).
  */
 const CLAUDE_CONTEXT = 1_000_000;
@@ -130,6 +140,9 @@ const CLAUDE_CAPABILITIES: Capabilities = { toolUse: true, imageInput: true, aud
 const OPENAI_CAPABILITIES: Capabilities = { toolUse: true, imageInput: true, audioInput: false, parallelToolCalls: true };
 const GEMINI_CAPABILITIES: Capabilities = { toolUse: true, imageInput: true, audioInput: true, parallelToolCalls: true };
 const GROK_CAPABILITIES: Capabilities = { toolUse: true, imageInput: true, audioInput: false, parallelToolCalls: true };
+const META_CAPABILITIES: Capabilities = { toolUse: true, imageInput: true, audioInput: false, parallelToolCalls: true };
+const META_CONTEXT = 1_048_576;
+const META_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"] as const;
 /** Where a local model starts, whatever it can do when run another way: see above. */
 const LOCAL_CAPABILITIES: Capabilities = { toolUse: true, imageInput: false, audioInput: false, parallelToolCalls: false };
 
@@ -147,6 +160,10 @@ function gemini(name: string, id: string, efforts: readonly string[]): ModelVers
 
 function grok(name: string, efforts: readonly string[], contextWindow: number): ModelVersion {
   return { name, id: `grok-${name}`, efforts, capabilities: GROK_CAPABILITIES, contextWindow };
+}
+
+function muse(name: string, efforts: readonly string[] = META_EFFORTS): ModelVersion {
+  return { name, id: `muse-spark-${name}`, efforts, capabilities: META_CAPABILITIES, contextWindow: META_CONTEXT };
 }
 
 /** Ollama names a model `family:tag`, and the tag is the version. */
@@ -237,6 +254,20 @@ export const PROVIDERS: readonly Provider[] = [
           grok("4.5", ["low", "medium", "high"], 500_000),
           grok("4.3", ["none", "low", "medium", "high", "xhigh"], 1_000_000),
         ],
+      },
+    ],
+  },
+  {
+    id: "meta",
+    name: "Meta AI",
+    needsKey: true,
+    baseUrl: "https://api.meta.ai/v1",
+    adjustableCapabilities: false,
+    smallModels: false,
+    families: [
+      {
+        name: "Muse Spark",
+        versions: [muse("1.3", [...META_EFFORTS, "max"]), muse("1.2"), muse("1.1")],
       },
     ],
   },

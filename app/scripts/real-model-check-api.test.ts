@@ -100,6 +100,8 @@ describe("the model check", () => {
     expect(isProvidersModel("local", "llama3.1:8b")).toBe(true);
     expect(isProvidersModel("grok", "grok-4.7")).toBe(true);
     expect(isProvidersModel("grok", "gpt-6-astra")).toBe(false);
+    expect(isProvidersModel("meta", "muse-spark-1.3")).toBe(true);
+    expect(isProvidersModel("meta", "gpt-6-astra")).toBe(false);
   });
 });
 

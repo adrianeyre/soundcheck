@@ -457,6 +457,7 @@ function sentToolNames(provider: ProviderId, body: Record<string, unknown>): str
       return (body.tools as { name: string }[]).map((tool) => tool.name);
     case "openai":
     case "grok":
+    case "meta":
     case "local":
       return (body.tools as { function: { name: string } }[]).map((tool) => tool.function.name);
     case "gemini":
@@ -500,12 +501,16 @@ const LOADS_SOUNDS: Record<ProviderId, [unknown, unknown]> = {
     completion({ tool_calls: [{ id: "call_1", type: "function", function: { name: "load_tools", arguments: '{"group":"sounds"}' } }] }),
     completion({ content: "Done." }),
   ],
+  meta: [
+    completion({ tool_calls: [{ id: "call_1", type: "function", function: { name: "load_tools", arguments: '{"group":"sounds"}' } }] }),
+    completion({ content: "Done." }),
+  ],
   gemini: [generated([{ functionCall: { id: "call_1", name: "load_tools", args: { group: "sounds" } } }]), generated([{ text: "Done." }])],
 };
 
 test("every Provider sends the tool list it is given each turn, so it grows after load_tools", async () => {
   const grown = toolDefinitions(["sounds"]);
-  for (const provider of ["claude", "openai", "local", "gemini"] as const) {
+  for (const provider of ["claude", "openai", "local", "gemini", "meta"] as const) {
     const { fetch, sent } = stubbed(...LOADS_SOUNDS[provider]);
     const conversation = conversationsFor(provider, GATEWAY, fetch)("add an EQ", createProject("Demo"));
     const first = await conversation.next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
@@ -547,6 +552,7 @@ function sentTurns(provider: ProviderId, body: Record<string, unknown>): { role:
       return (body.messages as { role: string; content: unknown }[]).map(({ role, content }) => ({ role, text: text(content) }));
     case "openai":
     case "grok":
+    case "meta":
     case "local":
       return (body.messages as { role: string; content: unknown }[])
         .filter(({ role }) => role !== "system")
@@ -659,4 +665,26 @@ test("Grok: an effort the model doesn't take is left off", async () => {
   );
   expect(sent[0]!.body.model).toBe("grok-4.5");
   expect(sent[0]!.body.reasoning_effort).toBeUndefined();
+});
+
+test("Meta AI: a Request goes to Meta's Model API with the key, the effort and the tools, and comes back as tool calls", async () => {
+  const { fetch, sent } = stubbed(OPENAI_CALLS);
+  const conversation = conversationsFor("meta", { apiKey: "meta-test", effort: "max" }, fetch)("make it 128", createProject("Demo"));
+  const reply = await conversation.next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
+
+  expect(reply.toolCalls.map((call) => call.name)).toEqual(["set_tempo", "analyse_audio"]);
+  expect(sent[0]!.url).toBe("https://api.meta.ai/v1/chat/completions");
+  expect(sent[0]!.headers.get("authorization")).toBe("Bearer meta-test");
+  // Muse Spark counts its reasoning in max_tokens; `max` is 1.3's alone.
+  expect(sent[0]!.body).toMatchObject({ model: "muse-spark-1.3", reasoning_effort: "max", max_tokens: 16_000 });
+  expect(sent[0]!.body.max_completion_tokens).toBeUndefined();
+});
+
+test("Meta AI: an effort the model doesn't take is left off, and reasoning can't be turned off", async () => {
+  const { fetch, sent } = stubbed(completion({ content: "Done." }), completion({ content: "Done." }));
+  await conversationsFor("meta", { apiKey: "k", model: "muse-spark-1.2", effort: "max" }, fetch)("hi", createProject("Demo")).next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
+  await conversationsFor("meta", { apiKey: "k", effort: "none" }, fetch)("hi", createProject("Demo")).next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
+  expect(sent[0]!.body.model).toBe("muse-spark-1.2");
+  expect(sent[0]!.body.reasoning_effort).toBeUndefined();
+  expect(sent[1]!.body.reasoning_effort).toBeUndefined();
 });

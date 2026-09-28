@@ -18,6 +18,7 @@ import {
 } from "./catalogue";
 import type { RequestMode } from "./assistant";
 import { capabilitiesFor, isContextWindow, requestModeFor, type Connection, type Settings } from "./connection";
+import { JEV_BASE_URL, JEV_DEFAULT_MODEL, JEV_MODELS, type JevConnection } from "./jev";
 import type { KeyStore } from "./key-store";
 
 export interface AssistantSettingsProps {
@@ -28,6 +29,10 @@ export interface AssistantSettingsProps {
  * The Assistant's connection, on the Settings page: the provider, its API
  * key, model and effort, how its Requests run, and a gateway or local
  * server to reach it through. What is saved here the Request box on the Editor page uses at once.
+ *
+ * Below it, Jev: the Decision Engine, which is no provider, since it can't
+ * chat or call tools, but which the Assistant can ask for quick bounded
+ * choices, and the Chords Widget for the next chord.
  */
 export function AssistantSettings({ keyStore }: AssistantSettingsProps) {
   const [{ settings, loaded, error }, store] = useAssistantSettings(keyStore);
@@ -50,6 +55,17 @@ export function AssistantSettings({ keyStore }: AssistantSettingsProps) {
           }
         }}
       />
+      <JevForm
+        key={`jev:${saves}`}
+        saved={settings?.jev}
+        onSave={async (jev) => {
+          setStatus(null);
+          if (await store.saveJev(jev)) {
+            setSaves((count) => count + 1);
+            setStatus(jev ? "Saved. The Assistant can ask Jev for quick decisions." : "Jev's key was forgotten.");
+          }
+        }}
+      />
       {settings && (
         <div className="row">
           <button
@@ -58,11 +74,11 @@ export function AssistantSettings({ keyStore }: AssistantSettingsProps) {
             onClick={async () => {
               await store.forget();
               setSaves((count) => count + 1);
-              setStatus("The API key was forgotten.");
+              setStatus("The API keys were forgotten.");
             }}
           >
             <Trash2 size={14} aria-hidden />
-            Forget API key
+            Forget all API keys
           </button>
         </div>
       )}
@@ -427,5 +443,86 @@ function RequestModeFields({
           : "A Suggestion is worked out on a copy of the Project, and nothing changes until you apply it."}
       </p>
     </fieldset>
+  );
+}
+
+/**
+ * Jev's connection: the musician's TypeSafe key, which model, and a gateway
+ * such as OpenRouter or Cloudflare's to reach it through. A blank key keeps
+ * the saved one, which is never shown.
+ */
+function JevForm({ saved, onSave }: { saved: JevConnection | undefined; onSave: (jev: JevConnection | null) => void | Promise<void> }) {
+  const [entered, setEntered] = useState("");
+  const [model, setModel] = useState(saved?.model ?? JEV_DEFAULT_MODEL);
+  const [baseUrl, setBaseUrl] = useState(saved?.baseUrl ?? "");
+  const apiKey = entered.trim() || saved?.apiKey || "";
+  const ids = useId();
+  const listed = JEV_MODELS.some(({ id }) => id === model);
+  return (
+    <form
+      className="stack"
+      aria-labelledby={`${ids}-heading`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!apiKey) return;
+        void onSave({ apiKey, ...(baseUrl.trim() && { baseUrl }), ...(model !== JEV_DEFAULT_MODEL && { model }) });
+      }}
+    >
+      <h3 id={`${ids}-heading`}>Jev, for quick decisions</h3>
+      <p className="hint">
+        TypeSafe&apos;s Jev can&apos;t chat, so it isn&apos;t a provider: it picks between options the app gives it, fast and cheaply.
+        With it set up, the Assistant hands it many small musical choices (the chord for each bar, which drum pattern, which
+        Instrument), and the Chords Widget can ask it for the next chord. It is a hosted service: what it is asked leaves this
+        machine.
+      </p>
+      <div className="row row-end">
+        <label className="field" style={{ flex: "1 1 18rem" }}>
+          TypeSafe API key
+          <input
+            type="password"
+            value={entered}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={saved?.apiKey ? "Saved — leave blank to keep it" : undefined}
+            onChange={(event) => setEntered(event.target.value)}
+          />
+        </label>
+        <label className="field">
+          Jev model
+          <select value={model} onChange={(event) => setModel(event.target.value)}>
+            {JEV_MODELS.map(({ id, name }) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+            {!listed && <option value={model}>{model}</option>}
+          </select>
+        </label>
+      </div>
+      <details open={Boolean(saved?.baseUrl)}>
+        <summary>Gateway (optional)</summary>
+        <label className="field mt-3">
+          Jev base URL
+          <input
+            inputMode="url"
+            value={baseUrl}
+            spellCheck={false}
+            placeholder={JEV_BASE_URL}
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+        </label>
+      </details>
+      <div className="row">
+        <button type="submit" className="btn-primary" disabled={!apiKey}>
+          {saved ? "Update Jev" : "Set up Jev"}
+        </button>
+        {saved && (
+          <button type="button" className="btn-sm" onClick={() => void onSave(null)}>
+            <Trash2 size={14} aria-hidden />
+            Forget Jev&apos;s key
+          </button>
+        )}
+      </div>
+    </form>
   );
 }

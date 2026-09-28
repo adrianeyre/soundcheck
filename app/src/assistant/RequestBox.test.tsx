@@ -120,7 +120,7 @@ test("the key can be forgotten, and then it is asked for again", async () => {
   show(keyStore, NOTHING);
 
   expect(await screen.findByLabelText("Request")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Forget API key" }));
+  fireEvent.click(screen.getByRole("button", { name: "Forget all API keys" }));
 
   expect(await screen.findByText(/The Assistant needs a model to talk to/)).toBeInTheDocument();
   expect(screen.queryByLabelText("Request")).not.toBeInTheDocument();
@@ -679,7 +679,7 @@ test("Local starts with Suggestions and the smaller core, and turning them off i
   fireEvent.change(screen.getByLabelText("Request"), { target: { value: "hello" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByLabelText("What the Assistant said");
-  expect(modes.at(-1)).toEqual({ smallCore: true, suggestion: true, hearsAudio: false });
+  expect(modes.at(-1)).toEqual({ smallCore: true, suggestion: true, hearsAudio: false, decides: false });
 
   fireEvent.click(screen.getByLabelText("Suggest changes for me to apply"));
   fireEvent.click(screen.getByLabelText("Start with fewer, simpler tools"));
@@ -897,4 +897,75 @@ test("Settings keeps a local server's Context Window", async () => {
   fireEvent.change(screen.getByLabelText("Context window (tokens)"), { target: { value: "65536" } });
   fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
   await waitFor(async () => expect(JSON.parse((await keyStore.read())!).connections.local.contextWindow).toBe(65_536));
+});
+
+test("with several providers set up, the Request box switches between them, and the next Request goes to the one picked", async () => {
+  const keyStore = memoryKeyStore(
+    JSON.stringify({ provider: "claude", connections: { claude: { apiKey: "sk" }, meta: { apiKey: "meta" }, openai: { apiKey: "" } } }),
+  );
+  const asked: string[] = [];
+  const conversations = (_connection: Connection, provider: string): StartConversation => {
+    asked.push(provider);
+    return () => ({ next: () => Promise.resolve({ text: `Answered by ${provider}.`, toolCalls: [] }) });
+  };
+  render(<RequestBox history={new ProjectHistory(createProject("Demo"))} keyStore={keyStore} conversations={conversations} />);
+
+  const picker = await screen.findByRole("combobox", { name: "Assistant provider" });
+  // OpenAI has no key, so it isn't ready to pick.
+  expect(within(picker).getAllByRole("option").map((option) => option.textContent)).toEqual([
+    "Claude Opus 5.5, default effort",
+    "Meta AI Muse Spark 1.3, default effort",
+  ]);
+  fireEvent.change(picker, { target: { value: "meta" } });
+  await waitFor(async () => expect(JSON.parse((await keyStore.read())!).provider).toBe("meta"));
+
+  fireEvent.change(screen.getByLabelText("Request"), { target: { value: "hello" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(await screen.findByLabelText("What the Assistant said")).toHaveTextContent("Answered by meta.");
+  expect(asked).toEqual(["meta"]);
+  // The other connections are kept, to switch back to.
+  expect(JSON.parse((await keyStore.read())!).connections).toMatchObject({ claude: { apiKey: "sk" }, meta: { apiKey: "meta" } });
+});
+
+test("with one provider set up there is nothing to pick: the box says which it uses", async () => {
+  render(<RequestBox history={new ProjectHistory(createProject("Demo"))} keyStore={memoryKeyStore("sk-test")} conversations={scripted(NOTHING)} />);
+  expect(await screen.findByText("Claude Opus 5.5, default effort")).toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Assistant provider" })).not.toBeInTheDocument();
+});
+
+test("Jev is set up in Settings beside the providers, and then the Assistant can ask it", async () => {
+  const keyStore = memoryKeyStore("sk-test");
+  const jevs: unknown[] = [];
+  const modes: unknown[] = [];
+  const conversations = (): StartConversation => (_request, _project, _library, _soFar, mode) => {
+    modes.push(mode);
+    return { next: () => Promise.resolve({ text: "Done.", toolCalls: [] }) };
+  };
+  render(
+    <Both
+      history={new ProjectHistory(createProject("Demo"))}
+      keyStore={keyStore}
+      conversations={conversations}
+      decisions={(jev) => {
+        jevs.push(jev);
+        return () => Promise.reject(new Error("unused"));
+      }}
+    />,
+  );
+
+  fireEvent.change(await screen.findByLabelText("TypeSafe API key"), { target: { value: "ts-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Set up Jev" }));
+  expect(await screen.findByText("with Jev deciding")).toBeInTheDocument();
+  expect(JSON.parse((await keyStore.read())!)).toEqual({ provider: "claude", connections: { claude: { apiKey: "sk-test" } }, jev: { apiKey: "ts-key" } });
+
+  fireEvent.change(screen.getByLabelText("Request"), { target: { value: "hello" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByLabelText("What the Assistant said");
+  expect(jevs).toEqual([{ apiKey: "ts-key" }]);
+  expect(modes.at(-1)).toMatchObject({ decides: true });
+
+  // Forgetting Jev keeps the provider's key.
+  fireEvent.click(screen.getByRole("button", { name: "Forget Jev's key" }));
+  await waitFor(() => expect(screen.queryByText("with Jev deciding")).not.toBeInTheDocument());
+  expect(await keyStore.read()).toBe("sk-test");
 });

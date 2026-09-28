@@ -10,6 +10,7 @@ import {
   modelChoice,
   readConnection,
   readSettings,
+  readyProviders,
   requestModeFor,
   saveConnection,
   saveSettings,
@@ -219,4 +220,31 @@ test("Local's Context Window is saved and read back, and one that isn't a whole 
   expect(readSettings(bad).connections.local?.contextWindow).toBeUndefined();
   const notLocal = JSON.stringify({ provider: "claude", connections: { claude: { apiKey: "k", contextWindow: 5 } } });
   expect(readSettings(notLocal).connections.claude?.contextWindow).toBeUndefined();
+});
+
+test("Jev's connection is saved beside the providers' and read back, and doesn't make Claude's key a bare one", () => {
+  const settings: Settings = {
+    provider: "claude",
+    connections: { claude: { apiKey: "sk-test" } },
+    jev: { apiKey: "ts-key", baseUrl: " https://gateway.example.com ", model: "jev-1.13.0" },
+  };
+  const saved = saveSettings(settings);
+  expect(saved.startsWith("{")).toBe(true);
+  expect(readSettings(saved)).toEqual({ ...settings, jev: { apiKey: "ts-key", baseUrl: "https://gateway.example.com", model: "jev-1.13.0" } });
+  // Without Jev, Claude's key alone is saved as it always was.
+  expect(saveSettings({ provider: "claude", connections: { claude: { apiKey: "sk-test" } } })).toBe("sk-test");
+  // Jev set up before any provider is still read, with no provider ready.
+  const jevOnly = readSettings(saveSettings({ provider: "claude", connections: {}, jev: { apiKey: "ts-key" } }));
+  expect(jevOnly).toEqual({ provider: "claude", connections: {}, jev: { apiKey: "ts-key" } });
+  expect(readyProviders(jevOnly)).toEqual([]);
+});
+
+test("the ready providers are those with a connection saved, with a key where one is needed, in the catalogue's order", () => {
+  expect(readyProviders(null)).toEqual([]);
+  expect(
+    readyProviders({
+      provider: "meta",
+      connections: { local: { apiKey: "" }, meta: { apiKey: "m" }, openai: { apiKey: " " }, claude: { apiKey: "sk" } },
+    }),
+  ).toEqual(["claude", "meta", "local"]);
 });

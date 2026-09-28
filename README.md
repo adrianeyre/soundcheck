@@ -887,17 +887,32 @@ a time. Each lives in its own folder of [`skills/`](skills/README.md), which
 says how to write one; a new folder is a new Skill, with no code to change.
 
 It talks to the **Provider** you pick in **Settings → Assistant**: Claude (the default),
-OpenAI, Google Gemini, xAI Grok, or a Local model served by Ollama or llama.cpp. For
+OpenAI, Google Gemini, xAI Grok, Meta AI (Muse Spark, through Meta's Model API), or a
+Local model served by Ollama or llama.cpp. For
 Claude it needs your own API key, from
 [the Anthropic Console](https://console.anthropic.com/settings/keys); OpenAI,
-Gemini and Grok need theirs (Grok's from [the xAI Console](https://console.x.ai)). Local needs no key, only a server with a model that can
+Gemini, Grok and Meta AI need theirs (Grok's from [the xAI Console](https://console.x.ai),
+Meta AI's from [Meta's developer platform](https://dev.meta.ai)). Local needs no key, only a server with a model that can
 use tools (`ollama pull qwen3:8b`, say): it goes to Ollama at
 `http://localhost:11434/v1` unless you give another base URL (llama.cpp's
 `llama-server`, for one, serves `http://localhost:8080/v1`). Each Provider
 keeps its own key, model, version, effort and gateway, so switching to another
-and back loses nothing. The app asks for a key once and keeps it in the machine's credential store — Windows
+and back loses nothing. With more than one set up, the **Assistant** Widget in the
+Editor has a picker beside its heading to switch between them; the next Request goes
+to the one picked, and the Conversation carries on. The app asks for a key once and keeps it in the machine's credential store — Windows
 Credential Manager on Windows, the login keychain on macOS — never in a Project, so a Project you share
-carries no key. **Forget API key** removes it. Requests are billed to your key.
+carries no key. **Forget all API keys** removes them. Requests are billed to your key.
+
+**Jev** ([TypeSafe](https://docs.typesafe.ai)'s decision model) can be set up in the
+same place, with your own TypeSafe key and, if you like, a gateway's base URL. It isn't a
+Provider: it can't chat or use tools, only pick between options it is given, with a
+probability for each. With it set up, the Assistant can hand it the many small musical
+choices a Request involves (the chord for each bar, which drum pattern for each Section,
+which Instrument) through its `decide` tool, and still makes every change itself; and the
+**Chords** Widget gets **Next chord from Jev**, which picks the next chord of the
+progression from the pads. It is a hosted service, so what it is asked leaves your
+machine; it is billed per input token to your TypeSafe account. See
+[ADR 0014](docs/architectural-decision-record/0014-jev-is-a-decision-engine-beside-the-assistant.md).
 
 The Browser Version (and `pnpm dev`) has no credential store, so there it is
 kept in the browser's local storage; on Linux the credential store is the Secret

@@ -156,8 +156,12 @@ The LLM feature that edits the Project on the musician's behalf, and can listen 
 _Avoid_: Claude, AI, the LLM, copilot
 
 **Provider**:
-Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, or a Local one (Ollama or llama.cpp). The musician picks one, then its model, version and effort; each Provider keeps its own key and settings in the platform's key store, never in a Project.
+Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, Meta AI, or a Local one (Ollama or llama.cpp). The musician picks one, then its model, version and effort; each Provider keeps its own key and settings in the platform's key store, never in a Project. With several set up, the Assistant Widget switches between them.
 _Avoid_: Backend, vendor
+
+**Decision Engine**:
+A model that only picks between options the app or the Assistant defines, answering each with a probability, and never chats or makes a change: TypeSafe's Jev. The Assistant asks it for many small bounded musical choices and makes the changes itself; the Chords Widget asks it for the next chord. It is not a Provider, and its key is kept beside theirs.
+_Avoid_: Provider (it can't be one), classifier, System One (TypeSafe's own name for the kind)
 
 **Capability**:
 What a Provider's model can do, as the Provider's catalogue declares it: tool use, image input, audio input, and several tool calls per turn. The Assistant uses a feature only where the model declares it, and a model without tool use can't be the Assistant. A Local model's image input, audio input and several calls per turn start off, and the musician turns on what their server gives it.

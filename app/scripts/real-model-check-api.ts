@@ -125,6 +125,7 @@ export const ENVIRONMENT: Record<ProviderId, { apiKey: string; baseUrl: string; 
   openai: { apiKey: "OPENAI_API_KEY", baseUrl: "OPENAI_BASE_URL", customHeaders: "OPENAI_CUSTOM_HEADERS" },
   gemini: { apiKey: "GEMINI_API_KEY", baseUrl: "GEMINI_BASE_URL", customHeaders: "GEMINI_CUSTOM_HEADERS" },
   grok: { apiKey: "XAI_API_KEY", baseUrl: "XAI_BASE_URL", customHeaders: "XAI_CUSTOM_HEADERS" },
+  meta: { apiKey: "META_API_KEY", baseUrl: "META_BASE_URL", customHeaders: "META_CUSTOM_HEADERS" },
   local: { apiKey: "LOCAL_API_KEY", baseUrl: "LOCAL_BASE_URL", customHeaders: "LOCAL_CUSTOM_HEADERS" },
 };
 
@@ -168,6 +169,8 @@ export function isProvidersModel(provider: ProviderId, model: string | null): bo
       return /^(models\/)?gemini-/.test(model);
     case "grok":
       return model.startsWith("grok-");
+    case "meta":
+      return model.startsWith("muse-");
     case "local":
       return true;
   }

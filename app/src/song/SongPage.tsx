@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import type { Listen } from "../assistant/assistant";
 import { AssistantSettings } from "../assistant/AssistantSettings";
 import { RequestBox, type RequestBoxProps } from "../assistant/RequestBox";
+import { useJevConnection } from "../assistant/assistant-settings";
+import { jevDecide } from "../assistant/jev";
 import type { KeyStore } from "../assistant/key-store";
 import { assistantLibrary } from "../assistant/library";
 import { listenWith } from "../assistant/listen";
@@ -30,7 +32,8 @@ import { SynthPanel } from "../instrument/SynthPanel";
 import { MeterBridge } from "../mixer/MeterBridge";
 import { Mixer } from "../mixer/Mixer";
 import { EqEditor } from "../effect/EqEditor";
-import { ChordPads } from "../theory/ChordPads";
+import { ChordPads, parallelKey } from "../theory/ChordPads";
+import { jevNextChord } from "../theory/next-chord";
 import { DEFAULT_KEY, type MusicalKey } from "../theory/theory";
 import { KitControls } from "../kit/KitControls";
 import { KitLibrary, loadKitCommand, type SavedKit } from "../kit/kit-library";
@@ -319,6 +322,9 @@ export function SongPage({
   const [midiStatus, setMidiStatus] = useState<string | null>(null);
   // The song's key, which the Keyboard, Chords and Note Tools share; the musician's view, not the Project's.
   const [songKey, setSongKey] = useState<MusicalKey>(DEFAULT_KEY);
+  // Jev, where it is set up, picks the Chords Widget's next chord.
+  const jev = useJevConnection(keyStore);
+  const nextChord = useMemo(() => (jev ? jevNextChord(jevDecide(jev, fetch), parallelKey) : undefined), [jev, fetch]);
   // The notes held right now, from the on-screen keys, the computer keyboard or MIDI, for the pianos to light.
   const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
   const [samples, setSamples] = useState<LoadedSamples>(new Map());
@@ -1616,6 +1622,7 @@ export function SongPage({
                   noteOff={noteOff}
                   target={chordTarget}
                   onNotes={(notes, label) => selected && execute({ type: "setPatternNotes", clipId: selected.clip.id, notes }, label)}
+                  nextChord={nextChord}
                 />
               ),
               noteTools: selected ? (
