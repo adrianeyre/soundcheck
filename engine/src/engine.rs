@@ -1530,6 +1530,29 @@ impl Engine {
         self.dj.as_ref().map(|dj| dj.headphones())
     }
 
+    /// Hand Deck `deck` its timecode vinyl's stereo input for the next
+    /// `render` (a DVS's REL and ABS modes), block by block, lined up with
+    /// the output. Nothing before the DJ Mixer is used.
+    pub fn dj_set_timecode_input(&mut self, deck: usize, left: &[f32], right: &[f32]) {
+        if let Some(dj) = &mut self.dj {
+            dj.set_timecode_input(deck, left, right);
+        }
+    }
+
+    /// Give Deck `deck` the position table for its timecode format, built
+    /// off the audio thread, handing back the one it replaces (or this one,
+    /// before the DJ Mixer is used) to be dropped there.
+    pub fn dj_set_timecode_table(
+        &mut self,
+        deck: usize,
+        table: Option<std::sync::Arc<crate::dj::PositionTable>>,
+    ) -> Option<std::sync::Arc<crate::dj::PositionTable>> {
+        match &mut self.dj {
+            Some(dj) => dj.set_timecode_table(deck, table),
+            None => table,
+        }
+    }
+
     /// Add the DJ Mixer's next block to the output, after the song's Master
     /// has been metered.
     fn render_dj(&mut self, frames: usize) {

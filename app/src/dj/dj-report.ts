@@ -2,7 +2,8 @@
  * The DJ Mixer's report, as the engine lays it out (`DjMixer::report` in
  * `engine/src/dj/mod.rs`): `GLOBAL_FIELDS` numbers for the mixer, then
  * `DECK_FIELDS` for each of the `DECKS` Decks, then `SAMPLER_FIELDS` for the
- * Sampler. A test checks the lengths against the engine's own.
+ * Sampler, then `TIMECODE_FIELDS` for each Deck's timecode vinyl. A test
+ * checks the lengths against the engine's own.
  */
 
 export const DECKS = 4;
@@ -13,7 +14,33 @@ export const SAMPLER_BANK_SLOTS = 16;
 export const SAMPLER_BANKS = 4;
 export const SAMPLER_SLOTS = SAMPLER_BANK_SLOTS * SAMPLER_BANKS;
 export const SAMPLER_FIELDS = 4 + SAMPLER_SLOTS;
-export const DJ_REPORT_LEN = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS;
+/** Each Deck's mode, signal, the record's speed and position, the carrier, the format chosen and whether ABS is ready. */
+export const TIMECODE_FIELDS = 7;
+export const DJ_REPORT_LEN = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + DECKS * TIMECODE_FIELDS;
+
+/**
+ * Who moves a Deck (a DVS's control modes): `int` it plays the file itself;
+ * `rel` the timecode vinyl's speed and direction move it; `abs` the vinyl's
+ * position places it too.
+ */
+export type DeckMode = "int" | "rel" | "abs";
+export const DECK_MODES: readonly DeckMode[] = ["int", "rel", "abs"];
+
+/** A Deck's timecode vinyl, as its decoder last read it. */
+export interface TimecodeReport {
+  /** A needle on a turning record. */
+  signal: boolean;
+  /** 1 is the record's nominal speed (33⅓ rpm); negative is backwards. */
+  speed: number;
+  /** Seconds into the record, once its position has been read (ABS), or null. */
+  position: number | null;
+  /** The carrier measured against, in Hz: the format's, or the one Auto found. */
+  carrier: number;
+  /** The format chosen: 0 Auto, then `TIMECODE_FORMATS` from 1. */
+  format: number;
+  /** Whether it can read positions, so ABS works. */
+  absReady: boolean;
+}
 
 /** Where a Sampler Slot is: `SlotState` in `engine/src/dj/sampler.rs`. */
 export type SlotState = "empty" | "stopped" | "playing" | "paused";
@@ -65,6 +92,9 @@ export interface DeckReport {
   silent: boolean;
   /** Slip Reverse held (or running out its 8 beats). */
   slipReverse: boolean;
+  /** INT, REL or ABS. */
+  mode: DeckMode;
+  timecode: TimecodeReport;
 }
 
 export interface DjReport {
@@ -106,6 +136,8 @@ const EMPTY_DECK: DeckReport = {
   tempo: 0,
   silent: false,
   slipReverse: false,
+  mode: "int",
+  timecode: { signal: false, speed: 0, position: null, carrier: 1000, format: 0, absReady: false },
 };
 
 /** What the page shows before the engine has reported. */
@@ -141,6 +173,7 @@ export function readDjReport(flat: readonly number[] | null | undefined): DjRepo
     decks: Array.from({ length: DECKS }, (_, deck) => {
       const f = (field: number) => at(GLOBAL_FIELDS + deck * DECK_FIELDS + field);
       const on = (field: number) => f(field) >= 0.5;
+      const t = (field: number) => at(GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + deck * TIMECODE_FIELDS + field);
       return {
         loaded: on(0),
         playing: on(1),
@@ -166,6 +199,15 @@ export function readDjReport(flat: readonly number[] | null | undefined): DjRepo
         tempo: f(23),
         silent: on(24),
         slipReverse: on(25),
+        mode: DECK_MODES[Math.round(t(0))] ?? "int",
+        timecode: {
+          signal: t(1) >= 0.5,
+          speed: t(2),
+          position: t(3) >= 0 ? t(3) : null,
+          carrier: t(4),
+          format: Math.round(t(5)),
+          absReady: t(6) >= 0.5,
+        },
       };
     }),
     sampler: (() => {

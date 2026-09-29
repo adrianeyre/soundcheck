@@ -12,6 +12,7 @@ import { memoryLibraryStorage } from "../preset/library-storage";
 import { SAMPLE_DRAG_TYPE } from "../samples/sample-drag";
 import type { SampleSource } from "../samples/sample-source";
 import { DjPage } from "./DjPage";
+import type { AddedTake, AddTakeRequest } from "./dj-session";
 import { DECK_FIELDS, DJ_REPORT_LEN, GLOBAL_FIELDS } from "./dj-report";
 import type { DjRecordingSaver } from "./recording-saver";
 
@@ -64,7 +65,7 @@ function fakeOutput() {
     takeRecordedNotes: () => [],
     resetCounters: () => {},
     close: async () => {},
-    dj: { load, unload: () => {}, loadSample: async () => 1, unloadSample: () => {}, takeRecording, headphones: false },
+    dj: { load, unload: () => {}, loadSample: async () => ({ seconds: 1, bpm: 0 }), unloadSample: () => {}, takeRecording, headphones: false },
   };
   const dj = (name: string) => sent.filter((c) => c.type === "djSet" && c.name === name);
   return { output, sent, report, load, takeRecording, dj };
@@ -184,10 +185,10 @@ test("a recording of the mix is encoded and saved", async () => {
 
 test("a recording of the mix, once stopped, can be added to the song", async () => {
   const fake = fakeOutput();
-  const onAddToSong = vi.fn<(wav: Uint8Array, name: string) => Promise<string>>(async () => "Mix take 1 is in the song.");
+  const onAddToSong = vi.fn<(request: AddTakeRequest) => Promise<AddedTake>>(async () => ({ message: "Mix take 1 is in the song." }));
   render(<DjPage output={fake.output} active saver={saver()} onAddToSong={onAddToSong} />);
   const mixer = screen.getByRole("region", { name: "Mixer" });
-  const add = within(mixer).getByRole("button", { name: "Add the recording to the song, on a new Audio Track" });
+  const add = within(mixer).getByRole("button", { name: "Add the recording to the song, at the playhead, on a new Audio Track" });
   expect(add).toBeDisabled();
   fireEvent.click(within(mixer).getByRole("button", { name: "Record the mix" }));
   expect(fake.dj("recordSource").at(-1)).toMatchObject({ value: 0 });
@@ -197,7 +198,11 @@ test("a recording of the mix, once stopped, can be added to the song", async () 
   fake.report[5] = 0;
   await waitFor(() => expect(add).toBeEnabled());
   fireEvent.click(add);
-  await waitFor(() => expect(onAddToSong).toHaveBeenCalledWith(expect.any(Uint8Array), "Mix take"));
+  await waitFor(() =>
+    expect(onAddToSong).toHaveBeenCalledWith(
+      expect.objectContaining({ wav: expect.any(Uint8Array), name: "Mix take", place: "playhead", track: "new", bpm: null }),
+    ),
+  );
   expect(await screen.findByText("Mix take 1 is in the song.")).toBeInTheDocument();
 });
 

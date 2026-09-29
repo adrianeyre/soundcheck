@@ -30,6 +30,8 @@ import {
 import type { DeckReport } from "./dj-report";
 import { DJ_TRACK_DRAG_TYPE, type DeckState } from "./dj-state";
 import { JogWheel } from "./JogWheel";
+import type { TimecodeControls } from "./timecode-input";
+import { TimecodePanel } from "./TimecodePanel";
 import { Overview } from "./Waveform";
 
 
@@ -55,6 +57,8 @@ export interface DeckPanelProps {
   onEject: () => void;
   /** Take the DJ to the Track browser, as the player's BROWSE button does. */
   onBrowse?: () => void;
+  /** The Decks' timecode vinyl (a DVS): INT, REL or ABS, and each Deck's input; absent for none. */
+  timecode?: TimecodeControls | null;
 }
 
 const BEND = 0.04;
@@ -582,6 +586,7 @@ export function DeckPanel(props: DeckPanelProps) {
               <span className="num dj-hw-caption">{state.brakeSeconds.toFixed(1)} S</span>
             </label>
           </div>
+          {props.timecode !== undefined && <TimecodePanel deck={deck} report={report} timecode={props.timecode} />}
         </div>
 
         <div className="dj-hw-column dj-deck-right">

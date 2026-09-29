@@ -7,9 +7,10 @@ import { initSync } from "@engine";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 
-import type { AudioOutput, DjAnalysis, EngineCommand } from "../audio/audio-output";
+import type { AudioOutput, DjAnalysis, DjSampleInfo, EngineCommand } from "../audio/audio-output";
 import { memoryLibraryStorage } from "../preset/library-storage";
 import { DjPages, type DjPagesProps } from "./DjPages";
+import type { AddedTake, AddTakeRequest } from "./dj-session";
 import { DECK_FIELDS, DJ_REPORT_LEN, GLOBAL_FIELDS } from "./dj-report";
 import type { DjRecordingSaver } from "./recording-saver";
 import { readSampler, slotAudioPath } from "./sampler-library";
@@ -44,7 +45,8 @@ function fakeOutput() {
     report[at + 21] = 1;
     return ANALYSIS;
   });
-  const loadSample = vi.fn<(slot: number, bytes: Uint8Array) => Promise<number>>(async () => 0.5);
+  // Every sample is found to be at 124 BPM.
+  const loadSample = vi.fn<(slot: number, bytes: Uint8Array) => Promise<DjSampleInfo>>(async () => ({ seconds: 0.5, bpm: 124 }));
   const unloadSample = vi.fn<(slot: number) => void>();
   const takeRecording = vi.fn<() => Promise<Float32Array>>(async () => new Float32Array([0.1, 0.1, 0.2, 0.2]));
   const output: AudioOutput = {
@@ -330,7 +332,7 @@ test("the browse knob moves through the loaded tracks and LOAD puts the one it i
 });
 
 test("a take recorded on the Pads page goes into the song, and the Mixer page shares the Pads page's Decks", async () => {
-  const onAddToSong = vi.fn<(wav: Uint8Array, name: string) => Promise<string>>(async () => "Sampler take 1 is in the song.");
+  const onAddToSong = vi.fn<(request: AddTakeRequest) => Promise<AddedTake>>(async () => ({ message: "Sampler take 1 is in the song." }));
   const { fake, view, props } = setUp({ onAddToSong });
   await loadDeck(0);
   await waitForReport();
@@ -346,11 +348,11 @@ test("a take recorded on the Pads page goes into the song, and the Mixer page sh
   fireEvent.click(within(controller()).getByRole("button", { name: "Stop recording" }));
   await waitFor(() => expect(fake.takeRecording).toHaveBeenCalled());
   fake.report[5] = 0;
-  const add = await within(controller()).findByRole("button", { name: "Add the recording to the song, on a new Audio Track" });
+  const add = await within(controller()).findByRole("button", { name: "Add the recording to the song, at the playhead, on a new Audio Track" });
   await waitFor(() => expect(add).toBeEnabled());
   fireEvent.click(add);
   await waitFor(() => expect(onAddToSong).toHaveBeenCalled());
-  const [wav, name] = onAddToSong.mock.calls[0]!;
+  const { wav, name } = onAddToSong.mock.calls[0]![0];
   expect(new TextDecoder().decode(wav.slice(0, 4))).toBe("RIFF");
   expect(name).toBe("Sampler take");
   expect(await within(controller()).findByText("Sampler take 1 is in the song.")).toBeInTheDocument();
@@ -361,4 +363,46 @@ test("a take recorded on the Pads page goes into the song, and the Mixer page sh
   expect(within(deck).getByRole("button", { name: /^Jump to Hot Cue A/ })).toBeInTheDocument();
   // Its own Pad Controller is on its Grid, hidden until the DJ shows it; the Pads page's is hidden with its page.
   expect(screen.queryAllByRole("region", { name: "Pad Controller" })).toHaveLength(0);
+});
+
+test("EDIT SLOTS sets a slot's pitch, cents, sync and BPM, found as it loads, and keeps them", async () => {
+  const library = memoryLibraryStorage();
+  const { fake } = setUp({ library });
+  await waitFor(() => expect(fake.loadSample).toHaveBeenCalledTimes(22));
+  // Each slot is told how it plays, at pitch 0 and not synced, with the BPM found for its sample.
+  expect(fake.dj("pitch", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 0 });
+  expect(fake.dj("sync", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 0 });
+  expect(fake.dj("bpm", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 124 });
+  fireEvent.click(within(controller()).getByRole("button", { name: "Edit the Sampler Slots" }));
+  const slots = within(controller()).getByRole("group", { name: "Bank 1 Sampler Slots" });
+  expect(within(slots).getByLabelText("Slot 1 BPM")).toHaveValue(124);
+
+  fireEvent.change(within(slots).getByLabelText("Slot 1 pitch, in semitones"), { target: { value: "7" } });
+  expect(fake.dj("pitch", "sampler").at(-1)).toMatchObject({ index: 0, value: 7 });
+  fireEvent.change(within(slots).getByLabelText("Slot 1 fine pitch, in cents"), { target: { value: "-25" } });
+  expect(fake.dj("pitch", "sampler").at(-1)).toMatchObject({ index: 0, value: 6.75 });
+  expect(within(slots).getByLabelText("Slot 1 pitch, in semitones")).toHaveValue(7);
+  fireEvent.change(within(slots).getByLabelText("Slot 1 pitch, in semitones"), { target: { value: "30" } });
+  expect(fake.dj("pitch", "sampler").at(-1)).toMatchObject({ index: 0, value: 12 });
+
+  const sync = within(slots).getByRole("button", { name: "Sync slot 1 to the master tempo" });
+  expect(sync).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(sync);
+  expect(fake.dj("sync", "sampler").at(-1)).toMatchObject({ index: 0, value: 1 });
+  expect(sync).toHaveAttribute("aria-pressed", "true");
+
+  fireEvent.change(within(slots).getByLabelText("Slot 1 BPM"), { target: { value: "128.5" } });
+  expect(fake.dj("bpm", "sampler").at(-1)).toMatchObject({ index: 0, value: 128.5 });
+
+  await waitFor(async () => {
+    const saved = await readSampler(library, bundled);
+    expect(saved?.slots[0]).toMatchObject({ pitch: 12, sync: true, bpm: 128.5 });
+  });
+
+  // A new session sends them again as it gives the engine the slot.
+  cleanup();
+  const again = setUp({ library });
+  await waitFor(() => expect(again.fake.dj("bpm", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 128.5 }));
+  expect(again.fake.dj("pitch", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 12 });
+  expect(again.fake.dj("sync", "sampler").find((c) => c.index === 0)).toMatchObject({ value: 1 });
 });

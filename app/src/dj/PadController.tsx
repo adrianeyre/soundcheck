@@ -4,7 +4,8 @@ import { droppedSample, isSampleDrag } from "../samples/sample-drag";
 import { BEAT_FX, beatsLabel, formatTime, HOT_CUE_COLOURS, quantize } from "./dj-logic";
 import type { DjSession } from "./dj-session";
 import { SAMPLER_BANK_SLOTS, SAMPLER_BANKS } from "./dj-report";
-import { DJ_TRACK_DRAG_TYPE, titleOf } from "./dj-state";
+import { AddToSong } from "./AddToSong";
+import { DJ_TRACK_DRAG_TYPE } from "./dj-state";
 import {
   DEFAULT_PAGE,
   dim,
@@ -21,12 +22,15 @@ import {
   pagesOf,
   SLIDE_FX_START,
 } from "./pad-controller";
-import { SLOT_MODES, type SlotMode } from "./sampler-library";
+import { SLOT_MODES, SLOT_PITCH_RANGE, type SamplerSlot, type SlotMode, slotPitch } from "./sampler-library";
+import { MODE_VALUE, type TimecodeControls } from "./timecode-input";
 
 export interface PadControllerProps {
   session: DjSession;
   /** Tells two Pad Controllers (the Mixer page's and the Pads page's) apart in their ids. */
   id: string;
+  /** The Decks' timecode vinyl, which INT turns a Deck to (REL) and from; absent for none. */
+  timecode?: TimecodeControls | null;
 }
 
 /** One half's own state: the pad mode, the page of each mode, which Deck it drives, and its SLIDE FX. */
@@ -153,7 +157,7 @@ function Key({
  * (or pad) does its SHIFT function; holding the keyboard's Shift key while
  * pressing works too.
  */
-export function PadController({ session, id }: PadControllerProps) {
+export function PadController({ session, id, timecode = null }: PadControllerProps) {
   const { report, decks, send, sampler } = session;
   const [halves, setHalves] = useState<[HalfState, HalfState]>(() => [newHalf(), newHalf()]);
   const [shift, setShift] = useState(false);
@@ -428,12 +432,8 @@ export function PadController({ session, id }: PadControllerProps) {
         void session.instantDouble(otherDeck, deck);
         return;
       }
-      const track = withShift ? session.moveCursor(1) : session.cursorTrack;
-      if (!track) {
-        setStatus("Choose a track first: turn the browse knob, or click one under Loaded tracks in the Track browser.");
-        return;
-      }
-      void session.loadTrack(track, deck);
+      // What the browse knob is on, in the loaded list or the folder tree.
+      setStatus(session.loadChosen(deck, withShift, browser));
     };
     const slideFxName = (slot: number) => BEAT_FX[state.slideFx[slot]!]!.label;
 
@@ -648,10 +648,14 @@ export function PadController({ session, id }: PadControllerProps) {
               </div>
             </div>
             <Key
-              label={shift ? `Switch the ${side} half to Deck ${halfDeck(half, !state.other) + 1}` : `${deckName} INT`}
+              label={
+                shift
+                  ? `Switch the ${side} half to Deck ${halfDeck(half, !state.other) + 1}`
+                  : `${deckName} INT, now ${r.mode === "int" ? "INT: it plays the file itself" : `${r.mode.toUpperCase()}: its timecode vinyl moves it`}`
+              }
               caption="INT"
               sub={`DECK ${halfDeck(half, !state.other) + 1}`}
-              light="on"
+              light={r.mode === "int" ? "on" : undefined}
               tone="blue"
               onPress={(held) => {
                 if (shifted(held)) {
@@ -664,9 +668,18 @@ export function PadController({ session, id }: PadControllerProps) {
                   session.lendBeatFx(slideOwner(half), null);
                   change(half, { other: !state.other });
                   setStatus(`The ${side} half drives Deck ${halfDeck(half, !state.other) + 1}.`);
+                } else if (r.mode !== "int") {
+                  // From REL, or from ABS, back to INT, as the hardware's button does.
+                  send("deck", deck, "mode", MODE_VALUE.int);
+                  setStatus(`${deckName} plays the file itself (INT).`);
+                } else if (!timecode?.available) {
+                  setStatus(`REL follows timecode vinyl through an audio input, which needs the Desktop App. ${deckName} stays in INT.`);
                 } else {
+                  send("deck", deck, "mode", MODE_VALUE.rel);
                   setStatus(
-                    "The Decks always play the file itself (INT). REL is for timecode vinyl, which the Mixer page doesn't take. SHIFT and INT switches the Deck.",
+                    timecode.setup[deck]?.device
+                      ? `${deckName} is in REL: its timecode vinyl's speed and direction move it.`
+                      : `${deckName} is in REL, but has no timecode input yet, so it stays still: choose one under its TIMECODE INPUT on the Mixer page.`,
                   );
                 }
               }}
@@ -766,11 +779,14 @@ export function PadController({ session, id }: PadControllerProps) {
 
   // ---- The centre: the browse knob and SHIFT.
 
-  const turn = (by: number) => {
-    const track = session.moveCursor(by);
-    if (!track) setStatus("The Track browser has no loaded tracks yet: add files to it, or drop them on a Deck.");
+  // The Track browser the knob drives: the one on this controller's page.
+  const browser = id === "pads" ? 3 : 1;
+  const turn = (by: number) => setStatus(session.turnKnob(by, browser));
+  const knobPress = (withShift: boolean) => {
+    setStatus(null);
+    session.pressKnob(withShift, browser);
   };
-  const knobPress = (withShift: boolean) => session.showBrowser(withShift ? "folders" : "loaded");
+  const inTree = session.browseList === "tree" && session.hasTree;
 
   const bankSlots = Array.from({ length: SAMPLER_BANK_SLOTS }, (_, pad) => slotOf(pad));
 
@@ -795,7 +811,7 @@ export function PadController({ session, id }: PadControllerProps) {
           <button
             type="button"
             className="dj-pc-knob"
-            aria-label={`Browse knob: turn with the arrow keys or the mouse wheel, press to show the ${shift ? "folders" : "loaded tracks"}. On ${session.cursorTrack ? titleOf(session.cursorTrack.name) : "no track"}`}
+            aria-label={`Browse knob: turn with the arrow keys or the mouse wheel to move through the ${inTree ? "folders" : "loaded tracks"}; press to ${inTree ? (shift ? "close a folder, or go to the loaded tracks" : "open a folder, or go to the loaded tracks") : session.hasTree ? "go to the folders" : "show the loaded tracks"}. On ${session.knobOn}`}
             onWheel={(event) => turn(event.deltaY > 0 ? 1 : -1)}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown" || event.key === "ArrowRight") {
@@ -815,7 +831,7 @@ export function PadController({ session, id }: PadControllerProps) {
             <Key label="Turn the browse knob down" caption="▼" onPress={() => turn(1)} />
           </div>
           <p className="dj-pc-cursor" aria-live="polite">
-            {session.cursorTrack ? titleOf(session.cursorTrack.name) : "No track chosen"}
+            {session.knobOn}
           </p>
           <Key label="SHIFT" caption="SHIFT" pressed={shift} tone="amber" onPress={() => setShift(!shift)} />
         </div>
@@ -889,12 +905,13 @@ export function PadController({ session, id }: PadControllerProps) {
           />
           <span className="num dj-hw-value">{recording ? formatTime(report.recordingSeconds) : session.take ? formatTime(session.take.seconds) : "0:00.0"}</span>
           {session.canAddToSong && (
-            <Key
-              label="Add the recording to the song, on a new Audio Track"
-              caption="ADD TO SONG"
-              tone="green"
+            <AddToSong
+              place={session.songPlace}
+              onPlace={session.setSongPlace}
+              onAdd={() => void session.addTakeToSong()}
               disabled={!session.take || recording || session.saving}
-              onPress={() => void session.addTakeToSong()}
+              tempoOffer={session.tempoOffer ?? null}
+              onSetTempo={session.setSongTempo}
             />
           )}
           <Key
@@ -981,6 +998,7 @@ export function PadController({ session, id }: PadControllerProps) {
                       onChange={(event) => session.changeSlot(slot, { gain: Number(event.target.value) })}
                     />
                   )}
+                  {held && <SlotTempo number={number} held={held} onChange={(tempo) => session.changeSlot(slot, tempo)} />}
                   <button
                     type="button"
                     className="btn-sm"
@@ -1018,5 +1036,92 @@ export function PadController({ session, id }: PadControllerProps) {
         </div>
       )}
     </section>
+  );
+}
+
+/** What a number input holds, or null while it holds none (being typed, say). */
+const entered = (value: string) => (value.trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value));
+const signed = (value: number) => (value > 0 ? `+${value}` : `${value}`);
+
+/**
+ * A Sampler Slot's pitch (semitones, and cents), its sync to the Master's
+ * tempo and its BPM, in EDIT SLOTS. The pitch plays the sample faster or
+ * slower; synced, the slot plays at the Sync Master's tempo, keeping its
+ * pitch, by its BPM (found as it loads, or entered).
+ */
+function SlotTempo({
+  number,
+  held,
+  onChange,
+}: {
+  number: number;
+  held: SamplerSlot;
+  onChange: (change: Partial<Pick<SamplerSlot, "pitch" | "sync" | "bpm">>) => void;
+}) {
+  const semitones = Math.round(held.pitch);
+  const cents = Math.round((held.pitch - semitones) * 100);
+  const pitch = (st: number, ct: number) => onChange({ pitch: slotPitch(st + ct / 100) });
+  const bpm = held.bpm ?? 0;
+  return (
+    <>
+      <label className="dj-pc-slot-field">
+        <span className="dj-hw-caption">PITCH</span>
+        <input
+          type="number"
+          min={-SLOT_PITCH_RANGE}
+          max={SLOT_PITCH_RANGE}
+          step={1}
+          value={semitones}
+          aria-label={`Slot ${number} pitch, in semitones`}
+          aria-valuetext={`${signed(semitones)} semitones`}
+          onChange={(event) => {
+            const value = entered(event.target.value);
+            if (value !== null) pitch(Math.round(value), cents);
+          }}
+        />
+      </label>
+      <label className="dj-pc-slot-field">
+        <span className="dj-hw-caption">CENTS</span>
+        <input
+          type="number"
+          min={-50}
+          max={50}
+          step={1}
+          value={cents}
+          aria-label={`Slot ${number} fine pitch, in cents`}
+          aria-valuetext={`${signed(cents)} cents`}
+          onChange={(event) => {
+            const value = entered(event.target.value);
+            if (value !== null) pitch(semitones, Math.max(-50, Math.min(50, Math.round(value))));
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        className="btn-sm"
+        aria-pressed={held.sync}
+        aria-label={`Sync slot ${number} to the master tempo`}
+        title={bpm > 0 ? "Play at the Sync Master's tempo, keeping the pitch" : "Give the slot a BPM for it to sync by"}
+        onClick={() => onChange({ sync: !held.sync })}
+      >
+        SYNC
+      </button>
+      <label className="dj-pc-slot-field">
+        <span className="dj-hw-caption">BPM</span>
+        <input
+          type="number"
+          min={0}
+          max={999}
+          step={0.01}
+          value={bpm > 0 ? Math.round(bpm * 100) / 100 : ""}
+          placeholder="none"
+          aria-label={`Slot ${number} BPM`}
+          onChange={(event) => {
+            const value = entered(event.target.value);
+            if (value !== null && value >= 0) onChange({ bpm: value });
+          }}
+        />
+      </label>
+    </>
   );
 }

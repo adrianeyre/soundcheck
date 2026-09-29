@@ -250,6 +250,7 @@ export function App() {
             exporter={platform.exporter}
             djRecordings={platform.djRecordings}
             headphones={platform.headphones}
+            timecodeInput={platform.timecode}
             stems={platform.stems}
             updater={platform.updater}
             keyStore={platform.keyStore}

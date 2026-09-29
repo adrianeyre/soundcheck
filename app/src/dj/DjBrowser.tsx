@@ -2,7 +2,7 @@ import { FolderTree, ListMusic } from "lucide-react";
 import { memo, useEffect, useId, useState } from "react";
 
 import type { LibraryStorage } from "../preset/library-storage";
-import { SampleBrowser, type SampleTarget } from "../samples/SampleBrowser";
+import { SampleBrowser, type SampleTarget, type TreeCommand, type TreeCursor } from "../samples/SampleBrowser";
 import type { SampleRef, SampleSource } from "../samples/sample-source";
 import type { LibraryTrack } from "./dj-state";
 import { TrackBrowser } from "./TrackBrowser";
@@ -38,6 +38,12 @@ export interface DjBrowserProps {
   onOrder?: (ids: readonly string[]) => void;
   /** A tab to bring into view, each time `nonce` changes: the browse knob's press. */
   show?: { tab: Tab; nonce: number } | null;
+  /** The row of the folder tree the browse knob is on (`TreeCursor.key`), which this tree follows. */
+  treeCursor?: string | null;
+  /** A move of it for this tree to make: the browse knob's, where this is the browser it drives. */
+  treeCommand?: TreeCommand | null;
+  /** Told where the tree's cursor is, as the knob or the musician moves it. */
+  onTreeCursor?: (cursor: TreeCursor | null, nonce: number | null) => void;
 }
 
 export type Tab = "folders" | "loaded";
@@ -54,7 +60,8 @@ export function DjBrowser(props: DjBrowserProps) {
   const hasFolders = source !== null && library !== null;
   const [tab, setTab] = useState<Tab>(hasFolders ? "folders" : "loaded");
   const id = useId();
-  // The browse knob's press: its tab brought up, and the browser focused.
+  // The browse knob's press: its tab brought up, and the browser scrolled into view. Focus stays on the
+  // knob, so it can go on turning from the keyboard.
   const shown = props.show;
   const [seen, setSeen] = useState(shown?.nonce ?? 0);
   if (shown && shown.nonce !== seen) {
@@ -62,7 +69,7 @@ export function DjBrowser(props: DjBrowserProps) {
     setTab(shown.tab);
   }
   useEffect(() => {
-    if (shown) document.getElementById(`dj-browser-${props.number}`)?.focus({ preventScroll: true });
+    if (shown) document.getElementById(`dj-browser-${props.number}`)?.scrollIntoView?.({ block: "nearest" });
   }, [shown, props.number]);
   const title = props.title ?? `Track browser ${props.number}`;
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -112,6 +119,9 @@ export function DjBrowser(props: DjBrowserProps) {
             onError={props.onError}
             title="Folders"
             noTargets="Start audio to load a Deck"
+            cursor={props.treeCursor}
+            command={props.treeCommand}
+            onCursor={props.onTreeCursor}
           />
         ) : (
           <p className="hint">

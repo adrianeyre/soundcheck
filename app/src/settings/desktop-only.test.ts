@@ -10,6 +10,7 @@ const DESKTOP: HasPlatformParts = {
   storage: {} as HasPlatformParts["storage"],
   vst3: {} as HasPlatformParts["vst3"],
   headphones: {} as HasPlatformParts["headphones"],
+  timecode: {} as HasPlatformParts["timecode"],
 };
 
 const CHROME: HasPlatformParts = {
@@ -20,18 +21,20 @@ const CHROME: HasPlatformParts = {
   storage: {} as HasPlatformParts["storage"],
   vst3: null,
   headphones: {} as HasPlatformParts["headphones"],
+  timecode: null,
 };
 
 test("the Desktop App lacks nothing", () => {
   expect(desktopOnly(DESKTOP)).toEqual([]);
 });
 
-test("in Chrome or Edge the Browser Version lacks low latency, recording, the sample browser, VST3 Plugins and the credential store", () => {
+test("in Chrome or Edge the Browser Version lacks low latency, recording, the sample browser, VST3 Plugins, timecode vinyl and the credential store", () => {
   expect(desktopOnly(CHROME).map(({ feature }) => feature)).toEqual([
     "Low latency",
     "Recording audio",
     "The sample browser",
     "VST3 Plugins",
+    "Timecode vinyl (DVS)",
     "Your system's credential store",
   ]);
 });
@@ -58,6 +61,7 @@ test("each lacking part is listed on its own, so a browser that gains one stops 
   expect(features({ vst3: DESKTOP.vst3 })).not.toContain("VST3 Plugins");
   expect(features({ headphones: null })).toContain("Headphones on a second audio device");
   expect(features({})).not.toContain("Headphones on a second audio device");
+  expect(features({ timecode: DESKTOP.timecode })).not.toContain("Timecode vinyl (DVS)");
 });
 
 test("VST3 Plugins says a Project keeps them in the browser, and names the trademark's owner", () => {

@@ -32,7 +32,7 @@ export function PadsPage(props: SessionPageProps) {
         onLayout={grid?.onLayout ?? setOwnLayout}
         pinned={grid?.pinned}
         widgets={{
-          padController: <PadController session={session} id="pads" />,
+          padController: <PadController session={session} id="pads" timecode={props.timecode} />,
           padsBrowser: <SessionBrowser session={session} number={3} title="Track browser" samples={samples} library={library} />,
         }}
       />
