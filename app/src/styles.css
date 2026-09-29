@@ -6544,10 +6544,48 @@ button[data-clipping="true"] {
   font-weight: 800;
 }
 
-/* The row the browse knob is on, in the Track browser's loaded list. */
-.dj-browser-table tr[data-cursor="true"] {
+/* A slot's pitch, cents and BPM: a caption over a small number box. */
+.dj-pc-slot-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dj-pc-slot input[type="number"] {
+  width: 4.5em;
+  min-width: 0;
+  background: #0b0e17;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+}
+
+.dj-pc-slot button[aria-pressed="true"] {
+  background: #4aa8ff;
+  color: #0b0e17;
+}
+
+/* The row the browse knob is on, in the Track browser's loaded list and its folder tree. */
+.dj-browser-table tr[data-cursor="true"],
+.sample-item[data-cursor="true"] {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
+}
+
+/* ADD TO SONG, its WHERE menu, and the offer of the mix's tempo beside it. */
+.dj-add-song {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dj-add-song .menu-button {
+  min-height: 0;
+  padding: 2px var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .dj-track-select {
@@ -6617,4 +6655,49 @@ button[data-clipping="true"] {
   .dj-pc-pad:active:not(:disabled) {
     transform: none;
   }
+}
+
+/* A Deck's timecode vinyl (a DVS): INT, REL or ABS, the record's signal light and speed, and its input. */
+.dj-timecode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.dj-timecode-light {
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  border: 1px solid #050608;
+  background: #20242c;
+}
+
+.dj-timecode-light[data-light="on"] {
+  background: #3ddc84;
+  box-shadow: 0 0 8px color-mix(in srgb, #3ddc84 60%, transparent);
+}
+
+.dj-timecode-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 6px;
+  margin-block-start: 4px;
+}
+
+.dj-timecode-picker select {
+  max-inline-size: 100%;
+}
+
+.dj-timecode-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.dj-timecode-picker .dj-hw-note {
+  flex-basis: 100%;
 }

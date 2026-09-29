@@ -102,7 +102,9 @@ import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
 import { useUpdates } from "../update/useUpdates";
 import { DjPages } from "../dj/DjPages";
+import type { AddedTake, AddTakeRequest } from "../dj/dj-session";
 import type { HeadphoneOutput } from "../dj/headphone-output";
+import type { TimecodeInput } from "../dj/timecode-input";
 import { browserRecordingSaver, type DjRecordingSaver } from "../dj/recording-saver";
 import { AudioEditor } from "./AudioEditor";
 import { NoteTools } from "./NoteTools";
@@ -116,6 +118,7 @@ import { DEFAULT_STEP_TICKS } from "./step-grid";
 import { PianoRoll } from "./PianoRoll";
 import { StepSequencer } from "./StepSequencer";
 import { type AbsentAudio, Timeline } from "./Timeline";
+import { describeTick, placeTake, roundBpm, setTempoAt, tempoMismatch } from "./take-placement";
 import { AddTrack, type AddTrackChoice, TrackList } from "./TrackList";
 
 /**
@@ -148,6 +151,8 @@ export interface SongPageProps {
   djRecordings?: DjRecordingSaver;
   /** Where the Mixer page's headphone cue can play: a second output device, or null where the platform can't choose one. */
   headphones?: HeadphoneOutput | null;
+  /** Where the Mixer page's timecode vinyl comes in (a DVS), or null where the platform can't take it. */
+  timecodeInput?: TimecodeInput | null;
   /** Where the Assistant's API key lives; no key store, no Assistant. */
   keyStore?: KeyStore;
   /** How the Assistant's requests go out; the global fetch unless the platform says otherwise. */
@@ -268,6 +273,7 @@ export function SongPage({
   exporter = null,
   djRecordings = browserRecordingSaver(),
   headphones,
+  timecodeInput = null,
   stems: stemSeparator = null,
   updater = null,
   keyStore,
@@ -794,22 +800,49 @@ export function SongPage({
   };
 
   /**
-   * A recording made on the Mixer or Pads page, put into the song: an Audio
-   * Clip from the song's start on a new Audio Track, as one undo step. Its
-   * WAV is saved into the Project folder's `audio/` with the rest.
+   * A recording made on the Mixer or Pads page, put into the song as an Audio
+   * Clip: at the playhead, the start of its bar or the song's start, on a new
+   * Audio Track or the selected one where it has room, as one undo step. Its
+   * WAV is saved into the Project folder's `audio/` with the rest. The take
+   * is audio, so it isn't stretched: where the mix's tempo wasn't the song's
+   * there, it says so, and offers the song the mix's tempo, as a change of its own.
    */
-  const addTakeToSong = async (wav: Uint8Array, name: string): Promise<string> => {
-    const waveform = await summariseAudio(wav);
-    const track = createAudioTrack(nextName(name));
-    const sample: LoadedSample = { name: `${track.name}.wav`, bytes: [...wav] };
-    const path = copyPathFor(sample, samples, project);
+  const addTakeToSong = async (request: AddTakeRequest): Promise<AddedTake> => {
+    const waveform = await summariseAudio(request.wav);
+    const now = history.project;
+    const playhead = outputRef.current?.stats().engine?.position ?? 0;
+    const placed = placeTake(now, {
+      playhead,
+      seconds: waveform.seconds,
+      place: request.place,
+      track: request.track,
+      selectedTrackId: selectedAudio?.track.id ?? selected?.track.id ?? null,
+    });
+    const track = placed.track ?? createAudioTrack(nextName(request.name));
+    const sample: LoadedSample = { name: `${placed.track ? request.name : track.name}.wav`, bytes: [...request.wav] };
+    const path = copyPathFor(sample, samples, now);
     const loaded = samples.get(path) ?? sample;
+    const clip: AudioClip = { id: newId(), kind: "audio", start: placed.at, duration: waveform.seconds, file: path, fileOffset: 0 };
+    const command: Command = placed.track ? { type: "addClip", trackId: placed.track.id, clip } : { type: "addTrack", track: { ...track, clips: [clip] } };
+    const result = history.execute(command, "Add recording to song");
+    if (!result.ok) throw new Error(result.error);
     setWaveforms((known) => new Map(known).set(loaded, waveform));
     setSamples((known) => new Map(known).set(path, loaded));
-    track.clips.push({ id: newId(), kind: "audio", start: 0, duration: waveform.seconds, file: path, fileOffset: 0 });
-    const result = history.execute({ type: "addTrack", track }, "Add recording to song");
-    if (!result.ok) throw new Error(result.error);
-    return `${track.name} is in the song: an Audio Track in the Editor, from its start. Undo takes it out.`;
+
+    const where = `${describeTick(now, placed.at)}${request.place === "playhead" ? " (the playhead)" : ""}`;
+    const onWhat = placed.track ? `on ${placed.track.name}` : `on ${track.name}, a new Audio Track`;
+    const why = placed.fallback ? ` It isn't on the selected Audio Track: ${placed.fallback}.` : "";
+    let message = `The take is in the song ${onWhat}, from ${where}.${why} Undo takes it out.`;
+    const songTempo = tempoMismatch(now, placed.at, request.bpm);
+    if (songTempo === null || request.bpm === null) return { message };
+    const mix = roundBpm(request.bpm);
+    message += ` The mix was at ${mix} BPM and the song is at ${songTempo} BPM there: the take is audio, so it keeps the mix's tempo and isn't stretched to the song's.`;
+    const apply = () => {
+      const changed = history.execute(setTempoAt(history.project, placed.at, mix), "Set tempo to the mix's");
+      if (!changed.ok) throw new Error(changed.error);
+      return `The song is at ${mix} BPM from ${describeTick(history.project, placed.at)} now, as the mix was. Undo puts ${songTempo} BPM back.`;
+    };
+    return { message, setTempo: { bpm: mix, apply } };
   };
 
   const setPad = (trackId: string, pad: number, settings: Partial<DrumPad>) =>
@@ -1739,6 +1772,7 @@ export function SongPage({
         starting={starting}
         saver={djRecordings}
         headphones={headphones}
+        timecodeInput={timecodeInput}
         samples={sampleSource}
         library={library}
         mixingGrid={mixingGrid}

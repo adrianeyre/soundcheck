@@ -1288,3 +1288,241 @@ fn the_headphone_cue_reaches_a_second_devices_ring_and_a_fake_device_plays_it() 
     controller.set_headphones(None);
     play(&mut renderer, 256, 256);
 }
+
+#[test]
+fn a_sampler_slot_loads_through_the_queues_plays_and_stops() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let file =
+        soundcheck_engine::PreparedAudioFile::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put_sample(20, file);
+    controller.send(dj("sampler", 20, "play", 1.0));
+    let playing = play(&mut renderer, 4_096, 256);
+    assert!(
+        peak(&playing) > 0.05,
+        "the slot is heard: {}",
+        peak(&playing)
+    );
+    controller.send(dj("sampler", 20, "stop", 1.0));
+    // Past its short fade out, it is silent.
+    play(&mut renderer, 2_048, 256);
+    assert_eq!(peak(&play(&mut renderer, 1_024, 256)), 0.0);
+}
+
+/// How many frames Sampler Slot `slot` plays for, once through, rendered
+/// in callbacks of 256.
+fn slot_frames(controller: &mut Controller, renderer: &mut Renderer, slot: usize) -> usize {
+    controller.send(dj("sampler", slot, "play", 1.0));
+    let mut frames = 0;
+    let at = soundcheck_engine::GLOBAL_FIELDS
+        + soundcheck_engine::DECKS * soundcheck_engine::DECK_FIELDS
+        + 4
+        + slot;
+    loop {
+        play(renderer, 256, 256);
+        frames += 256;
+        let report = controller.stats().snapshot().dj.expect("the mixer reports");
+        if report[at] != soundcheck_engine::SlotState::Playing as u8 as f64 || frames > 10 * 48_000
+        {
+            return frames;
+        }
+    }
+}
+
+#[test]
+fn a_sampler_slot_is_pitched_and_synced_to_the_master_through_the_queues() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let prepared =
+        soundcheck_engine::PreparedDjSample::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    let info = controller.dj_put_prepared_sample(7, prepared);
+    assert!((info.seconds - 0.5).abs() < 1e-9, "{info:?}");
+    assert_eq!(
+        serde_json::to_value(info).unwrap(),
+        serde_json::json!({ "seconds": 0.5, "bpm": info.bpm }),
+        "under the names the TypeScript uses"
+    );
+    let own = slot_frames(&mut controller, &mut renderer, 7);
+    assert!(own.abs_diff(24_000) <= 256, "its own speed: {own}");
+
+    controller.send(dj("sampler", 7, "pitch", 12.0));
+    let up = slot_frames(&mut controller, &mut renderer, 7);
+    assert!(
+        up.abs_diff(12_000) <= 256,
+        "an octave up plays twice as fast: {up}"
+    );
+
+    // A Sync Master at 128 BPM, and the slot synced at 120: 128/120 as fast.
+    let deck = PreparedDjTrack::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put(0, deck);
+    controller.send(dj("deck", 0, "gridBpm", 128.0));
+    controller.send(dj("deck", 0, "syncMaster", 1.0));
+    controller.send(dj("sampler", 7, "pitch", 0.0));
+    controller.send(dj("sampler", 7, "bpm", 120.0));
+    controller.send(dj("sampler", 7, "sync", 1.0));
+    let synced = slot_frames(&mut controller, &mut renderer, 7);
+    assert!(
+        synced.abs_diff(22_500) <= 256,
+        "at the Master's tempo: {synced}"
+    );
+}
+
+#[test]
+fn a_replaced_or_emptied_sampler_slot_is_dropped_off_the_audio_thread_and_goes_quiet() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let decode = || {
+        soundcheck_engine::PreparedAudioFile::decode(&soundcheck_engine_test_wav(), RATE).unwrap()
+    };
+    controller.dj_put_sample(0, decode());
+    play(&mut renderer, 256, 256);
+    // Loaded again over itself, the old sample comes back to be freed here; then emptied.
+    controller.dj_put_sample(0, decode());
+    play(&mut renderer, 256, 256);
+    controller.dj_unload_sample(0);
+    play(&mut renderer, 256, 256);
+    controller.send(dj("sampler", 0, "play", 1.0));
+    assert_eq!(
+        peak(&play(&mut renderer, 2_048, 256)),
+        0.0,
+        "an empty slot plays nothing"
+    );
+}
+
+#[test]
+fn silent_cue_mutes_a_playing_deck_through_the_host() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let prepared = PreparedDjTrack::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put(0, prepared);
+    controller.send(dj("deck", 0, "play", 1.0));
+    assert!(peak(&play(&mut renderer, 2_048, 256)) > 0.05, "it plays");
+    controller.send(dj("deck", 0, "silentCue", 1.0));
+    play(&mut renderer, 2_048, 256);
+    assert!(
+        peak(&play(&mut renderer, 1_024, 256)) < 1e-3,
+        "and is muted"
+    );
+}
+
+/// A turntable's control record reaching an input, as the input callback
+/// pushes it: `frames` of `record` at `speed` on inputs 1 and 2.
+fn turn(
+    writer: &mut crate::monitor::MonitorWriter,
+    record: &mut soundcheck_engine::TimecodeGenerator,
+    speed: f64,
+    frames: usize,
+) {
+    writer.begin(frames);
+    for _ in 0..frames {
+        let (left, right) = record.next(speed);
+        crate::timecode::push_frame(writer, &[left, right], &[(0, 1)], |s| s);
+    }
+}
+
+/// The needle lifted: an input with nothing on it.
+fn lifted(writer: &mut crate::monitor::MonitorWriter, frames: usize) {
+    writer.begin(frames);
+    for _ in 0..frames {
+        crate::timecode::push_frame(writer, &[0.0f32, 0.0], &[(0, 1)], |s| s);
+    }
+}
+
+fn timecode_field(report: &[f64], deck: usize, field: usize) -> f64 {
+    use soundcheck_engine::{DECK_FIELDS, DECKS, GLOBAL_FIELDS, SAMPLER_FIELDS, TIMECODE_FIELDS};
+    report[GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + deck * TIMECODE_FIELDS + field]
+}
+
+fn deck_seconds(report: &[f64], deck: usize) -> f64 {
+    report[soundcheck_engine::GLOBAL_FIELDS + deck * soundcheck_engine::DECK_FIELDS + 2]
+}
+
+#[test]
+fn a_timecode_input_moves_a_deck_in_rel_at_the_decoded_speed() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let prepared = PreparedDjTrack::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put(1, prepared);
+    controller.send(dj("deck", 1, "mode", 1.0));
+    // Deck 2's record on inputs 1 and 2 of an interface, as its input
+    // stream would feed it.
+    let (mut writer, reader) = crate::monitor::monitor(1);
+    controller.set_timecode(Some(crate::timecode::TimecodeFeed::new(vec![(
+        reader,
+        vec![1],
+    )])));
+    let format = soundcheck_engine::TIMECODE_FORMATS[0];
+    let mut record = soundcheck_engine::TimecodeGenerator::new(format, RATE, 100.0);
+    let mut buffer = vec![0.0; 256 * 2];
+    let callbacks = 56;
+    for _ in 0..callbacks {
+        turn(&mut writer, &mut record, 0.5, 256);
+        renderer.process(&mut buffer, 2);
+    }
+    let report = controller.stats().snapshot().dj.expect("the mixer reports");
+    assert_eq!(timecode_field(&report, 1, 0), 1.0, "REL");
+    assert_eq!(timecode_field(&report, 1, 1), 1.0, "a signal");
+    assert!(
+        (timecode_field(&report, 1, 2) - 0.5).abs() < 0.01,
+        "{}",
+        timecode_field(&report, 1, 2)
+    );
+    // Half as far as the record turned, less the callback the ring waits
+    // to fill, the one it plays behind, and the moment the decoder takes
+    // to hear the record.
+    let turned = f64::from(callbacks * 256) / f64::from(RATE) * 0.5;
+    let position = deck_seconds(&report, 1);
+    assert!(
+        position > turned - 0.02 && position <= turned,
+        "{position} against {turned}"
+    );
+    assert!(peak(&buffer) > 0.05, "and it is heard");
+
+    // The needle lifted: the Deck stops where it is.
+    for _ in 0..10 {
+        lifted(&mut writer, 256);
+        renderer.process(&mut buffer, 2);
+    }
+    let stopped = deck_seconds(&controller.stats().snapshot().dj.unwrap(), 1);
+    for _ in 0..10 {
+        lifted(&mut writer, 256);
+        renderer.process(&mut buffer, 2);
+    }
+    let report = controller.stats().snapshot().dj.unwrap();
+    assert_eq!(deck_seconds(&report, 1), stopped);
+    assert_eq!(timecode_field(&report, 1, 1), 0.0, "no signal");
+
+    // Taking the inputs away hands the feed back to be dropped off the
+    // audio thread.
+    controller.set_timecode(None);
+    play(&mut renderer, 256, 256);
+}
+
+#[test]
+fn a_deck_in_abs_goes_where_the_record_is_through_the_host() {
+    let (mut controller, mut renderer, _midi) = host(RATE, 0);
+    let prepared = PreparedDjTrack::decode(&soundcheck_engine_test_wav(), RATE).unwrap();
+    controller.dj_put(0, prepared);
+    // Serato's record, whose position table the control side builds.
+    controller.send(dj("deck", 0, "timecodeFormat", 1.0));
+    controller.send(dj("deck", 0, "mode", 2.0));
+    let (mut writer, reader) = crate::monitor::monitor(1);
+    controller.set_timecode(Some(crate::timecode::TimecodeFeed::new(vec![(
+        reader,
+        vec![0],
+    )])));
+    let format = soundcheck_engine::TIMECODE_FORMATS[0];
+    let mut record = soundcheck_engine::TimecodeGenerator::new(format, RATE, 0.1);
+    let mut buffer = vec![0.0; 256 * 2];
+    for _ in 0..40 {
+        turn(&mut writer, &mut record, 1.0, 256);
+        renderer.process(&mut buffer, 2);
+    }
+    let report = controller.stats().snapshot().dj.unwrap();
+    assert_eq!(timecode_field(&report, 0, 0), 2.0, "ABS");
+    assert_eq!(timecode_field(&report, 0, 6), 1.0, "the table is in");
+    // Where the needle was as the input reached the engine: the ring
+    // plays a callback behind the input.
+    let behind = 256.0 / f64::from(RATE);
+    let position = deck_seconds(&report, 0);
+    assert!(
+        (position - (record.seconds() - behind)).abs() < 0.005,
+        "{position} against {}",
+        record.seconds() - behind
+    );
+}

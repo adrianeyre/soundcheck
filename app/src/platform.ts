@@ -20,6 +20,7 @@ import { desktopMixExporter } from "./export/desktop-mix-exporter";
 import type { MixExporter } from "./export/mix-exporter";
 import { browserRecordingSaver, desktopRecordingSaver, type DjRecordingSaver } from "./dj/recording-saver";
 import { browserHeadphoneOutput, desktopHeadphoneOutput, type HeadphoneOutput } from "./dj/headphone-output";
+import { desktopTimecodeInput, type TimecodeInput } from "./dj/timecode-input";
 import { desktopMidiInput } from "./midi/desktop-midi-input";
 import { openWebMidiInput, type OpenMidiInput } from "./midi/midi-input";
 import { browserLibraryStorage } from "./preset/browser-library-storage";
@@ -85,6 +86,11 @@ export interface Platform {
    * (ADR 0013), or null where it can't: a browser without `setSinkId`.
    */
   headphones: HeadphoneOutput | null;
+  /**
+   * The audio inputs a Deck's timecode vinyl comes in on, for REL and ABS
+   * (a DVS; ADR 0013), or null where there are none (the browser).
+   */
+  timecode: TimecodeInput | null;
   /** Chooses and auditions the Reference Track, past the mixer. */
   reference: ReferencePlayer;
   /** Where the Assistant's Claude API key is kept on this machine. */
@@ -160,6 +166,8 @@ export function currentPlatform(): Platform {
       djRecordings: desktopRecordingSaver(invoke),
       // A second cpal stream in the shell, fed from the engine through a lock-free ring.
       headphones: desktopHeadphoneOutput(invoke),
+      // A cpal input stream per device in the shell, each Deck's pair handed to the engine on the audio thread.
+      timecode: desktopTimecodeInput(invoke),
       // The system's file dialog, and the native host's audition.
       reference: desktopReferencePlayer(invoke),
       keyStore: desktopKeyStore(invoke),
@@ -209,6 +217,8 @@ export function currentPlatform(): Platform {
     djRecordings: browserRecordingSaver(),
     // The worklet's cue channels to an audio element sent to the device with setSinkId (Chromium).
     headphones: browserHeadphoneOutput(),
+    // No audio input into the worklet yet (as for recording), so no timecode vinyl: the Decks play INT only.
+    timecode: null,
     // A file input, and Web Audio in a context beside the worklet's.
     reference: browserReferencePlayer(),
     // Local storage is not a credential store, but a web page has nothing

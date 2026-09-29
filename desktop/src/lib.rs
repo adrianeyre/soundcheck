@@ -22,6 +22,7 @@ pub mod samples;
 pub mod secrets;
 pub mod stats;
 pub mod stems;
+pub mod timecode;
 pub mod update;
 pub mod vst3;
 
@@ -62,6 +63,55 @@ struct App {
     /// The Mixer page's headphone cue on a second device: the one chosen,
     /// and its stream while the main output runs.
     headphones: Mutex<Headphones>,
+    /// The Mixer page's timecode vinyl: each Deck's chosen input, and the
+    /// streams reading them while the main output runs.
+    timecode: Mutex<Timecode>,
+}
+
+#[derive(Default)]
+struct Timecode {
+    choices: Vec<timecode::TimecodeChoice>,
+    streams: Vec<timecode::TimecodeStream>,
+    /// Why a chosen device couldn't be opened, until they are chosen again.
+    error: Option<String>,
+}
+
+/// Open the chosen timecode inputs against the running output, if there
+/// is one, handing its engine a fresh feed; with none chosen, stop feeding.
+fn apply_timecode(audio: &mut Option<AudioOutput>, timecode: &mut Timecode) {
+    // Stop feeding the old streams before they close.
+    if let Some(output) = audio.as_mut() {
+        output.controller.set_timecode(None);
+    }
+    timecode.streams.clear();
+    timecode.error = None;
+    let Some(output) = audio.as_mut() else {
+        return;
+    };
+    if timecode.choices.is_empty() {
+        return;
+    }
+    let rate = output.controller.sample_rate();
+    let (streams, feed, error) =
+        timecode::open(Some(output.info.host.as_str()), &timecode.choices, rate);
+    output.controller.set_timecode(feed);
+    timecode.streams = streams;
+    timecode.error = error;
+}
+
+fn timecode_status(timecode: &Timecode) -> timecode::TimecodeStatus {
+    timecode::TimecodeStatus {
+        choices: timecode.choices.clone(),
+        running: timecode
+            .streams
+            .iter()
+            .map(|stream| stream.device.clone())
+            .collect(),
+        failed: timecode
+            .error
+            .clone()
+            .or_else(|| timecode.streams.iter().find_map(|s| s.failed())),
+    }
 }
 
 #[derive(Default)]
@@ -121,6 +171,8 @@ fn audio_open(app: State<'_, App>, options: OpenOptions) -> Result<OpenInfo, Str
     *running = Some(output);
     // The headphones chosen before follow the new output.
     apply_headphones(&mut running, &mut lock(&app.headphones));
+    // And so do the timecode inputs.
+    apply_timecode(&mut running, &mut lock(&app.timecode));
     Ok(info)
 }
 
@@ -182,20 +234,23 @@ fn dj_load(app: State<'_, App>, deck: usize, bytes: Vec<u8>) -> Result<String, S
 
 /// Put a sample in a Sampler Slot of the Mixer page's DJ Mixer. It is
 /// decoded here, outside the lock and off the audio thread; what is wrong with
-/// it comes back as the error. Answers how long it plays, in seconds.
+/// it comes back as the error. Answers how long it plays, in seconds, and
+/// the tempo the analysis found for it, for its Sync.
 #[tauri::command]
-fn dj_sample_load(app: State<'_, App>, slot: usize, bytes: Vec<u8>) -> Result<f64, String> {
+fn dj_sample_load(
+    app: State<'_, App>,
+    slot: usize,
+    bytes: Vec<u8>,
+) -> Result<host::DjSampleInfo, String> {
     let rate = match lock(&app.audio).as_ref() {
         Some(output) => output.controller.sample_rate(),
         None => return Err("Start audio to load a Sampler Slot".into()),
     };
-    let file = soundcheck_engine::PreparedAudioFile::decode(&bytes, rate)
+    let prepared = soundcheck_engine::PreparedDjSample::decode(&bytes, rate)
         .map_err(|error| format!("The sample can't be loaded: {}", error.message()))?;
-    let seconds = file.left().len() as f64 / f64::from(rate);
     match lock(&app.audio).as_mut() {
         Some(output) if output.controller.sample_rate() == rate => {
-            output.controller.dj_put_sample(slot, file);
-            Ok(seconds)
+            Ok(output.controller.dj_put_prepared_sample(slot, prepared))
         }
         _ => Err("The audio stopped while the sample was loading".into()),
     }
@@ -309,7 +364,37 @@ fn audio_reset_counters(app: State<'_, App>) {
 fn audio_close(app: State<'_, App>) {
     lock(&app.midi).route_to(None);
     lock(&app.headphones).stream = None;
+    lock(&app.timecode).streams.clear();
     *lock(&app.audio) = None;
+}
+
+/// The input devices a timecode vinyl can come in on, on the running
+/// output's host, with their channel counts.
+#[tauri::command]
+fn timecode_devices(app: State<'_, App>) -> Result<Vec<InputDevice>, String> {
+    let host = lock(&app.audio)
+        .as_ref()
+        .map(|output| output.info.host.clone());
+    audio_input::input_devices(host.as_deref())
+}
+
+/// Read each Deck's timecode vinyl from the input it names: a device and a
+/// pair of its channels. Kept for the next time audio starts, too.
+#[tauri::command]
+fn timecode_choose(
+    app: State<'_, App>,
+    choices: Vec<timecode::TimecodeChoice>,
+) -> timecode::TimecodeStatus {
+    let mut audio = lock(&app.audio);
+    let mut timecode = lock(&app.timecode);
+    timecode.choices = choices;
+    apply_timecode(&mut audio, &mut timecode);
+    timecode_status(&timecode)
+}
+
+#[tauri::command]
+fn timecode_input_status(app: State<'_, App>) -> timecode::TimecodeStatus {
+    timecode_status(&lock(&app.timecode))
 }
 
 /// The output devices headphones can be on, on the running output's host.
@@ -949,6 +1034,9 @@ pub fn run() {
             headphones_devices,
             headphones_choose,
             headphones_status,
+            timecode_devices,
+            timecode_choose,
+            timecode_input_status,
             audio_input_devices,
             audio_input_open,
             audio_input_levels,

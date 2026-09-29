@@ -12,6 +12,7 @@ import type {
   AudioOutputOptions,
   AudioOutputStats,
   DjAnalysis,
+  DjSampleInfo,
   EngineCommand,
   EngineReport,
   Meters,
@@ -218,7 +219,7 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
           // oxlint-disable-next-line unicorn/require-post-message-target-origin
           node.port.postMessage(message);
         },
-        async loadSample(slot: number, bytes: Uint8Array): Promise<number> {
+        async loadSample(slot: number, bytes: Uint8Array): Promise<DjSampleInfo> {
           // Decoded here, as a Deck's file is, so the audio thread only moves it in.
           await init({ module_or_path: module });
           const prepared = dj_prepare_sample(bytes, context.sampleRate);
@@ -226,7 +227,7 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
             const message: DjSampleMessage = { type: "djSample", slot, left: prepared.left(), right: prepared.right() };
             // oxlint-disable-next-line unicorn/require-post-message-target-origin
             node.port.postMessage(message, [message.left!.buffer, message.right!.buffer]);
-            return prepared.seconds(context.sampleRate);
+            return { seconds: prepared.seconds(context.sampleRate), bpm: prepared.bpm() };
           } finally {
             prepared.free();
           }

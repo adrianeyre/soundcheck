@@ -5,14 +5,18 @@
 //! `RtCommand`s, doing any allocating first, so the audio thread only ever
 //! moves prepared data into the engine.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use soundcheck_engine::{
-    DjControl, DjMixer, DjTrack, KeysSettings, NoteList, PreparedAudioClips, PreparedAudioFile,
-    PreparedAutomation, PreparedBus, PreparedEffect, PreparedInstrument, PreparedSample,
-    PreparedSends, PreparedTempoChanges, PreparedTrack, RecordedNote, SynthSettings,
+    DjControl, DjMixer, DjTrack, KeysSettings, NoteList, PositionTable, PreparedAudioClips,
+    PreparedAudioFile, PreparedAutomation, PreparedBus, PreparedEffect, PreparedInstrument,
+    PreparedSample, PreparedSends, PreparedTempoChanges, PreparedTrack, RecordedNote,
+    SynthSettings,
 };
 
 use crate::monitor::MonitorFeed;
+use crate::timecode::TimecodeFeed;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(
@@ -468,6 +472,15 @@ pub enum RtCommand {
     /// Where the headphone cue goes for a second output device, or None
     /// when there is none (`headphones.rs`).
     SetHeadphones(Option<Box<rtrb::Producer<f32>>>),
+    /// The timecode vinyl's inputs, a stereo pair for each Deck chosen, or
+    /// None when there are none (`timecode.rs`).
+    SetTimecode(Option<Box<TimecodeFeed>>),
+    /// The position table for the timecode format Deck `deck` reads, built
+    /// off the audio thread, or None for Auto.
+    DjTimecodeTable {
+        deck: usize,
+        table: Option<Arc<PositionTable>>,
+    },
 }
 
 /// The most settings any Effect has: a Plugin may declare this many.
@@ -541,6 +554,8 @@ pub enum Garbage {
     DjTrack(DjTrack),
     DjMixer(Box<DjMixer>),
     Headphones(Box<rtrb::Producer<f32>>),
+    Timecode(Box<TimecodeFeed>),
+    TimecodeTable(Arc<PositionTable>),
 }
 
 #[cfg(test)]
@@ -562,6 +577,29 @@ mod tests {
                 value: 0.04,
             }
         );
+    }
+
+    #[test]
+    fn a_sampler_slots_pitch_sync_and_bpm_arrive_under_the_names_the_typescript_uses() {
+        for control in ["pitch", "sync", "bpm"] {
+            let json = format!(
+                r#"{{"type":"djSet","kind":"sampler","index":63,"name":"{control}","value":-3.5}}"#
+            );
+            let EngineCommand::DjSet {
+                kind,
+                index,
+                name,
+                value,
+            } = parse(&json)
+            else {
+                panic!("{json} isn't a DJ control");
+            };
+            assert_eq!(value, -3.5);
+            assert!(
+                DjControl::parse(&kind, index, &name).is_some(),
+                "the engine takes the Sampler's {control}"
+            );
+        }
     }
 
     #[test]

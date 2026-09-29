@@ -7,6 +7,7 @@ import type {
   AudioOutput,
   AudioOutputStats,
   DjAnalysis,
+  DjSampleInfo,
   EngineCommand,
   EngineReport,
   Meters,
@@ -131,8 +132,8 @@ export function desktopAudioOutput(invoke: Invoke): OpenAudioOutput {
         unload(deck: number) {
           void invoke("dj_unload", { deck }).catch(() => {});
         },
-        async loadSample(slot: number, bytes: Uint8Array): Promise<number> {
-          return invoke<number>("dj_sample_load", { slot, bytes: [...bytes] });
+        async loadSample(slot: number, bytes: Uint8Array): Promise<DjSampleInfo> {
+          return invoke<DjSampleInfo>("dj_sample_load", { slot, bytes: [...bytes] });
         },
         unloadSample(slot: number) {
           void invoke("dj_sample_unload", { slot }).catch(() => {});

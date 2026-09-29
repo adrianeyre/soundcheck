@@ -6,6 +6,7 @@ import { MixerPage } from "./DjPage";
 import { type DjSessionProps, useDjSession } from "./dj-session";
 import type { HeadphoneOutput } from "./headphone-output";
 import { PadsPage } from "./PadsPage";
+import { type TimecodeInput, useTimecode } from "./timecode-input";
 
 export type DjView = "mixing" | "pads";
 
@@ -15,6 +16,8 @@ export interface DjPagesProps extends DjSessionProps {
   onStart?: () => void;
   starting?: boolean;
   headphones?: HeadphoneOutput | null;
+  /** Where the Decks' timecode vinyl comes in (a DVS), or null where it can't. */
+  timecodeInput?: TimecodeInput | null;
   mixingGrid?: PageGrid;
   padsGrid?: PageGrid;
   /** Each page's panel id, for the app's menu to point at. */
@@ -59,7 +62,12 @@ export function DjPages(props: DjPagesProps) {
 function DjSessionPages(props: DjPagesProps & { mixingSlot: HTMLElement | null; padsSlot: HTMLElement | null }) {
   const { view, mixingSlot, padsSlot, onStart, starting, headphones, samples = null, library = null } = props;
   const session = useDjSession(props);
-  const shared = { session, onStart, starting, headphones, samples, library };
+  const timecode = useTimecode({
+    output: session.output,
+    input: props.timecodeInput ?? null,
+    modes: session.report.decks.map((deck) => deck.mode),
+  });
+  const shared = { session, onStart, starting, headphones, samples, library, timecode };
   return (
     <>
       {mixingSlot && createPortal(<MixerPage {...shared} active={view === "mixing"} grid={props.mixingGrid} />, mixingSlot)}

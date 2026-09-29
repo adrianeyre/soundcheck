@@ -12,7 +12,7 @@ export interface DesktopOnly {
 }
 
 /** The parts of a platform that say what it lacks. */
-export type HasPlatformParts = Pick<Platform, "name" | "listAudioHosts" | "audioInputs" | "samples" | "storage" | "vst3" | "headphones">;
+export type HasPlatformParts = Pick<Platform, "name" | "listAudioHosts" | "audioInputs" | "samples" | "storage" | "vst3" | "headphones" | "timecode">;
 
 export function desktopOnly(platform: HasPlatformParts): DesktopOnly[] {
   if (platform.name === "desktop") return [];
@@ -48,6 +48,13 @@ export function desktopOnly(platform: HasPlatformParts): DesktopOnly[] {
       feature: "Headphones on a second audio device",
       detail:
         "On the Mixer page, the headphone cue out of a device of its own while the mix plays out of the main one. This browser can't choose an output device; Chrome and Edge can, and outputs 3 and 4 of an audio interface work in any browser.",
+    });
+  }
+  if (!platform.timecode) {
+    lacks.push({
+      feature: "Timecode vinyl (DVS)",
+      detail:
+        "On the Mixer page, a turntable playing a Serato, Traktor, MixVibes or rekordbox control record moves a Deck, in REL or ABS, through a pair of an audio interface's inputs. A web page here has no audio input to read it from.",
     });
   }
   if (!platform.storage) {

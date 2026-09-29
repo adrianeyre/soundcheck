@@ -202,6 +202,17 @@ export interface DjAnalysis {
 }
 
 /**
+ * A sample put in a Sampler Slot: how long it plays, and the tempo the
+ * Decks' analysis found for it, which the slot's sync goes by.
+ * `DjSampleInfo` in `desktop/src/host.rs`.
+ */
+export interface DjSampleInfo {
+  seconds: number;
+  /** 0 when no steady beat was found. */
+  bpm: number;
+}
+
+/**
  * The DJ Mixer's side of an audio output (ADR 0013): what isn't a plain
  * command, because it carries a file or brings audio back.
  */
@@ -211,9 +222,10 @@ export interface DjHost {
   unload(deck: number): void;
   /**
    * Decode `bytes` off the audio thread and put the sample in Sampler Slot
-   * `slot` (0 to 63, across the four banks). Answers how long it plays, in seconds.
+   * `slot` (0 to 63, across the four banks). Answers how long it plays, in
+   * seconds, and its tempo.
    */
-  loadSample(slot: number, bytes: Uint8Array): Promise<number>;
+  loadSample(slot: number, bytes: Uint8Array): Promise<DjSampleInfo>;
   /** Empty Sampler Slot `slot`. */
   unloadSample(slot: number): void;
   /** The mix recorded since the last call, interleaved stereo at the output's rate. */

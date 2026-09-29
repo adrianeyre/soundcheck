@@ -7,6 +7,7 @@ import { WidgetGrid, type WidgetGridProps } from "../grid/WidgetGrid";
 import type { LibraryStorage } from "../preset/library-storage";
 import type { SampleTarget } from "../samples/SampleBrowser";
 import type { SampleRef, SampleSource } from "../samples/sample-source";
+import { AddToSong } from "./AddToSong";
 import { DjBrowser } from "./DjBrowser";
 import type { HeadphoneOutput } from "./headphone-output";
 import { DeckPanel } from "./DeckPanel";
@@ -15,6 +16,7 @@ import { titleOf } from "./dj-state";
 import { MixerPanel } from "./MixerPanel";
 import { PadController } from "./PadController";
 import type { DjRecordingSaver } from "./recording-saver";
+import type { TimecodeControls } from "./timecode-input";
 import { WaveformStack } from "./WaveformStack";
 
 /**
@@ -93,6 +95,8 @@ export interface SessionPageProps {
   samples?: SampleSource | null;
   library?: LibraryStorage | null;
   grid?: PageGrid;
+  /** The Decks' timecode vinyl (`useTimecode`), or absent for none. */
+  timecode?: TimecodeControls | null;
 }
 
 /**
@@ -125,6 +129,10 @@ export function SessionBrowser({
   const onUse = useCallback((sample: SampleRef, target: string) => void putSample(sample, Number(target.split(":")[1])), [putSample]);
   const setMessage = session.setMessage;
   const onBrowseError = useCallback((error: string) => setMessage(error), [setMessage]);
+  // A browser with a folder tree is one the browse knob can drive.
+  const registerTree = session.registerTree;
+  const hasTree = samples !== null && library !== null;
+  useEffect(() => (hasTree ? registerTree(number) : undefined), [hasTree, registerTree, number]);
   return (
     <DjBrowser
       number={number}
@@ -147,6 +155,9 @@ export function SessionBrowser({
       onCursor={session.setCursor}
       onOrder={session.setOrder}
       show={number === 3 || number === 1 ? session.browserShow : null}
+      treeCursor={session.treeCursor?.key ?? null}
+      treeCommand={session.treeCommand?.browser === number ? session.treeCommand : null}
+      onTreeCursor={session.onTreeCursor}
     />
   );
 }
@@ -234,6 +245,7 @@ export function MixerPage(props: SessionPageProps) {
         onDropSample={(sample) => void session.putSample(sample, deck)}
         onBrowse={() => browse(deck)}
         onEject={() => session.eject(deck)}
+        timecode={props.timecode}
       />
     );
   };
@@ -318,15 +330,25 @@ export function MixerPage(props: SessionPageProps) {
               recording={{ on: report.recording, seconds: report.recordingSeconds, format, saving }}
               onRecordFormat={session.setFormat}
               onRecord={(on) => void session.record(on, { source: "master" })}
-              onAddToSong={session.canAddToSong ? () => void session.addTakeToSong() : undefined}
-              canAddToSong={session.take !== null}
+              addToSong={
+                session.canAddToSong ? (
+                  <AddToSong
+                    place={session.songPlace}
+                    onPlace={session.setSongPlace}
+                    onAdd={() => void session.addTakeToSong()}
+                    disabled={session.take === null || report.recording || saving}
+                    tempoOffer={session.tempoOffer ?? null}
+                    onSetTempo={session.setSongTempo}
+                  />
+                ) : undefined
+              }
               headphoneOutput={headphones}
               output={output}
             />
           ),
           djBrowser: <SessionBrowser session={session} number={1} samples={samples} library={folderLibrary} />,
           djBrowser2: <SessionBrowser session={session} number={2} samples={samples} library={folderLibrary} />,
-          djPadController: <PadController session={session} id="mixing" />,
+          djPadController: <PadController session={session} id="mixing" timecode={props.timecode} />,
         }}
       />
     </div>

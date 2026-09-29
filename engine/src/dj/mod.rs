@@ -20,17 +20,26 @@ mod colour;
 mod deck;
 mod sampler;
 mod stretch;
+mod timecode;
 
 pub use analysis::{TrackAnalysis, WAVEFORM_RATE, analyse};
 pub use beat_fx::BEAT_FX;
 pub use colour::COLOUR_FX;
-pub use deck::DjTrack;
-pub use sampler::{SAMPLER_BANK_SLOTS, SAMPLER_BANKS, SAMPLER_SLOTS, SlotMode, SlotState};
+pub use deck::{DeckMode, DjTrack};
+pub use sampler::{
+    SAMPLER_BANK_SLOTS, SAMPLER_BANKS, SAMPLER_SLOTS, SLOT_PITCH_RANGE, SlotMode, SlotState,
+};
+pub use timecode::{
+    PositionTable, TIMECODE_FORMATS, TimecodeDecoder, TimecodeFormat, TimecodeGenerator,
+    VinylFrame, timecode_format,
+};
 
 use beat_fx::BeatFx;
 use channel::Channel;
 use deck::Deck;
-use sampler::Sampler;
+use sampler::{MasterTempo, Sampler};
+
+use std::sync::Arc;
 
 use crate::audio_file::{AudioFile, AudioFileError, decode};
 use crate::engine::PreparedAudioFile;
@@ -45,7 +54,13 @@ pub const DECK_FIELDS: usize = 26;
 /// recording takes (0 the Master, 1 the Sampler alone), then each slot's
 /// `SlotState`.
 pub const SAMPLER_FIELDS: usize = 4 + SAMPLER_SLOTS;
-pub const DJ_REPORT_LEN: usize = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS;
+/// After the Sampler, each Deck's timecode: its mode (0 INT, 1 REL, 2
+/// ABS), whether there is a signal, the record's speed, its position in
+/// seconds (-1 unknown), the carrier in Hz, the format chosen (0 Auto) and
+/// whether it can read positions (ABS is ready).
+pub const TIMECODE_FIELDS: usize = 7;
+pub const DJ_REPORT_LEN: usize =
+    GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + DECKS * TIMECODE_FIELDS;
 /// How much of the recording the engine holds before the host takes it.
 const RECORD_SECONDS: f32 = 4.0;
 /// How fast a meter falls back from a peak, in dB per second.
@@ -53,6 +68,52 @@ const METER_FALL_DB_PER_SECOND: f32 = 20.0;
 /// How far out of step Sync lets the beats get before it jumps them back
 /// into line rather than easing them, in beats.
 const SYNC_JUMP_BEATS: f64 = 0.25;
+
+/// A sample decoded for a Sampler Slot, off the audio thread, with the
+/// tempo its Sync follows: the Deck's BPM analysis, or none found.
+#[derive(Debug)]
+pub struct PreparedDjSample {
+    pub file: PreparedAudioFile,
+    /// 0 when no steady beat was found.
+    pub bpm: f64,
+}
+
+impl PreparedDjSample {
+    /// Decode a WAV, FLAC or MP3 file's bytes for an engine at
+    /// `sample_rate` and find its tempo.
+    pub fn decode(bytes: &[u8], sample_rate: f32) -> Result<Self, AudioFileError> {
+        let decoded = decode(bytes)?;
+        let file = AudioFile::from_decoded(&decoded, sample_rate);
+        let bpm = sample_bpm(file.left(), file.right(), sample_rate);
+        Ok(Self {
+            file: PreparedAudioFile::from_file(file),
+            bpm,
+        })
+    }
+
+    /// How long it plays, in seconds at `sample_rate`.
+    pub fn seconds(&self, sample_rate: f32) -> f64 {
+        self.file.left().len() as f64 / f64::from(sample_rate)
+    }
+}
+
+/// A sample's tempo, by the Decks' analysis. A loop is a whole number of
+/// beats long, so a tempo that makes it nearly a power of two of them is
+/// put right to make it exactly that many.
+pub fn sample_bpm(left: &[f32], right: &[f32], sample_rate: f32) -> f64 {
+    let bpm = analyse(left, right, sample_rate).bpm;
+    let seconds = left.len().min(right.len()) as f64 / f64::from(sample_rate);
+    if bpm <= 0.0 || seconds <= 0.0 {
+        return bpm;
+    }
+    let beats = seconds * bpm / 60.0;
+    let whole = 2f64.powf(beats.log2().round());
+    if whole >= 1.0 && (beats / whole - 1.0).abs() < 0.03 {
+        ((60.0 * whole / seconds) * 100.0).round() / 100.0
+    } else {
+        bpm
+    }
+}
 
 /// A file decoded and analysed for a Deck, off the audio thread.
 #[derive(Debug)]
@@ -102,6 +163,13 @@ pub enum SamplerControl {
     /// `SlotMode`: 0 one-shot, 1 gate, 2 loop.
     Mode,
     Gain,
+    /// In semitones, -12 to 12; a fraction is cents. Played by reading the
+    /// sample faster or slower, so it changes the speed too.
+    Pitch,
+    /// Follow the Sync Master's tempo, keeping the pitch.
+    Sync,
+    /// The sample's tempo, for Sync; 0 for none.
+    Bpm,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -138,6 +206,14 @@ pub enum DeckControl {
     Eject,
     SilentCue,
     SlipReverse,
+    /// INT (0), REL (1) or ABS (2): who moves the Deck.
+    Mode,
+    /// Which timecode record it reads: 0 Auto, then `TIMECODE_FORMATS`.
+    TimecodeFormat,
+    /// Its input's left and right are the other way round.
+    TimecodeSwap,
+    /// Its input's right channel is upside down.
+    TimecodeInvert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -221,6 +297,10 @@ impl DjControl {
                     "eject" => D::Eject,
                     "silentCue" => D::SilentCue,
                     "slipReverse" => D::SlipReverse,
+                    "mode" => D::Mode,
+                    "timecodeFormat" => D::TimecodeFormat,
+                    "timecodeSwap" => D::TimecodeSwap,
+                    "timecodeInvert" => D::TimecodeInvert,
                     _ => return None,
                 },
             )),
@@ -274,6 +354,9 @@ impl DjControl {
                     "pause" => SamplerControl::Pause,
                     "mode" => SamplerControl::Mode,
                     "gain" => SamplerControl::Gain,
+                    "pitch" => SamplerControl::Pitch,
+                    "sync" => SamplerControl::Sync,
+                    "bpm" => SamplerControl::Bpm,
                     _ => return None,
                 },
             )),
@@ -342,6 +425,15 @@ pub struct DjMixer {
     record_source: u8,
     sampler: Sampler,
     sampler_meter: f32,
+    /// Each Deck's timecode vinyl: its decoder, the input the host handed
+    /// it for this block (and how much of it), and what it read, frame by
+    /// frame.
+    timecode: [TimecodeDecoder; DECKS],
+    timecode_input: [[Vec<f32>; 2]; DECKS],
+    timecode_frames: [usize; DECKS],
+    vinyl: [Vec<VinylFrame>; DECKS],
+    /// The last frame each decoder read, for the report.
+    vinyl_last: [VinylFrame; DECKS],
 }
 
 impl DjMixer {
@@ -377,8 +469,13 @@ impl DjMixer {
             recorded: Vec::with_capacity((RECORD_SECONDS * sample_rate) as usize * 2),
             recorded_frames: 0,
             record_source: 0,
-            sampler: Sampler::new(),
+            sampler: Sampler::new(sample_rate),
             sampler_meter: 0.0,
+            timecode: std::array::from_fn(|_| TimecodeDecoder::new(sample_rate)),
+            timecode_input: std::array::from_fn(|_| block()),
+            timecode_frames: [0; DECKS],
+            vinyl: std::array::from_fn(|_| Vec::new()),
+            vinyl_last: [VinylFrame::default(); DECKS],
         }
     }
 
@@ -398,6 +495,16 @@ impl DjMixer {
             }
         }
         self.sampler.prepare(frames);
+        for (input, vinyl) in self.timecode_input.iter_mut().zip(&mut self.vinyl) {
+            for buffer in input {
+                if buffer.len() < frames {
+                    buffer.resize(frames, 0.0);
+                }
+            }
+            if vinyl.len() < frames {
+                vinyl.resize(frames, VinylFrame::default());
+            }
+        }
     }
 
     /// Put a file on Deck `deck`, or take it off with None, handing back
@@ -437,6 +544,18 @@ impl DjMixer {
             .unwrap_or(120.0)
     }
 
+    /// The tempo synced Sampler Slots follow: the Sync Master's, as it plays
+    /// now, and where it is in its beats while it plays. None without a
+    /// Sync Master with a Beat Grid.
+    fn sampler_tempo(&self) -> Option<MasterTempo> {
+        let deck = &self.decks[self.sync_master?];
+        let bpm = deck.effective_bpm();
+        (bpm > 0.0).then(|| MasterTempo {
+            bpm,
+            beat: deck.beat_position().filter(|_| deck.is_playing()),
+        })
+    }
+
     /// Set a control to `value`. Switches are on above 0.5.
     pub fn apply(&mut self, control: DjControl, value: f64) {
         let on = value >= 0.5;
@@ -450,6 +569,9 @@ impl DjMixer {
                 SamplerControl::Pause => self.sampler.pause(slot),
                 SamplerControl::Mode => self.sampler.set_mode(slot, SlotMode::from_value(value)),
                 SamplerControl::Gain => self.sampler.set_slot_gain(slot, v),
+                SamplerControl::Pitch => self.sampler.set_pitch(slot, value),
+                SamplerControl::Sync => self.sampler.set_sync(slot, on),
+                SamplerControl::Bpm => self.sampler.set_bpm(slot, value),
             },
             DjControl::Channel(index, control) => {
                 let channel = &mut self.channels[index];
@@ -559,6 +681,13 @@ impl DjMixer {
             }
             DeckControl::SilentCue => deck.silent = on,
             DeckControl::SlipReverse => deck.slip_reverse(on),
+            DeckControl::Mode => {
+                deck.set_mode(DeckMode::from_value(value));
+                self.aligned[index] = false;
+            }
+            DeckControl::TimecodeFormat => self.timecode[index].set_format(value.max(0.0) as usize),
+            DeckControl::TimecodeSwap => self.timecode[index].swap = on,
+            DeckControl::TimecodeInvert => self.timecode[index].invert = on,
             DeckControl::SyncMaster => {
                 self.sync_master = Some(index);
                 self.decks[index].sync_rate = None;
@@ -612,6 +741,11 @@ impl DjMixer {
             let rate = leader_bpm / bpm;
             let deck = &mut self.decks[index];
             deck.sync_rate = Some(rate);
+            if deck.mode() != DeckMode::Internal {
+                // The vinyl places the beats: Sync gives it only the tempo.
+                deck.phase_trim = 0.0;
+                continue;
+            }
             let (Some(theirs), Some(ours)) = (leader_beat, deck.beat_position()) else {
                 continue;
             };
@@ -639,6 +773,7 @@ impl DjMixer {
         self.prepare(frames);
         self.follow_sync();
         let bpm = self.master_bpm();
+        let sampler_tempo = self.sampler_tempo();
         let fall = 10f32.powf(-METER_FALL_DB_PER_SECOND * frames as f32 / self.sample_rate / 20.0);
         for side in &mut self.sides {
             side[0][..frames].fill(0.0);
@@ -648,9 +783,10 @@ impl DjMixer {
         self.cue[1][..frames].fill(0.0);
 
         for index in 0..DECKS {
+            self.decode_timecode(index, frames);
             let [left, right] = &mut self.deck_buffers[index];
             let (left, right) = (&mut left[..frames], &mut right[..frames]);
-            self.decks[index].render(left, right);
+            self.decks[index].render_vinyl(left, right, &self.vinyl[index][..frames]);
             let channel = &mut self.channels[index];
             channel.process(
                 left,
@@ -703,7 +839,7 @@ impl DjMixer {
         };
         let (a, b) = crossfade(position, self.crossfader_curve);
         // The Sampler has a channel of its own, past the crossfader, into the Master.
-        self.sampler.render(frames);
+        self.sampler.render(frames, sampler_tempo);
         self.sampler_meter = (self.sampler_meter * fall).max(self.sampler.peak);
         let (sampler_l, sampler_r) = self.sampler.output();
         if self.sampler.cue {
@@ -847,6 +983,80 @@ impl DjMixer {
         out[at + 3] = f64::from(self.record_source);
         for slot in 0..SAMPLER_SLOTS {
             out[at + 4 + slot] = f64::from(self.sampler.state(slot) as u8);
+        }
+        for (index, deck) in self.decks.iter().enumerate() {
+            let at = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + index * TIMECODE_FIELDS;
+            let decoder = &self.timecode[index];
+            let vinyl = self.vinyl_last[index];
+            out[at..at + TIMECODE_FIELDS].copy_from_slice(&[
+                deck.mode().value(),
+                flag(vinyl.present),
+                vinyl.speed,
+                if vinyl.position.is_finite() {
+                    vinyl.position
+                } else {
+                    -1.0
+                },
+                decoder.carrier(),
+                decoder.format() as f64,
+                flag(decoder.reads_position()),
+            ]);
+        }
+    }
+
+    /// Hand Deck `deck` its timecode vinyl's input for the next `render`:
+    /// the host's audio input, block by block, lined up with the output.
+    /// Read once, for one block; a Deck given none hears no signal.
+    /// Allocates nothing once `prepare` has sized it.
+    pub fn set_timecode_input(&mut self, deck: usize, left: &[f32], right: &[f32]) {
+        let Some([to_l, to_r]) = self.timecode_input.get_mut(deck) else {
+            return;
+        };
+        let frames = left.len().min(right.len()).min(to_l.len());
+        to_l[..frames].copy_from_slice(&left[..frames]);
+        to_r[..frames].copy_from_slice(&right[..frames]);
+        self.timecode_frames[deck] = frames;
+    }
+
+    /// Give Deck `deck`'s decoder the position table for its format, built
+    /// off the audio thread, handing back the one it had to be dropped there.
+    pub fn set_timecode_table(
+        &mut self,
+        deck: usize,
+        table: Option<Arc<PositionTable>>,
+    ) -> Option<Arc<PositionTable>> {
+        match self.timecode.get_mut(deck) {
+            Some(decoder) => decoder.set_table(table),
+            None => table,
+        }
+    }
+
+    /// The format Deck `deck` reads: 0 Auto, then `TIMECODE_FORMATS`.
+    pub fn timecode_format(&self, deck: usize) -> usize {
+        self.timecode.get(deck).map_or(0, TimecodeDecoder::format)
+    }
+
+    /// Read Deck `index`'s input for this block into `vinyl`, sample by
+    /// sample. A Deck playing itself with no input skips it.
+    fn decode_timecode(&mut self, index: usize, frames: usize) {
+        let given = std::mem::take(&mut self.timecode_frames[index]);
+        let vinyl = &mut self.vinyl[index][..frames];
+        let decoder = &mut self.timecode[index];
+        if given == 0 && self.decks[index].mode() == DeckMode::Internal && !decoder.is_present() {
+            vinyl.fill(VinylFrame::default());
+            self.vinyl_last[index] = VinylFrame::default();
+            return;
+        }
+        let [left, right] = &self.timecode_input[index];
+        for (i, frame) in vinyl.iter_mut().enumerate() {
+            *frame = if i < given {
+                decoder.process(left[i], right[i])
+            } else {
+                decoder.process(0.0, 0.0)
+            };
+        }
+        if let Some(last) = vinyl.last() {
+            self.vinyl_last[index] = *last;
         }
     }
 }
@@ -1056,6 +1266,53 @@ mod tests {
     }
 
     #[test]
+    fn a_synced_sampler_slot_follows_the_sync_master_and_a_pitched_one_its_own_speed() {
+        assert_eq!(
+            DjControl::parse("sampler", 5, "pitch"),
+            Some(DjControl::Sampler(5, SamplerControl::Pitch))
+        );
+        let mut mixer = DjMixer::new(RATE);
+        mixer.load(0, Some(tone_track(128.0, 20.0)));
+        set(&mut mixer, "deck", 0, "syncMaster", 1.0);
+        mixer.load_sample(3, Some(tone_sample(1.0)));
+        let frames_played = |mixer: &mut DjMixer| {
+            set(mixer, "sampler", 3, "play", 1.0);
+            let mut frames = 0;
+            while sampler_field(&report(mixer), 4 + 3) == SlotState::Playing as u8 as f64 {
+                mixer.render(100);
+                frames += 100;
+            }
+            // It stops within the block it reaches its end in.
+            frames - 100
+        };
+        assert_eq!(frames_played(&mut mixer), 48_000, "sync off: its own tempo");
+        set(&mut mixer, "sampler", 3, "bpm", 120.0);
+        set(&mut mixer, "sampler", 3, "sync", 1.0);
+        assert_eq!(frames_played(&mut mixer), 45_000, "128 against its 120");
+        set(&mut mixer, "sampler", 3, "sync", 0.0);
+        set(&mut mixer, "sampler", 3, "pitch", 12.0);
+        assert_eq!(
+            frames_played(&mut mixer),
+            24_000,
+            "an octave up, twice as fast"
+        );
+    }
+
+    #[test]
+    fn a_loops_tempo_is_put_right_to_a_whole_number_of_beats() {
+        let beat = (RATE / 2.0) as usize;
+        let mut clicks = vec![0.0f32; 16 * beat];
+        for start in (0..clicks.len()).step_by(beat) {
+            for (i, s) in clicks[start..start + 400].iter_mut().enumerate() {
+                *s = (-(i as f32) / 80.0).exp() * if i % 2 == 0 { 0.8 } else { -0.8 };
+            }
+        }
+        assert_eq!(sample_bpm(&clicks, &clicks, RATE), 120.0);
+        let silence = vec![0.0f32; 10_000];
+        assert_eq!(sample_bpm(&silence, &silence, RATE), 0.0, "no beat");
+    }
+
+    #[test]
     fn the_sampler_is_cued_and_can_be_recorded_alone() {
         let mut mixer = DjMixer::new(RATE);
         mixer.load(0, Some(tone_track(120.0, 2.0)));
@@ -1138,5 +1395,114 @@ mod tests {
         let mut out = vec![0.0; DJ_REPORT_LEN];
         engine.dj_report_into(&mut out);
         assert_eq!(deck_field(&out, 0, 1), 1.0);
+    }
+
+    fn timecode_field(report: &[f64], deck: usize, field: usize) -> f64 {
+        report
+            [GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS + deck * TIMECODE_FIELDS + field]
+    }
+
+    /// Render `seconds` of the mix with Deck `deck` fed `record` turning at
+    /// `speed`, in blocks of `block`, as a host hands its input over.
+    fn play_record(
+        mixer: &mut DjMixer,
+        deck: usize,
+        record: &mut TimecodeGenerator,
+        speed: f64,
+        seconds: f32,
+        block: usize,
+    ) {
+        let frames = (seconds * RATE) as usize;
+        let (mut left, mut right) = (vec![0.0; block], vec![0.0; block]);
+        let mut done = 0;
+        while done < frames {
+            let n = block.min(frames - done);
+            for i in 0..n {
+                (left[i], right[i]) = record.next(speed);
+            }
+            mixer.set_timecode_input(deck, &left[..n], &right[..n]);
+            mixer.render(n);
+            done += n;
+        }
+    }
+
+    #[test]
+    fn the_timecode_controls_parse() {
+        assert_eq!(
+            DjControl::parse("deck", 3, "mode"),
+            Some(DjControl::Deck(3, DeckControl::Mode))
+        );
+        for name in ["timecodeFormat", "timecodeSwap", "timecodeInvert"] {
+            assert!(DjControl::parse("deck", 0, name).is_some(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_deck_in_rel_follows_the_timecode_input_whatever_the_block() {
+        let played: Vec<(f64, Vec<f64>)> = [64, 480, 1_024]
+            .into_iter()
+            .map(|block| {
+                let mut mixer = DjMixer::new(RATE);
+                mixer.prepare(1_024);
+                mixer.load(0, Some(tone_track(120.0, 20.0)));
+                set(&mut mixer, "deck", 0, "mode", 1.0);
+                // REL sets the Deck's own tempo fader aside.
+                set(&mut mixer, "deck", 0, "tempo", 0.3);
+                set(&mut mixer, "channel", 0, "assign", 1.0);
+                let mut record = TimecodeGenerator::new(TIMECODE_FORMATS[0], RATE, 50.0);
+                play_record(&mut mixer, 0, &mut record, 0.5, 1.0, block);
+                let report = report(&mixer);
+                assert!(peak(&mixer.output().0[..64]) > 0.1, "heard");
+                (deck_field(&report, 0, 2), report)
+            })
+            .collect();
+        let (position, first) = &played[0];
+        assert!(*position > 0.48 && *position <= 0.5, "{position}");
+        assert_eq!(timecode_field(first, 0, 0), 1.0, "REL");
+        assert_eq!(timecode_field(first, 0, 1), 1.0, "a signal");
+        assert!((timecode_field(first, 0, 2) - 0.5).abs() < 0.005);
+        assert_eq!(
+            timecode_field(first, 0, 4),
+            1_000.0,
+            "Auto found the carrier"
+        );
+        for (other, _) in &played[1..] {
+            assert!(
+                (other - position).abs() < 1e-9,
+                "{other} against {position}"
+            );
+        }
+
+        // No input, as when the needle is lifted: the Deck stops.
+        let mut mixer = DjMixer::new(RATE);
+        mixer.load(0, Some(tone_track(120.0, 20.0)));
+        set(&mut mixer, "deck", 0, "mode", 1.0);
+        mixer.render(4_800);
+        assert_eq!(deck_field(&report(&mixer), 0, 2), 0.0);
+    }
+
+    #[test]
+    fn a_deck_in_abs_goes_where_the_record_is() {
+        let mut mixer = DjMixer::new(RATE);
+        mixer.prepare(1_024);
+        mixer.load(1, Some(tone_track(120.0, 60.0)));
+        set(&mut mixer, "deck", 1, "timecodeFormat", 1.0);
+        assert!(
+            mixer
+                .set_timecode_table(1, PositionTable::build(1).map(Arc::new))
+                .is_none()
+        );
+        set(&mut mixer, "deck", 1, "mode", 2.0);
+        let mut record = TimecodeGenerator::new(TIMECODE_FORMATS[0], RATE, 30.0);
+        play_record(&mut mixer, 1, &mut record, 1.0, 0.3, 256);
+        let report = report(&mixer);
+        assert_eq!(timecode_field(&report, 1, 6), 1.0, "ABS is ready");
+        assert!((timecode_field(&report, 1, 3) - record.seconds()).abs() < 0.001);
+        assert!(
+            (deck_field(&report, 1, 2) - record.seconds()).abs() < 0.002,
+            "{} against {}",
+            deck_field(&report, 1, 2),
+            record.seconds()
+        );
     }
 }

@@ -15,16 +15,17 @@ use std::time::Instant;
 use rtrb::{Consumer, Producer, RingBuffer};
 use soundcheck_engine::{
     AUDITION_GAIN, Audition, DJ_REPORT_LEN, DjControl, DjMixer, Engine, KeysSettings, MAX_BUSES,
-    MAX_TRACKS, NoteList, PluginKind, PluginRuntime, PreparedAudioClips, PreparedAudioFile,
-    PreparedAutomation, PreparedBus, PreparedDjTrack, PreparedEffect, PreparedInstrument,
-    PreparedSample, PreparedSends, PreparedTempoChanges, PreparedTrack, RECORDING_CAPACITY,
-    SynthSettings, TICKS_PER_BEAT, bus_chain,
+    MAX_TRACKS, NoteList, PluginKind, PluginRuntime, PositionTable, PreparedAudioClips,
+    PreparedAudioFile, PreparedAutomation, PreparedBus, PreparedDjSample, PreparedDjTrack,
+    PreparedEffect, PreparedInstrument, PreparedSample, PreparedSends, PreparedTempoChanges,
+    PreparedTrack, RECORDING_CAPACITY, SynthSettings, TICKS_PER_BEAT, bus_chain,
 };
 
 use crate::command::{EffectSettings, EngineCommand, Garbage, RecordedNoteEvent, RtCommand};
 use crate::monitor::MonitorFeed;
 use crate::recorder::PlaybackClock;
 use crate::stats::{EngineState, SharedStats};
+use crate::timecode::TimecodeFeed;
 
 /// The most frames the engine renders at once. A callback asking for more
 /// is rendered in several blocks.
@@ -36,6 +37,15 @@ const MIDI_QUEUE: usize = 1_024;
 /// Seconds of the DJ mix's recording the audio thread can hand over before
 /// the UI next takes it.
 const DJ_RECORDING_SECONDS: f32 = 10.0;
+
+/// What a sample put in a Sampler Slot is, for the UI: how long it plays,
+/// in seconds, and its tempo (0 when none was found). Mirrors
+/// `DjSampleInfo` in `app/src/audio/audio-output.ts`.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+pub struct DjSampleInfo {
+    pub seconds: f64,
+    pub bpm: f64,
+}
 
 /// Build a Renderer for the audio thread, the Controller that drives it, and
 /// the producer end of the MIDI queue.
@@ -69,6 +79,7 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
         dj_recording: dj_recording_out,
         dj_report: [0.0; DJ_REPORT_LEN],
         headphones: None,
+        timecode: None,
     };
     let mut controller = Controller {
         sample_rate,
@@ -85,6 +96,7 @@ pub fn host(sample_rate: f32, track_count: usize) -> (Controller, Renderer, Prod
         offline: false,
         dj_installed: false,
         dj_recording,
+        timecode_tables: HashMap::new(),
     };
     controller.send(EngineCommand::SetTrackCount { count: track_count });
     (controller, renderer, midi)
@@ -130,6 +142,9 @@ pub struct Controller {
     dj_installed: bool,
     /// The DJ mix's recording, as the audio thread hands it over.
     dj_recording: Consumer<f32>,
+    /// Each timecode format's position table once one Deck has chosen it,
+    /// kept here so the audio thread never drops the last of one.
+    timecode_tables: HashMap<usize, Arc<PositionTable>>,
 }
 
 impl Controller {
@@ -508,6 +523,9 @@ impl Controller {
                 if let Some(control) = DjControl::parse(&kind, index, &name) {
                     self.install_dj();
                     self.push(RtCommand::DjSet(control, value));
+                    if kind == "deck" && name == "timecodeFormat" {
+                        self.dj_timecode_table(index, value.max(0.0) as usize);
+                    }
                 }
             }
         }
@@ -522,6 +540,29 @@ impl Controller {
             self.push(RtCommand::DjInstall(dj));
             self.dj_installed = true;
         }
+    }
+
+    /// Give Deck `deck` the position table for timecode format `choice`,
+    /// built here the first time any Deck chooses it (a moment, and up to
+    /// 17 MB for the longest record), so ABS can read where the needle is.
+    fn dj_timecode_table(&mut self, deck: usize, choice: usize) {
+        if !self.timecode_tables.contains_key(&choice)
+            && let Some(table) = PositionTable::build(choice)
+        {
+            self.timecode_tables.insert(choice, Arc::new(table));
+        }
+        let table = self.timecode_tables.get(&choice).cloned();
+        self.push(RtCommand::DjTimecodeTable { deck, table });
+    }
+
+    /// Read each chosen Deck's timecode vinyl from `feed`, replacing any
+    /// feed there was, or none with None.
+    pub fn set_timecode(&mut self, feed: Option<TimecodeFeed>) {
+        self.collect_garbage();
+        if feed.is_some() {
+            self.install_dj();
+        }
+        self.push(RtCommand::SetTimecode(feed.map(Box::new)));
     }
 
     /// Put a file decoded and analysed for Deck `deck` (at this
@@ -555,6 +596,22 @@ impl Controller {
             slot,
             file: Some(file),
         });
+    }
+
+    /// Put a sample decoded for Sampler Slot `slot` (at this Controller's
+    /// sample rate, off the audio thread) there. Answers how long it plays
+    /// and the tempo found for it.
+    pub fn dj_put_prepared_sample(
+        &mut self,
+        slot: usize,
+        prepared: PreparedDjSample,
+    ) -> DjSampleInfo {
+        let info = DjSampleInfo {
+            seconds: prepared.seconds(self.sample_rate),
+            bpm: prepared.bpm,
+        };
+        self.dj_put_sample(slot, prepared.file);
+        info
     }
 
     /// Empty Sampler Slot `slot`.
@@ -728,6 +785,8 @@ pub struct Renderer {
     dj_report: [f64; DJ_REPORT_LEN],
     /// Where the headphone cue goes for a second output device to play.
     headphones: Option<Box<Producer<f32>>>,
+    /// The timecode vinyl's inputs, while any Deck has one.
+    timecode: Option<Box<TimecodeFeed>>,
 }
 
 impl Renderer {
@@ -762,10 +821,16 @@ impl Renderer {
         if let Some(monitor) = &mut self.monitor {
             monitor.begin(frames);
         }
+        if let Some(timecode) = &mut self.timecode {
+            timecode.begin(frames);
+        }
         for chunk in out.chunks_mut(MAX_BLOCK * channels) {
             let block = chunk.len() / channels;
             if let Some(monitor) = &mut self.monitor {
                 monitor.feed(&mut self.engine, block);
+            }
+            if let Some(timecode) = &mut self.timecode {
+                timecode.feed(&mut self.engine, block);
             }
             self.engine.render(block);
             let left = &self.engine.left()[..block];
@@ -1097,6 +1162,16 @@ impl Renderer {
             RtCommand::SetHeadphones(ring) => {
                 if let Some(old) = std::mem::replace(&mut self.headphones, ring) {
                     self.discard(Garbage::Headphones(old));
+                }
+            }
+            RtCommand::SetTimecode(feed) => {
+                if let Some(old) = std::mem::replace(&mut self.timecode, feed) {
+                    self.discard(Garbage::Timecode(old));
+                }
+            }
+            RtCommand::DjTimecodeTable { deck, table } => {
+                if let Some(old) = engine.dj_set_timecode_table(deck, table) {
+                    self.discard(Garbage::TimecodeTable(old));
                 }
             }
         }

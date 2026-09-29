@@ -287,8 +287,20 @@ _Avoid_: DJ mode, performance view, live page
 One of the Mixer page's two or four players: a file loaded onto it, played at a tempo of its own, with its own cues and loops, into one channel of the DJ mixer. A Deck is not a Track: it holds a file, not Clips.
 _Avoid_: Player, turntable, channel (that is its strip on the mixer)
 
+**DVS**:
+Playing the Decks from turntables, a digital vinyl system: each turntable plays a timecode vinyl, whose signal comes in through a pair of an audio input's channels and moves its Deck, in REL or ABS. The Desktop App's only: the Browser Version has no audio input to read it from.
+_Avoid_: Timecode mode, vinyl control (on its own), scratch mode
+
+**Timecode vinyl**:
+A control record with no music on it: a stereo tone whose two channels are a quarter of a cycle apart, so its speed and direction can be read, and whose cycles carry a sequence of bits that says where on the record the needle is. Serato's, Traktor's, MixVibes' and rekordbox's records are read; Auto finds a record's speed without knowing whose it is.
+_Avoid_: Control vinyl (the makers' own name for theirs), DVS record, timecode (on its own)
+
+**INT**, **REL** and **ABS**:
+A Deck's control modes. INT (internal): the Deck plays the file itself, as it always has. REL (relative): the timecode vinyl's speed and direction move it, its own tempo fader set aside, and a needle dropped elsewhere carries on from where the Deck is; Sync still gives it the Master's tempo. ABS (absolute): the Deck goes to where the needle is on the record, the record's start the file's start, and a needle drop jumps it there. In REL and ABS a lifted needle stops the Deck. A Hot Cue, a loop, a Beat Jump or Needle Search can't move the needle, so in ABS they turn the Deck to REL. The Pad Controller's INT turns a Deck between INT and REL; ABS is chosen on the Deck.
+_Avoid_: Internal/relative/absolute mode (spelled out, except to explain them), thru mode
+
 **Track browser**:
-The Mixer and Pads pages' list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck or into a Sampler Slot. The Pad Controller's browse knob moves a cursor through it, and LOAD loads the file it is on (the chosen track).
+The Mixer and Pads pages' list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck or into a Sampler Slot. The Pad Controller's browse knob moves a cursor through its loaded list or its folder tree, and LOAD loads the file it is on (the chosen track).
 _Avoid_: Library (that is the app's Preset and Kit library), crate, playlist
 
 **Beat Grid**:
@@ -340,7 +352,7 @@ The DJ mixer's own player of short sounds: 64 Sampler Slots in four banks of six
 _Avoid_: Drum Sampler (that is an Instrument), sampler deck, sample player
 
 **Sampler Slot**:
-One of the Sampler's 64 places for a sample: a name, the sample, how it plays (one-shot, gate or loop) and its level. A pad of the Pad Controller in SAMPLER mode plays one; SHIFT and the pad pauses it, or loads the Track browser's chosen track into it.
+One of the Sampler's 64 places for a sample: a name, the sample, how it plays (one-shot, gate or loop), its level, its pitch (semitones and cents, an octave either way, which changes its speed too, as a sampler's pitch does), its BPM (found when the sample goes in, or typed) and its SYNC. With SYNC on, the slot plays at the Sync Master's tempo keeping its pitch, as a DJ sampler's BEAT SYNC does, and a synced loop comes round on the Master's beat; that is a slot's own switch, not Sync, which is a Deck's. A pad of the Pad Controller in SAMPLER mode plays one; SHIFT and the pad pauses it, or loads the Track browser's chosen track into it.
 _Avoid_: Pad (that is a Drum Sampler's sound), cell
 
 **Pad Controller**:

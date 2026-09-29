@@ -48,8 +48,13 @@ pub use clip_render::ClipRender;
 pub use clip_waveform::ClipWaveform;
 pub use dj::{
     BEAT_FX, COLOUR_FX, DECK_FIELDS, DECKS, DJ_REPORT_LEN, DjControl, DjMixer, DjTrack,
-    GLOBAL_FIELDS, PreparedDjTrack, SAMPLER_BANK_SLOTS, SAMPLER_BANKS, SAMPLER_FIELDS,
-    SAMPLER_SLOTS, SlotMode, SlotState, TrackAnalysis, WAVEFORM_RATE,
+    GLOBAL_FIELDS, PreparedDjSample, PreparedDjTrack, SAMPLER_BANK_SLOTS, SAMPLER_BANKS,
+    SAMPLER_FIELDS, SAMPLER_SLOTS, SLOT_PITCH_RANGE, SlotMode, SlotState, TrackAnalysis,
+    WAVEFORM_RATE,
+};
+pub use dj::{
+    DeckMode, PositionTable, TIMECODE_FIELDS, TIMECODE_FORMATS, TimecodeDecoder, TimecodeFormat,
+    TimecodeGenerator, VinylFrame, timecode_format,
 };
 pub use effect::{EffectKind, MAX_EFFECTS};
 pub use engine::{
@@ -253,31 +258,37 @@ pub fn dj_prepare(bytes: &[u8], sample_rate: f32) -> Result<DjPrepared, String> 
         .map_err(|error| error.message().to_string())
 }
 
-/// A sample decoded for a Sampler Slot at the engine's rate, on the page's
-/// thread, so the audio thread only moves it in.
+/// A sample decoded for a Sampler Slot at the engine's rate, and its tempo
+/// found, on the page's thread, so the audio thread only moves it in.
 #[wasm_bindgen]
-pub struct DjPreparedSample(PreparedAudioFile);
+pub struct DjPreparedSample(PreparedDjSample);
 
 #[wasm_bindgen]
 impl DjPreparedSample {
     pub fn left(&self) -> Vec<f32> {
-        self.0.left().to_vec()
+        self.0.file.left().to_vec()
     }
 
     pub fn right(&self) -> Vec<f32> {
-        self.0.right().to_vec()
+        self.0.file.right().to_vec()
     }
 
     /// How long it plays, in seconds at `sample_rate`.
     pub fn seconds(&self, sample_rate: f32) -> f64 {
-        self.0.left().len() as f64 / f64::from(sample_rate)
+        self.0.seconds(sample_rate)
+    }
+
+    /// Its tempo, by the Decks' analysis; 0 when none was found.
+    pub fn bpm(&self) -> f64 {
+        self.0.bpm
     }
 }
 
-/// Decode a WAV, FLAC or MP3 file for a Sampler Slot at `sample_rate`.
+/// Decode a WAV, FLAC or MP3 file for a Sampler Slot at `sample_rate`, and
+/// find its tempo.
 #[wasm_bindgen]
 pub fn dj_prepare_sample(bytes: &[u8], sample_rate: f32) -> Result<DjPreparedSample, String> {
-    PreparedAudioFile::decode(bytes, sample_rate)
+    PreparedDjSample::decode(bytes, sample_rate)
         .map(DjPreparedSample)
         .map_err(|error| error.message().to_string())
 }
@@ -305,4 +316,24 @@ pub fn dj_effects() -> String {
         list(BEAT_FX),
         list(COLOUR_FX)
     )
+}
+
+/// The timecode records a Deck can read in REL and ABS, in the order its
+/// `timecodeFormat` control numbers them from 1 (0 is Auto), as JSON:
+/// each one's id, label and carrier in Hz.
+#[wasm_bindgen]
+pub fn timecode_formats() -> String {
+    let formats = TIMECODE_FORMATS
+        .iter()
+        .map(|f| {
+            format!(
+                r#"{{"id":"{}","label":"{}","carrier":{}}}"#,
+                f.id,
+                f.label.replace('"', "\\\""),
+                f.carrier
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{formats}]")
 }

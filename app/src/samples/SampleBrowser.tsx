@@ -72,6 +72,45 @@ export interface SampleBrowserProps {
   title?: string;
   /** What "Put on" says when there is nowhere to put a file. */
   noTargets?: string;
+  /**
+   * A cursor driven from outside, as the Pad Controller's browse knob drives
+   * the Track browser's tree: the row (by `TreeCursor.key`) to select, open
+   * the folders down to, and scroll into view, without taking focus.
+   */
+  cursor?: string | null;
+  /** A move of that cursor to make, once per `nonce`. */
+  command?: TreeCommand | null;
+  /**
+   * Told the row the selection is on each time it moves here, by the
+   * musician or by `command` (with that command's `nonce`); null for a tree
+   * with no rows.
+   */
+  onCursor?: (cursor: TreeCursor | null, nonce: number | null) => void;
+}
+
+/**
+ * A move of the tree's cursor asked from outside: `move` it `by` rows, `open`
+ * the folder it is on, or `close` the one it is on or in (the cursor going
+ * to it). It starts from `from`, the row the driver last knew it on.
+ */
+export interface TreeCommand {
+  nonce: number;
+  action: "move" | "open" | "close";
+  by?: number;
+  from: string | null;
+}
+
+/** The row a tree's cursor is on, as told to whoever drives it. */
+export interface TreeCursor {
+  key: string;
+  kind: "root" | "folder" | "file" | "more" | "status";
+  name: string;
+  /** The file, on a file's row. */
+  sample: SampleRef | null;
+  /** Whether a folder's row is open; null on any other. */
+  expanded: boolean | null;
+  /** 1 for an added folder, 2 for what is in it, and so on. */
+  level: number;
 }
 
 type Listing = { files: string[] } | { error: string };
@@ -122,7 +161,18 @@ export function SampleBrowser(props: SampleBrowserProps) {
   );
 }
 
-function Browser({ source, library, canAudition, targets, onUse, onError, noTargets }: SampleBrowserProps & { source: SampleSource }) {
+function Browser({
+  source,
+  library,
+  canAudition,
+  targets,
+  onUse,
+  onError,
+  noTargets,
+  cursor = null,
+  command = null,
+  onCursor,
+}: SampleBrowserProps & { source: SampleSource }) {
   const id = useId();
   // Null until the library has been read, so nothing added meanwhile is lost.
   const [folders, setFolders] = useState<readonly SampleFolder[] | null>(null);
@@ -144,6 +194,10 @@ function Browser({ source, library, canAudition, targets, onUse, onError, noTarg
   const [preview, setPreview] = useState(() => readLocal(PREVIEW_KEY) === "on");
   const items = useRef(new Map<string, HTMLElement>());
   const focusNext = useRef<string | null>(null);
+  // A row brought into view without taking focus: the driven cursor's.
+  const scrollNext = useRef<string | null>(null);
+  // A folder opened or closed here (not by following `cursor`), to tell `onCursor` once the tree shows it.
+  const report = useRef(false);
   const typed = useRef({ text: "", at: 0 });
 
   useEffect(() => {
@@ -201,11 +255,46 @@ function Browser({ source, library, canAudition, targets, onUse, onError, noTarg
   const active = rows[activeIndex];
 
   useLayoutEffect(() => {
+    if (scrollNext.current !== null && items.current.has(scrollNext.current)) {
+      items.current.get(scrollNext.current)?.scrollIntoView?.({ block: "nearest" });
+      scrollNext.current = null;
+    }
     if (focusNext.current === null) return;
     const element = items.current.get(focusNext.current);
     focusNext.current = null;
     element?.focus();
     element?.scrollIntoView?.({ block: "nearest" });
+  });
+
+  // The driven cursor followed: its row selected, the folders down to it opened, and it scrolled into view.
+  const [followed, setFollowed] = useState<string | null>(null);
+  if (cursor !== followed) {
+    setFollowed(cursor);
+    if (cursor !== null && cursor !== activeKey) {
+      setActiveKey(cursor);
+      const opening = ancestorsOf(cursor);
+      if (opening.some((key) => (key.startsWith("r\n") ? toggled.has(key) : !toggled.has(key)))) {
+        setToggled((known) => {
+          const next = new Set(known);
+          for (const key of opening) {
+            if (key.startsWith("r\n")) next.delete(key);
+            else next.add(key);
+          }
+          return next;
+        });
+      }
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (cursor !== null) items.current.get(cursor)?.scrollIntoView?.({ block: "nearest" });
+  }, [cursor]);
+
+  // A folder opened or closed here: the driver is told how the row is now.
+  useEffect(() => {
+    if (!report.current) return;
+    report.current = false;
+    if (active) onCursor?.(cursorOf(active), null);
   });
 
   const change = (update: (current: readonly SampleFolder[]) => SampleFolder[]) => {
@@ -281,12 +370,16 @@ function Browser({ source, library, canAudition, targets, onUse, onError, noTarg
     });
 
   const setOpen = (row: Row, open: boolean) => {
-    if ((row.kind === "root" || row.kind === "folder") && row.expanded !== open && !searching) toggleOpen(row.key);
+    if ((row.kind === "root" || row.kind === "folder") && row.expanded !== open && !searching) {
+      toggleOpen(row.key);
+      report.current = onCursor !== undefined;
+    }
   };
 
   /** Make `row` the selection, and move focus to it where the keyboard asked. */
   const select = (row: Row, focus: boolean) => {
     setActiveKey(row.key);
+    onCursor?.(cursorOf(row), null);
     if (focus) focusNext.current = row.key;
     if (preview && row.kind === "file" && row.key !== active?.key) audition({ folder: row.folder, path: row.path });
   };
@@ -304,6 +397,50 @@ function Browser({ source, library, canAudition, targets, onUse, onError, noTarg
     const row = rows[Math.min(Math.max(index, 0), rows.length - 1)];
     if (row) select(row, true);
   };
+
+  // A move asked from outside, made once: the browse knob's turn and press. The driver is told where it
+  // landed at once, as the tree will show it, so what it does next (LOAD's next track) can follow.
+  const done = useRef(command?.nonce ?? null);
+  useEffect(() => {
+    if (!command || command.nonce === done.current) return;
+    done.current = command.nonce;
+    const at = rows.findIndex((row) => row.key === (command.from ?? activeKey));
+    const from = at >= 0 ? at : activeIndex;
+    const row = rows[from];
+    if (!row) {
+      onCursor?.(null, command.nonce);
+      return;
+    }
+    const show = (to: Row, expanded?: boolean) => {
+      setActiveKey(to.key);
+      scrollNext.current = to.key;
+      if (preview && to.kind === "file" && to.key !== active?.key) audition({ folder: to.folder, path: to.path });
+      const told = cursorOf(to);
+      onCursor?.(expanded === undefined || told.expanded === null || searching ? told : { ...told, expanded }, command.nonce);
+    };
+    if (command.action === "move") {
+      const by = command.by ?? 1;
+      show(at < 0 ? rows[by > 0 ? 0 : rows.length - 1]! : rows[Math.min(Math.max(from + by, 0), rows.length - 1)]!);
+    } else if (command.action === "open") {
+      setOpen(row, true);
+      show(row, true);
+    } else if ((row.kind === "root" || row.kind === "folder") && row.expanded) {
+      setOpen(row, false);
+      show(row, false);
+    } else {
+      // Closing from inside a folder closes it, and the cursor goes to it.
+      let parent = from - 1;
+      while (parent >= 0 && rows[parent]!.level >= row.level) parent--;
+      const folder = rows[parent];
+      if (folder) {
+        setOpen(folder, false);
+        show(folder, false);
+      } else show(row);
+    }
+    report.current = false;
+    // The rows and selection are read as they are when the command comes: only a new command runs it.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [command]);
 
   const onTreeKey = (event: KeyboardEvent<HTMLElement>) => {
     if (!active) return;
@@ -477,6 +614,7 @@ function Browser({ source, library, canAudition, targets, onUse, onError, noTarg
               row={row}
               words={words}
               active={index === activeIndex}
+              cursor={row.key === cursor}
               playing={row.key === playing}
               canAudition={canAudition}
               ref={(element) => {
@@ -583,6 +721,8 @@ interface TreeRowProps {
   row: Row;
   words: readonly string[];
   active: boolean;
+  /** Where the driven cursor (the browse knob's) is. */
+  cursor: boolean;
   playing: boolean;
   canAudition: boolean;
   ref: (element: HTMLDivElement | null) => void;
@@ -597,6 +737,7 @@ function TreeRow({
   row,
   words,
   active,
+  cursor,
   playing,
   canAudition,
   ref,
@@ -630,6 +771,7 @@ function TreeRow({
       data-kind={row.kind}
       data-tone={row.kind === "status" ? row.tone : undefined}
       data-playing={playing || undefined}
+      data-cursor={cursor || undefined}
       style={{ "--level": row.level - 1 } as CSSProperties}
       title={row.kind === "file" ? `${row.path}: drag onto an Audio Track or a Pad` : row.kind === "root" ? row.folder.id : undefined}
       draggable={sample !== null}
@@ -741,6 +883,29 @@ function rowName(row: Row): string {
     case "status":
       return row.text;
   }
+}
+
+/** What a driver of the tree's cursor is told of `row`. */
+function cursorOf(row: Row): TreeCursor {
+  return {
+    key: row.key,
+    kind: row.kind,
+    name: rowName(row),
+    sample: row.kind === "file" ? { folder: row.folder, path: row.path } : null,
+    expanded: row.kind === "root" || row.kind === "folder" ? row.expanded : null,
+    level: row.level,
+  };
+}
+
+/** The keys of the folders a row is inside, its added folder among them. */
+function ancestorsOf(key: string): string[] {
+  const [kind, id, ...rest] = key.split("\n");
+  if ((kind !== "d" && kind !== "f") || id === undefined) return [];
+  const path = rest.join("\n");
+  const parts = (kind === "f" ? folderPart(path) : path).split("/").filter(Boolean);
+  if (kind === "d") parts.pop();
+  const root = `r\n${id}`;
+  return [root, ...parts.map((_, at) => `d\n${id}\n${parts.slice(0, at + 1).join("/")}`)];
 }
 
 /** The tree's lines, in order: each added folder, and inside the open ones their folders and files. */
