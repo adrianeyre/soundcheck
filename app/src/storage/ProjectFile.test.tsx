@@ -237,7 +237,7 @@ test("missing audio is reported when a Project folder opens without it", async (
     name: "Vocals",
     input: { device: null, channels: null },
     monitoring: false,
-    mixer: { volume: 1, pan: 0, mute: false, solo: false },
+    mixer: { volume: 1, pan: 0, mute: false, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } },
     insertChain: [],
     output: null,
     sends: [],

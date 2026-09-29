@@ -1,5 +1,5 @@
 import { FolderTree, ListMusic } from "lucide-react";
-import { memo, useId, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 
 import type { LibraryStorage } from "../preset/library-storage";
 import { SampleBrowser, type SampleTarget } from "../samples/SampleBrowser";
@@ -11,8 +11,13 @@ import { TrackBrowser } from "./TrackBrowser";
 const Folders = memo(SampleBrowser);
 
 export interface DjBrowserProps {
-  /** Which of the page's two it is: in its heading, and its id, which a Deck's BROWSE button looks it up by. */
-  number: 1 | 2;
+  /**
+   * Which it is: the Mixer page's two, 1 and 2, or the Pads page's, 3. In its heading, and its id, which a
+   * Deck's BROWSE button looks it up by.
+   */
+  number: 1 | 2 | 3;
+  /** Its heading, if not "Track browser" and its number. */
+  title?: string;
   /** The sample folders on this machine, or null where the platform has none. */
   source: SampleSource | null;
   library: LibraryStorage | null;
@@ -26,9 +31,16 @@ export interface DjBrowserProps {
   canLoad: boolean;
   onAdd: (files: File[]) => void;
   onLoad: (trackId: string, deck: number) => void;
+  /** The loaded track the Pad Controller's browse knob is on, and a way to put it on another. */
+  cursor?: string | null;
+  onCursor?: (trackId: string) => void;
+  /** Told the loaded tracks' order as this browser sorts them, for the knob to move through. */
+  onOrder?: (ids: readonly string[]) => void;
+  /** A tab to bring into view, each time `nonce` changes: the browse knob's press. */
+  show?: { tab: Tab; nonce: number } | null;
 }
 
-type Tab = "folders" | "loaded";
+export type Tab = "folders" | "loaded";
 
 /**
  * The Track browser, as DJ software's: the Editor's folder tree of the
@@ -42,6 +54,17 @@ export function DjBrowser(props: DjBrowserProps) {
   const hasFolders = source !== null && library !== null;
   const [tab, setTab] = useState<Tab>(hasFolders ? "folders" : "loaded");
   const id = useId();
+  // The browse knob's press: its tab brought up, and the browser focused.
+  const shown = props.show;
+  const [seen, setSeen] = useState(shown?.nonce ?? 0);
+  if (shown && shown.nonce !== seen) {
+    setSeen(shown.nonce);
+    setTab(shown.tab);
+  }
+  useEffect(() => {
+    if (shown) document.getElementById(`dj-browser-${props.number}`)?.focus({ preventScroll: true });
+  }, [shown, props.number]);
+  const title = props.title ?? `Track browser ${props.number}`;
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "folders", label: "Folders", icon: <FolderTree size={14} aria-hidden /> },
     { id: "loaded", label: `Loaded tracks (${props.tracks.length})`, icon: <ListMusic size={14} aria-hidden /> },
@@ -51,9 +74,9 @@ export function DjBrowser(props: DjBrowserProps) {
       <div className="panel-head">
         <h2 id={`${id}-heading`}>
           <ListMusic size={18} aria-hidden />
-          Track browser {props.number}
+          {title}
         </h2>
-        <div className="dj-tabs" role="tablist" aria-label={`Track browser ${props.number} views`}>
+        <div className="dj-tabs" role="tablist" aria-label={`${title} views`}>
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -97,7 +120,16 @@ export function DjBrowser(props: DjBrowserProps) {
         )}
       </div>
       <div role="tabpanel" id={`${id}-loaded-panel`} aria-labelledby={`${id}-loaded`} hidden={tab !== "loaded"}>
-        <TrackBrowser tracks={props.tracks} decks={props.decks} canLoad={props.canLoad} onAdd={props.onAdd} onLoad={props.onLoad} />
+        <TrackBrowser
+          tracks={props.tracks}
+          decks={props.decks}
+          canLoad={props.canLoad}
+          onAdd={props.onAdd}
+          onLoad={props.onLoad}
+          cursor={props.cursor ?? null}
+          onCursor={props.onCursor}
+          onOrder={props.onOrder}
+        />
       </div>
     </section>
   );

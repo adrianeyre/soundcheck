@@ -138,6 +138,10 @@ impl StereoEffect for PitchShifter {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.grain = self.settings.grain_ms / 1_000.0 * self.sample_rate;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let ratio = self.settings.ratio();
         let mix = self.settings.mix;

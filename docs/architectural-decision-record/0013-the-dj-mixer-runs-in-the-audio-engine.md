@@ -43,3 +43,15 @@ On a two-channel output with no second device chosen, the cue buttons still work
 - Four time-stretched Decks with Beat FX at a small buffer may be more than a laptop manages; the Settings load test measures the song's engine, not this.
 - A two-channel output, the usual laptop case, needs a second device chosen for the headphone cue.
 - The headphone cue on a second device runs on its own clock and a little behind the Master (the ring's 40 ms, and in the browser the audio element's buffering): enough to preview, not to beat-match by ear against the Master in one ear.
+
+## Amended: the Sampler, and a session the Pads page shares
+
+The **Pad Controller** (the Pads page's, and a Widget of the Mixer page's) plays a **Sampler** as DJ software's does, so the DJ Mixer grows one, in the engine as everything else here is.
+
+- **The Sampler is part of the DJ Mixer** (`engine/src/dj/sampler.rs`): 64 **Sampler Slots** (four banks of sixteen), each a decoded sample at the engine's rate, a read position, a mode (one-shot, gate or loop), a level and a short fade so a stop, pause or retrigger doesn't click. Its sum goes into the Master past the Crossfader, at the Sampler Gain, and into the headphone cue when its cue is on. Its controls are named like the others' (`"sampler"`, by slot, and `samplerGain`, `samplerCue`, `samplerStopAll` on the mixer), and the report grows a Sampler section after the Decks (its meter, gain, cue and each slot's state).
+- **A sample reaches a slot as a Deck's file does:** decoded and resampled off the audio thread (the desktop's `dj_sample_load` command, the browser page's `dj_prepare_sample`), moved in whole (`RtCommand::DjSample`, the worklet's `djSample` message), the one it replaces dropped off the audio thread. Playing one only moves a read position.
+- **The recording can take the Sampler alone** (`recordSource`), so what was played on the pads can go into the song by itself.
+- **Silent Cue and Slip Reverse are the Deck's**: a mute that the Deck plays on under, which calling a Hot Cue ends; and Reverse held with Slip, which ends itself after 8 beats backwards.
+- **One session, two pages.** The Mixer page and the Pads page draw over one session (`app/src/dj/dj-session.ts`), started when the first of them opens and kept while the app is open, so both drive the same Decks, Sampler and recording.
+- **The Sampler's slots are kept** in the app-level library (`dj-sampler/`), not the session: they are the DJ's instrument. Everything else stays the session's.
+- **"Add to song" is the exception to "Not in the Project"**, and only when the DJ asks: the last recording goes into the Editor's Project, through the Editor, as a new Audio Track with one Audio Clip, as one undo step.

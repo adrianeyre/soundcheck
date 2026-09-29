@@ -634,6 +634,35 @@ mod tests {
     }
 
     #[test]
+    fn a_pad_past_the_kit_s_end_is_silent_rather_than_playing_another_pad_s_sound() {
+        let kit_pads = super::super::STARTER_KIT_PADS;
+        let mut sampler = DrumSampler::starter_kit(RATE, MAX_PADS);
+        assert_eq!(sampler.pad_count(), MAX_PADS);
+        // Putting the kit's own sample back, as taking the musician's off
+        // does, finds none past the kit: the index doesn't wrap around.
+        assert!(super::super::kit_sample(kit_pads).is_none());
+        assert!(super::super::kit_sample(MAX_PADS - 1).is_none());
+        for pad in kit_pads..MAX_PADS {
+            let note = 76 + (pad - kit_pads) as u8;
+            sampler.set_pad(
+                pad,
+                PadSettings {
+                    note,
+                    ..PadSettings::default()
+                },
+            );
+            sampler.set_sample(pad, super::super::kit_sample(pad).map(Arc::new));
+            sampler.note_on(note, 1.0);
+            assert_eq!(sampler.active_voices(), 0, "pad {pad} plays nothing");
+            assert_eq!(peak(&render(&mut sampler, 1_024).0), 0.0);
+        }
+        // The last of the kit's own still sounds beside them.
+        let last = sampler.pad_settings(kit_pads - 1).unwrap().note;
+        sampler.note_on(last, 1.0);
+        assert!(peak(&render(&mut sampler, 24_000).0) > 0.1);
+    }
+
+    #[test]
     fn a_sample_recorded_at_another_rate_plays_at_its_own_speed() {
         let mut sampler = DrumSampler::new(RATE, 1);
         sampler.set_pad(

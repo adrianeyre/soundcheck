@@ -81,6 +81,10 @@ export interface MixerPanelProps {
   recording: { on: boolean; seconds: number; format: "wav" | "mp3"; saving: boolean };
   onRecordFormat: (format: "wav" | "mp3") => void;
   onRecord: (on: boolean) => void;
+  /** Put the last recording into the Editor's song; absent where there is no song to put it in. */
+  onAddToSong?: () => void;
+  /** Whether there is a recording to add. */
+  canAddToSong?: boolean;
   /**
    * Plays the cue out of a second output device the DJ picks: absent while
    * the page doesn't offer it, null where the platform can't.
@@ -478,6 +482,18 @@ export function MixerPanel(props: MixerPanelProps) {
               <span className="num dj-hw-value" role="timer" aria-label="Recording time">
                 {recording.saving ? "SAVING…" : formatTime(recording.seconds)}
               </span>
+              {props.onAddToSong && (
+                <button
+                  type="button"
+                  className="dj-hw-button"
+                  data-tone="green"
+                  aria-label="Add the recording to the song, on a new Audio Track"
+                  disabled={!props.canAddToSong || recording.on || recording.saving}
+                  onClick={props.onAddToSong}
+                >
+                  ADD TO SONG
+                </button>
+              )}
             </div>
           </div>
         </div>

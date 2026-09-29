@@ -268,6 +268,16 @@ export function Control({
   // A choice goes by its name, as the table's interface has it.
   const set = (next: string | number) => onChange({ [param.name]: next } as Record<string, number>);
 
+  // A number that is only ever 0 or 1, such as the Beat Repeat's Repeat, is a switch Automation can still move.
+  if (isNumberSwitch(param)) {
+    return (
+      <label className="param param-switch">
+        <input type="checkbox" disabled={disabled} checked={(value as number) >= 1} onChange={(event) => set(event.target.checked ? 1 : 0)} />
+        <span>{param.label}</span>
+      </label>
+    );
+  }
+
   return (
     <label className="param">
       <span className="num">
@@ -302,6 +312,11 @@ export function Control({
       )}
     </label>
   );
+}
+
+/** Whether `param` is a number that is only ever 0 or 1, drawn as a switch rather than a slider. */
+export function isNumberSwitch(param: TableParam): boolean {
+  return param.choices.length === 0 && param.min === 0 && param.max === 1 && param.step === 1;
 }
 
 /** Enough decimals to show a millisecond, without a long tail of them. */

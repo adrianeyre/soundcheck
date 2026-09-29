@@ -32,6 +32,11 @@ pub fn kit_sample(pad: usize) -> Option<Sample> {
     decode(kit::STARTER_KIT.get(pad)?.wav).ok()
 }
 
+/// The bundled kit's WAV for pad `pad`, as the file's bytes.
+pub fn kit_wav(pad: usize) -> Option<&'static [u8]> {
+    kit::STARTER_KIT.get(pad).map(|pad| pad.wav)
+}
+
 /// The Instrument one Instrument Track owns.
 #[derive(Debug)]
 pub enum Instrument {

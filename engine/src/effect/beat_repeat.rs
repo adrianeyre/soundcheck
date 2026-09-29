@@ -1,9 +1,12 @@
 //! The Beat Repeat Effect: grabs a slice of the signal and stutters it, the
 //! machine-gun rolls of a build-up.
 //!
-//! While Repeat is on, the Effect records a Slice-long stretch from the
-//! moment it was turned on, playing it through as it does, then plays that
-//! stretch over and over, in time with the tempo, until Repeat goes off.
+//! While Repeat is on, the Effect records a Slice-long stretch, playing it
+//! through as it does, then plays that stretch over and over, in time with
+//! the tempo, until Repeat goes off. While the song plays, the stretch
+//! starts on the song's grid: Repeat turned on part-way through a slice
+//! waits, dry, for the next slice of the song to begin. Stopped, or without
+//! a position, it starts the moment Repeat is turned on.
 //! Each time round is quieter than the last by Decay, so a roll can fade
 //! away. Repeat is a number rather than a switch, 0 or 1, so Automation can
 //! drop a roll exactly where it should be. Every repeat is faded in and out
@@ -15,7 +18,7 @@
 
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, choice, number, time_coefficient};
-use super::stereo::StereoEffect;
+use super::stereo::{SongPosition, StereoEffect};
 use crate::dsp::flush_denormal;
 
 /// The slice lengths, shortest first.
@@ -84,6 +87,7 @@ pub struct BeatRepeat {
     right: Vec<f32>,
     /// Whether it was repeating at the last frame.
     engaged: bool,
+    song: SongPosition,
     /// How many frames of the slice have been recorded.
     recorded: usize,
     /// Which time round the slice is on, 0 while it is being recorded, and
@@ -108,6 +112,7 @@ impl BeatRepeat {
             left: vec![0.0; capacity],
             right: vec![0.0; capacity],
             engaged: false,
+            song: SongPosition::default(),
             recorded: 0,
             pass: 0,
             at: 0,
@@ -118,10 +123,15 @@ impl BeatRepeat {
         }
     }
 
+    /// How many quarter notes a slice lasts.
+    fn slice_quarters(&self) -> f64 {
+        SLICE_QUARTERS[self.settings.slice.min(SLICE_QUARTERS.len() - 1)]
+    }
+
     /// How many frames a slice lasts at the tempo, held to the recording.
     fn slice_frames(&self) -> usize {
-        let quarters = SLICE_QUARTERS[self.settings.slice.min(SLICE_QUARTERS.len() - 1)];
-        let frames = (quarters * 60.0 / self.tempo * f64::from(self.sample_rate)).round() as usize;
+        let frames = (self.slice_quarters() * 60.0 / self.tempo * f64::from(self.sample_rate))
+            .round() as usize;
         frames.clamp(1, self.left.len())
     }
 
@@ -177,16 +187,23 @@ impl StereoEffect for BeatRepeat {
     }
 
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.process_stereo_at(left, right, &[]);
+    }
+
+    fn process_stereo_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
         let BeatRepeatSettings {
             repeat, decay, mix, ..
         } = self.settings;
         let on = repeat >= 0.5;
         let slice = self.slice_frames();
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            if on && !self.engaged {
+        let quarters = self.slice_quarters();
+        for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            let moved = self.song.step(ticks, frame);
+            // While the song moves, a new slice waits for the song's next.
+            if on && !self.engaged && moved.is_none_or(|moved| moved.crossed(quarters)) {
                 self.engage();
             }
-            let target = if on { 1.0 } else { 0.0 };
+            let target = if on && self.engaged { 1.0 } else { 0.0 };
             self.wet = target + self.switch * (self.wet - target);
             if !on && self.wet < 1e-4 {
                 self.wet = 0.0;
@@ -224,6 +241,7 @@ impl StereoEffect for BeatRepeat {
 mod tests {
     use super::*;
     use crate::dsp::measure::{max_jump, rms, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
     /// A sixteenth at 120 is 6,000 frames.
@@ -245,6 +263,19 @@ mod tests {
             repeat.process_stereo(l, r);
         }
         assert_eq!(left, right);
+        left
+    }
+
+    /// `run`, with the song's position at each frame `ticks`.
+    fn run_at(repeat: &mut BeatRepeat, input: &[f32], ticks: &[f64], chunk: usize) -> Vec<f32> {
+        let (mut left, mut right) = (input.to_vec(), input.to_vec());
+        for ((l, r), t) in left
+            .chunks_mut(chunk)
+            .zip(right.chunks_mut(chunk))
+            .zip(ticks.chunks(chunk))
+        {
+            repeat.process_stereo_at(l, r, t);
+        }
         left
     }
 
@@ -350,5 +381,53 @@ mod tests {
         repeat.set_tempo(999.0);
         repeat.set_settings(settings(&[("repeat", 1.0), ("slice", 0.0)]));
         assert!(run(&mut repeat, &input, 3).iter().all(|s| s.is_finite()));
+    }
+
+    #[test]
+    fn playing_a_roll_waits_for_the_next_slice_of_the_song() {
+        let input = ramp(SLICE * 5);
+        // Half a sixteenth in: dry until the next sixteenth, 3,000 frames on,
+        // then that slice over and over.
+        let ticks = song_ticks(120.0, 120.0, RATE, input.len());
+        for chunk in [1, 256] {
+            let mut repeat = BeatRepeat::new(RATE, settings(&[("repeat", 1.0)]));
+            let out = run_at(&mut repeat, &input, &ticks, chunk);
+            assert_eq!(out[..3_000], input[..3_000], "{chunk}");
+            for pass in 0..3 {
+                for at in (200..SLICE - 200).step_by(500) {
+                    let heard = out[3_000 + pass * SLICE + at];
+                    let expected = input[3_000 + at];
+                    assert!((heard - expected).abs() < 1e-3, "{chunk}: {pass} {at}");
+                }
+            }
+        }
+        // With no position, it starts at once.
+        let mut repeat = BeatRepeat::new(RATE, settings(&[("repeat", 1.0)]));
+        let out = run(&mut repeat, &input, 256);
+        for at in (200..SLICE - 200).step_by(500) {
+            assert!((out[SLICE + at] - input[at]).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn turned_on_mid_slice_while_playing_it_waits_without_clicking() {
+        let input = sine(150.0, 0.8, RATE, SLICE * 4);
+        let ticks = song_ticks(0.0, 120.0, RATE, input.len());
+        let mut repeat = BeatRepeat::new(RATE, settings(&[]));
+        let turn_on = SLICE + 1_234;
+        let mut out = run_at(&mut repeat, &input[..turn_on], &ticks[..turn_on], 128);
+        repeat.set_settings(settings(&[("repeat", 1.0)]));
+        out.extend(run_at(
+            &mut repeat,
+            &input[turn_on..],
+            &ticks[turn_on..],
+            128,
+        ));
+        // Dry until the next sixteenth, then the slice from there.
+        assert_eq!(out[..SLICE * 2], input[..SLICE * 2]);
+        for at in (200..SLICE - 200).step_by(500) {
+            assert!((out[SLICE * 3 + at] - input[SLICE * 2 + at]).abs() < 1e-3);
+        }
+        assert!(max_jump(&out) < 0.1, "{}", max_jump(&out));
     }
 }

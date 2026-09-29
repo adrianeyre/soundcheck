@@ -8,6 +8,7 @@ import {
   gridKey,
   MIXING_WIDGETS,
   moveWidget,
+  PADS_WIDGETS,
   parseLayout,
   pinWidget,
   resizeWidget,
@@ -73,6 +74,21 @@ test("the Mixer page's Widgets start clear of each other, in a layout of their o
   // A saved Mixing layout comes back, and one saved wrongly falls back to the starting places.
   expect(parseLayout(serialiseLayout(moved), "mixing")).toEqual(moved);
   expect(parseLayout("not json", "mixing")).toEqual(layout);
+});
+
+test("the Pads page has a layout of its own: the Pad Controller the Grid's width, a Track browser under it", () => {
+  const layout = defaultLayout("pads");
+  expect(specsOf(layout).map((spec) => spec.id)).toEqual(PADS_WIDGETS.map((spec) => spec.id));
+  expect(layout.padController).toMatchObject({ x: 0, y: 0, w: GRID.columns, hidden: false });
+  expect(layout.padsBrowser).toMatchObject({ x: 0, y: layout.padController.h, w: GRID.columns, hidden: false });
+  expectNoOverlaps(layout);
+  expect(gridKey("pads")).toBe(`${GRID_KEY}.pads`);
+  expect(parseLayout(serialiseLayout(layout), "pads")).toEqual(layout);
+  // On the Mixer page the Pad Controller is on the Grid menu, but starts hidden; a layout saved before it was
+  // there gets it hidden too.
+  expect(defaultLayout("mixing").djPadController.hidden).toBe(true);
+  const { djPadController: _, ...older } = defaultLayout("mixing");
+  expect(parseLayout(serialiseLayout(older as WidgetLayout), "mixing").djPadController.hidden).toBe(true);
 });
 
 test("a Widget dropped onto others pushes them down, and the rest stay put", () => {

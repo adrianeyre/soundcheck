@@ -126,6 +126,15 @@ impl StereoEffect for Vibrato {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        let VibratoSettings {
+            rate_hz,
+            depth_cents,
+            ..
+        } = self.settings;
+        self.swing = swing_samples(rate_hz, depth_cents, self.sample_rate);
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let VibratoSettings {
             rate_hz,

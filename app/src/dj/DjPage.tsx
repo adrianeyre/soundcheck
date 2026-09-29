@@ -1,4 +1,3 @@
-import { encode_mp3, encode_wav } from "@engine";
 import { Power } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -7,42 +6,27 @@ import { defaultLayout, type WidgetId, type WidgetLayout } from "../grid/layout"
 import { WidgetGrid, type WidgetGridProps } from "../grid/WidgetGrid";
 import type { LibraryStorage } from "../preset/library-storage";
 import type { SampleTarget } from "../samples/SampleBrowser";
-import { lastName, type SampleRef, type SampleSource } from "../samples/sample-source";
+import type { SampleRef, SampleSource } from "../samples/sample-source";
 import { DjBrowser } from "./DjBrowser";
 import type { HeadphoneOutput } from "./headphone-output";
 import { DeckPanel } from "./DeckPanel";
-import { type MusicalKey, shiftKey } from "./dj-logic";
-import { EMPTY_REPORT, readDjReport } from "./dj-report";
-import {
-  type ChannelState,
-  type DeckState,
-  type LibraryTrack,
-  mixerSettings,
-  type MixerState,
-  newChannel,
-  newDeck,
-  NEW_MIXER,
-  titleOf,
-} from "./dj-state";
+import { type DjSession, type DjSessionProps, useDjSession } from "./dj-session";
+import { titleOf } from "./dj-state";
 import { MixerPanel } from "./MixerPanel";
-import type { DjRecordingSaver, RecordingKind } from "./recording-saver";
+import { PadController } from "./PadController";
+import type { DjRecordingSaver } from "./recording-saver";
 import { WaveformStack } from "./WaveformStack";
 
 /**
  * A Deck's BROWSE button: the Track browser on its side of the mixer brought into view and focused, Decks 1
  * and 3 the first, 2 and 4 the second; or the other, if that one is hidden.
  */
-function browse(deck: number) {
+export function browse(deck: number) {
   const [near, far] = deck % 2 === 0 ? [1, 2] : [2, 1];
   const browser = document.getElementById(`dj-browser-${near}`) ?? document.getElementById(`dj-browser-${far}`);
   browser?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   browser?.focus({ preventScroll: true });
 }
-
-/** How often the page reads the engine's report: often enough for a smooth platter. */
-const REPORT_MS = 40;
-/** How often a recording is taken from the engine while it runs. */
-const RECORDING_MS = 500;
 
 /** The keys that play, cue and sync each Deck, CDJ-style: cue, play, sync. */
 export const DECK_KEYS: readonly { cue: string; play: string; sync: string }[] = [
@@ -58,6 +42,14 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !["checkbox", "radio", "button", "range"].includes(target.type);
 }
 
+/** A page's Grid (ADR 0004): its layout, kept by the app, where its pinned Widgets go, and a way to say which are empty. */
+export interface PageGrid {
+  layout: WidgetLayout;
+  onLayout: (layout: WidgetLayout) => void;
+  pinned?: WidgetGridProps["pinned"];
+  onEmpty?: (empty: readonly WidgetId[]) => void;
+}
+
 export interface DjPageProps {
   output: AudioOutput | null;
   /** Start the audio output, as the Editor's Start audio does. */
@@ -70,18 +62,104 @@ export interface DjPageProps {
   headphones?: HeadphoneOutput | null;
   /** The sample folders the Editor's Samples Widget reads, for the Track browser's tree; null where there are none. */
   samples?: SampleSource | null;
-  /** The app-level library, where those folders are remembered. */
+  /** The app-level library, where those folders are remembered and the Sampler's slots kept. */
   library?: LibraryStorage | null;
+  /** Put a recording into the Editor's song (`DjSessionProps.onAddToSong`). */
+  onAddToSong?: DjSessionProps["onAddToSong"];
   /**
    * The page's Grid (ADR 0004): its layout, kept by the app, where its pinned Widgets go, and a way
    * to say which Widgets have nothing to show. Without one the page keeps a layout of its own.
    */
-  grid?: {
-    layout: WidgetLayout;
-    onLayout: (layout: WidgetLayout) => void;
-    pinned?: WidgetGridProps["pinned"];
-    onEmpty?: (empty: readonly WidgetId[]) => void;
-  };
+  grid?: PageGrid;
+}
+
+/**
+ * The Mixer page on a session of its own, for a host (or a test) that has
+ * only this page. The app shares one session between the Mixer page and the
+ * Pads page (`MixerPage`, `PadsPage`).
+ */
+export function DjPage(props: DjPageProps) {
+  const session = useDjSession(props);
+  return <MixerPage {...props} session={session} />;
+}
+
+/** The parts of a page drawn over the shared session. */
+export interface SessionPageProps {
+  session: DjSession;
+  onStart?: () => void;
+  starting?: boolean;
+  active: boolean;
+  headphones?: HeadphoneOutput | null;
+  samples?: SampleSource | null;
+  library?: LibraryStorage | null;
+  grid?: PageGrid;
+}
+
+/**
+ * The Track browser, over the session's loaded tracks: `number` 1 and 2 on
+ * the Mixer page, and the Pads page's own.
+ */
+export function SessionBrowser({
+  session,
+  number,
+  samples,
+  library,
+  sampleTargets = true,
+  title,
+}: {
+  session: DjSession;
+  number: 1 | 2 | 3;
+  samples: SampleSource | null;
+  library: LibraryStorage | null;
+  /** Whether a folder's file can be put straight onto a Deck. */
+  sampleTargets?: boolean;
+  /** Its heading, if not "Track browser" and its number. */
+  title?: string;
+}) {
+  const { dj, layout, output } = session;
+  const targets = useMemo<SampleTarget[]>(
+    () => (dj && sampleTargets ? Array.from({ length: layout }, (_, deck) => ({ id: `deck:${deck}`, label: `Deck ${deck + 1}` })) : []),
+    [dj, layout, sampleTargets],
+  );
+  const putSample = session.putSample;
+  const onUse = useCallback((sample: SampleRef, target: string) => void putSample(sample, Number(target.split(":")[1])), [putSample]);
+  const setMessage = session.setMessage;
+  const onBrowseError = useCallback((error: string) => setMessage(error), [setMessage]);
+  return (
+    <DjBrowser
+      number={number}
+      title={title}
+      source={samples}
+      library={library}
+      canAudition={output !== null}
+      targets={targets}
+      onUse={onUse}
+      onError={onBrowseError}
+      tracks={session.library}
+      decks={layout}
+      canLoad={dj !== null}
+      onAdd={(files) => void session.addFiles(files)}
+      onLoad={(trackId, deck) => {
+        const track = session.library.find((t) => t.id === trackId);
+        if (track) void session.loadTrack(track, deck);
+      }}
+      cursor={session.cursor}
+      onCursor={session.setCursor}
+      onOrder={session.setOrder}
+      show={number === 3 || number === 1 ? session.browserShow : null}
+    />
+  );
+}
+
+/** Start audio, as the page's toolbar offers it. */
+export function StartAudio({ session, onStart, starting }: Pick<SessionPageProps, "session" | "onStart" | "starting">) {
+  if (session.output || !onStart) return null;
+  return (
+    <button type="button" className="btn-primary" disabled={starting} aria-busy={starting} onClick={onStart}>
+      <Power size={16} aria-hidden />
+      {starting ? "Starting…" : "Start audio for mixing"}
+    </button>
+  );
 }
 
 /**
@@ -90,178 +168,11 @@ export interface DjPageProps {
  * the DJ does and draws what the engine reports; nothing here is the
  * Project's, and none of it is undone.
  */
-export function DjPage(props: DjPageProps) {
-  const { output, onStart, starting = false, active, saver, samples = null, library: folderLibrary = null, grid, headphones } = props;
+export function MixerPage(props: SessionPageProps) {
+  const { session, onStart, starting = false, active, samples = null, library: folderLibrary = null, grid, headphones } = props;
   const [ownLayout, setOwnLayout] = useState(() => defaultLayout("mixing"));
-  const dj = output?.dj ?? null;
-  const [layout, setLayout] = useState<2 | 4>(2);
-  const [library, setLibrary] = useState<LibraryTrack[]>([]);
-  const [decks, setDecks] = useState<DeckState[]>(() => Array.from({ length: 4 }, newDeck));
-  const [channels, setChannels] = useState<ChannelState[]>(() => Array.from({ length: 4 }, (_, deck) => newChannel(deck)));
-  const [mixer, setMixer] = useState<MixerState>(NEW_MIXER);
-  const [report, setReport] = useState(EMPTY_REPORT);
-  const [format, setFormat] = useState<RecordingKind>("wav");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { output, dj, layout, setLayout, library, decks, channels, mixer, report, send, format, saving, message } = session;
   const [span, setSpan] = useState(4);
-  const recorded = useRef<Float32Array[]>([]);
-  const nextId = useRef(0);
-
-  const send = useCallback(
-    (kind: "deck" | "channel" | "mixer", index: number, name: string, value: number) =>
-      output?.send({ type: "djSet", kind, index, name, value }),
-    [output],
-  );
-
-  // A new output is a fresh engine: tell it every knob as the page has it.
-  // Each change after that is sent as it is made.
-  const knobs = useRef(mixerSettings(channels, mixer));
-  useEffect(() => {
-    knobs.current = mixerSettings(channels, mixer);
-  }, [channels, mixer]);
-  useEffect(() => {
-    if (!output) return;
-    for (const setting of knobs.current) output.send({ type: "djSet", ...setting });
-  }, [output]);
-
-  useEffect(() => {
-    if (!output) return;
-    const timer = setInterval(() => setReport(readDjReport(output.stats().dj)), REPORT_MS);
-    return () => clearInterval(timer);
-  }, [output]);
-
-  useEffect(() => {
-    if (!dj || !report.recording) return;
-    const timer = setInterval(() => {
-      void dj.takeRecording().then((chunk) => chunk.length > 0 && recorded.current.push(chunk));
-    }, RECORDING_MS);
-    return () => clearInterval(timer);
-  }, [dj, report.recording]);
-
-  const changeDeck = (deck: number, change: Partial<DeckState>) =>
-    setDecks((all) => all.map((state, index) => (index === deck ? { ...state, ...change } : state)));
-  /** Tell the engine the settings that differ between `before` and `after`. */
-  const sendChanges = (before: ReturnType<typeof mixerSettings>, after: ReturnType<typeof mixerSettings>) => {
-    after.forEach((setting, at) => {
-      if (before[at]?.value !== setting.value) send(setting.kind, setting.index, setting.name, setting.value);
-    });
-  };
-  const changeChannel = (index: number, change: Partial<ChannelState>) => {
-    const next = channels.map((state, at) => (at === index ? { ...state, ...change } : state));
-    setChannels(next);
-    sendChanges(mixerSettings(channels, mixer), mixerSettings(next, mixer));
-  };
-  const changeMixer = (change: Partial<MixerState>) => {
-    const next = { ...mixer, ...change };
-    setMixer(next);
-    sendChanges(mixerSettings(channels, mixer), mixerSettings(channels, next));
-  };
-
-  const addFiles = async (files: File[]): Promise<LibraryTrack[]> => {
-    const added = await Promise.all(
-      files.map(async (file) => ({
-        id: `track-${nextId.current++}`,
-        name: file.name,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-        analysis: null,
-      })),
-    );
-    setLibrary((all) => [...all, ...added]);
-    return added;
-  };
-
-  const loadTrack = async (track: LibraryTrack, deck: number) => {
-    if (!dj) return;
-    if (report.decks[deck]?.playing) {
-      setMessage(`Pause Deck ${deck + 1} to load another track onto it.`);
-      return;
-    }
-    setMessage(null);
-    changeDeck(deck, { loading: true, error: null });
-    try {
-      const analysis = await dj.load(deck, track.bytes);
-      setLibrary((all) => all.map((t) => (t.id === track.id ? { ...t, analysis } : t)));
-      changeDeck(deck, { ...newDeck(), vinyl: decks[deck]!.vinyl, range: decks[deck]!.range, trackId: track.id });
-    } catch (reason) {
-      changeDeck(deck, { loading: false, error: `${titleOf(track.name)} couldn't be loaded: ${String(reason)}` });
-    }
-  };
-
-  // A file from the folder tree: read once, kept in the loaded list, and loaded onto the Deck.
-  const latestLoad = useRef({ loadTrack, library });
-  useEffect(() => {
-    latestLoad.current = { loadTrack, library };
-  });
-  const useSample = useCallback(
-    async (sample: SampleRef, deck: number) => {
-      if (!samples) return;
-      const from = `${sample.folder.id}\u0000${sample.path}`;
-      let track = latestLoad.current.library.find((t) => t.from === from);
-      if (!track) {
-        try {
-          const bytes = await samples.readBytes(sample);
-          track = { id: `track-${nextId.current++}`, name: lastName(sample.path), bytes, analysis: null, from };
-        } catch (reason) {
-          setMessage(`${sample.path} couldn't be read: ${String(reason instanceof Error ? reason.message : reason)}`);
-          return;
-        }
-        const added = track;
-        setLibrary((all) => [...all, added]);
-      }
-      await latestLoad.current.loadTrack(track, deck);
-    },
-    [samples],
-  );
-  const deckCount = layout;
-  const targets = useMemo<SampleTarget[]>(
-    () => (dj ? Array.from({ length: deckCount }, (_, deck) => ({ id: `deck:${deck}`, label: `Deck ${deck + 1}` })) : []),
-    [dj, deckCount],
-  );
-  const onUse = useCallback((sample: SampleRef, target: string) => void useSample(sample, Number(target.split(":")[1])), [useSample]);
-  const onBrowseError = useCallback((error: string) => setMessage(error), []);
-
-  const record = async (on: boolean) => {
-    if (on) {
-      recorded.current = [];
-      send("mixer", 0, "record", 1);
-      return;
-    }
-    send("mixer", 0, "record", 0);
-    if (!dj || !output) return;
-    setSaving(true);
-    try {
-      const last = await dj.takeRecording();
-      const chunks = [...recorded.current, last];
-      recorded.current = [];
-      const interleaved = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
-      let at = 0;
-      for (const chunk of chunks) {
-        interleaved.set(chunk, at);
-        at += chunk.length;
-      }
-      if (interleaved.length === 0) {
-        setMessage("Nothing was recorded.");
-        return;
-      }
-      const rate = output.stats().sampleRate;
-      const bytes = format === "wav" ? encode_wav(interleaved, rate, 24) : encode_mp3(interleaved, rate, 320);
-      if (!bytes) throw new Error("the recording couldn't be encoded");
-      const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
-      const where = await saver.save(`Mix ${stamp}`, format, bytes);
-      setMessage(where ? `Recording saved: ${where}` : "The recording wasn't saved.");
-    } catch (reason) {
-      setMessage(`The recording couldn't be saved: ${String(reason)}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // The Sync Master's key as it plays, for the other Decks' key displays.
-  const keyOf = (deck: number): MusicalKey | null => {
-    const analysis = library.find((t) => t.id === decks[deck]?.trackId)?.analysis;
-    return analysis?.key ? shiftKey(analysis.key, report.decks[deck]?.keyShift ?? 0) : null;
-  };
-  const masterKey = report.syncMaster !== null ? keyOf(report.syncMaster) : null;
 
   // The keyboard plays the Decks while the page shows. It is listened to
   // before anything else, so the Editor's computer keyboard plays no notes
@@ -311,45 +222,21 @@ export function DjPage(props: DjPageProps) {
         title={track ? titleOf(track.name) : null}
         analysis={report.decks[deck]!.loaded ? (track?.analysis ?? null) : null}
         syncMaster={report.syncMaster === deck}
-        masterKey={report.syncMaster !== deck ? masterKey : null}
+        masterKey={report.syncMaster !== deck ? session.masterKey : null}
         canPlay={dj !== null}
         set={(name, value) => send("deck", deck, name, value)}
-        onState={(change) => changeDeck(deck, change)}
-        onLoadFile={(file) => void addFiles([file]).then(([added]) => added && loadTrack(added, deck))}
+        onState={(change) => session.changeDeck(deck, change)}
+        onLoadFile={(file) => void session.addFiles([file]).then(([added]) => added && session.loadTrack(added, deck))}
         onDropTrack={(trackId) => {
           const dropped = library.find((t) => t.id === trackId);
-          if (dropped) void loadTrack(dropped, deck);
+          if (dropped) void session.loadTrack(dropped, deck);
         }}
-        onDropSample={(sample) => void useSample(sample, deck)}
+        onDropSample={(sample) => void session.putSample(sample, deck)}
         onBrowse={() => browse(deck)}
-        onEject={() => {
-          dj?.unload(deck);
-          changeDeck(deck, { ...newDeck(), vinyl: state.vinyl, range: state.range });
-        }}
+        onEject={() => session.eject(deck)}
       />
     );
   };
-
-  // One under each of the first two Decks; each keeps its own tab and folder, over the same loaded tracks.
-  const trackBrowser = (number: 1 | 2) => (
-    <DjBrowser
-      number={number}
-      source={samples}
-      library={folderLibrary}
-      canAudition={output !== null}
-      targets={targets}
-      onUse={onUse}
-      onError={onBrowseError}
-      tracks={library}
-      decks={layout}
-      canLoad={dj !== null}
-      onAdd={(files) => void addFiles(files)}
-      onLoad={(trackId, deck) => {
-        const track = library.find((t) => t.id === trackId);
-        if (track) void loadTrack(track, deck);
-      }}
-    />
-  );
 
   // With two Decks, the third and fourth have nothing to show, so they are off the Grid (ADR 0004).
   const empty: WidgetId[] = layout === 4 ? [] : ["deck3", "deck4"];
@@ -362,12 +249,7 @@ export function DjPage(props: DjPageProps) {
   return (
     <div className="dj-page">
       <div className="dj-toolbar row">
-        {!output && onStart && (
-          <button type="button" className="btn-primary" disabled={starting} aria-busy={starting} onClick={onStart}>
-            <Power size={16} aria-hidden />
-            {starting ? "Starting…" : "Start audio for mixing"}
-          </button>
-        )}
+        <StartAudio session={session} onStart={onStart} starting={starting} />
         <div className="dj-layout" role="radiogroup" aria-label="Deck layout">
           {([2, 4] as const).map((count) => (
             <button
@@ -400,22 +282,22 @@ export function DjPage(props: DjPageProps) {
         widgets={{
           djWaveforms: (
             <WaveformStack
-                span={span}
-                onSpan={setSpan}
-                onDeck={(deck, name, value) => send("deck", deck, name, value)}
-                lanes={Array.from({ length: layout }, (_, deck) => {
-                  const track = library.find((t) => t.id === decks[deck]?.trackId) ?? null;
-                  return {
-                    deck,
-                    report: report.decks[deck]!,
-                    analysis: track?.analysis ?? null,
-                    hotCues: decks[deck]!.hotCues,
-                    title: track ? titleOf(track.name) : null,
-                    syncMaster: report.syncMaster === deck,
-                    vinyl: decks[deck]!.vinyl,
-                  };
-                })}
-              />
+              span={span}
+              onSpan={setSpan}
+              onDeck={(deck, name, value) => send("deck", deck, name, value)}
+              lanes={Array.from({ length: layout }, (_, deck) => {
+                const track = library.find((t) => t.id === decks[deck]?.trackId) ?? null;
+                return {
+                  deck,
+                  report: report.decks[deck]!,
+                  analysis: track?.analysis ?? null,
+                  hotCues: decks[deck]!.hotCues,
+                  title: track ? titleOf(track.name) : null,
+                  syncMaster: report.syncMaster === deck,
+                  vinyl: decks[deck]!.vinyl,
+                };
+              })}
+            />
           ),
           deck1: deckPanel(0),
           deck2: deckPanel(1),
@@ -431,17 +313,20 @@ export function DjPage(props: DjPageProps) {
               count={4}
               headphones={dj?.headphones ?? false}
               canPlay={dj !== null}
-              onChannel={changeChannel}
-              onMixer={changeMixer}
+              onChannel={session.changeChannel}
+              onMixer={session.changeMixer}
               recording={{ on: report.recording, seconds: report.recordingSeconds, format, saving }}
-              onRecordFormat={setFormat}
-              onRecord={(on) => void record(on)}
+              onRecordFormat={session.setFormat}
+              onRecord={(on) => void session.record(on, { source: "master" })}
+              onAddToSong={session.canAddToSong ? () => void session.addTakeToSong() : undefined}
+              canAddToSong={session.take !== null}
               headphoneOutput={headphones}
               output={output}
             />
           ),
-          djBrowser: trackBrowser(1),
-          djBrowser2: trackBrowser(2),
+          djBrowser: <SessionBrowser session={session} number={1} samples={samples} library={folderLibrary} />,
+          djBrowser2: <SessionBrowser session={session} number={2} samples={samples} library={folderLibrary} />,
+          djPadController: <PadController session={session} id="mixing" />,
         }}
       />
     </div>

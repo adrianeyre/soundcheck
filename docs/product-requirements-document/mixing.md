@@ -57,11 +57,24 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 23. As a DJ, the **Crossfader** blends side A with side B on a curve I choose (smooth, constant power or a sharp cut), and can be reversed.
 24. As a DJ, the Master has a level, a booth level, and a stereo meter with peak hold and a clip indicator.
 25. As a DJ, the headphone section mixes the cued channels with the Master, at its own level, out of a second audio device I pick, such as my headphones, so I hear what is coming up while the Master plays out of the main output; or out of outputs 3 and 4 of an audio interface with four or more outputs. The device I picked is remembered, and the page says when it can't be used or has been unplugged (see [Platforms](#platforms)).
-26. As a DJ, **Record** captures the Master output as I hear it and saves it as WAV or MP3.
+26. As a DJ, **Record** captures the Master output as I hear it and saves it as WAV or MP3. Once it has stopped, **Add to song** puts it into the Editor's **Project** as an **Audio Clip** from the song's start on a new **Audio Track**, as one undo step.
+
+### The Pad Controller and the Pads page
+
+27. As a DJ, **Menu → Pads** opens the **Pads page**, beside the Editor, the Mixer page and Settings, with a Grid of its own (its own layout, Grid menu and Reset layout). It opens with the **Pad Controller** across the Grid's whole width, so there is room to play, and a **Track browser** under it. The Pads page and the Mixer page share one session: the pads play the Mixer page's **Decks** and the **Sampler**, and a recording made on either page is the same recording. The Editor's song stops while it is open. On the Mixer page the Pad Controller is in the Grid menu, hidden until I show it.
+28. As a DJ, the Pad Controller is drawn and laid out as a two-deck pad controller for DJ software: on the dark metal of the Decks and the mixer, a half for each side, each with a SLIDE FX strip at its outer edge (FX 1, 2 and 3 above it, HOLD below), LOOP (4 BEAT LOOP, 1/2X, 2X), QUANTIZE, LOAD, PARAMETER ◀ ▶, SLIP REVERSE, MASTER TEMPO, BEAT SYNC, SILENT CUE, KEY − and +, INT, four PAD MODE buttons and sixteen lit RGB pads coloured by their mode; between the halves the browse knob and SHIFT. What SHIFT gives is printed under each button. No maker's name or logo is on it. Too narrow for the halves side by side, they stack.
+29. As a DJ, the left half drives **Deck** 1 and the right Deck 2; SHIFT and INT switches a half to Deck 3 or 4, which plays through its mixer channel even while the Mixer page shows two Decks.
+30. As a DJ, the loop buttons work as on the hardware: 4 BEAT LOOP turns a 4-beat loop on and off (SHIFT: the last loop again, Active Loop), 1/2X and 2X halve and double it (SHIFT: loop in and loop out). QUANTIZE, MASTER TEMPO and BEAT SYNC (SHIFT: make the Deck the **Sync Master**) toggle. SLIP REVERSE plays backwards while held, with **Slip**, for at most 8 beats. SILENT CUE mutes the Deck while it plays on, until a **Hot Cue** is called. KEY − and + move the **Key Shift** a semitone (SHIFT: **Key Sync** on and off, which then follows the Master's key; and key reset).
+31. As a DJ, the eight pad modes work as the hardware's do. PAD MODE 1 is Hot Cue (sixteen Hot Cues, A to P: set, call and, with SHIFT, delete) and with SHIFT Keyboard (the chosen Hot Cue played at a semitone, five pages from +12 to −12 with Key Sync, up, down, +7, +12, reset, −5 and −12 on the last). PAD MODE 2 is Pad FX 1 (effects A to P) and with SHIFT Pad FX 2 (Q to AF), each applied to the Deck for a number of beats while its pad is held. PAD MODE 3 is Beat Jump (three pages, from FINE to 32 bars, back and forward) and with SHIFT Beat Loop (1/64 of a beat to 128 bars, on and off). PAD MODE 4 is Sampler (slots 1 to 16 of the bank) and with SHIFT Key Shift (the Keyboard's pages, moving the Deck's key). PARAMETER ◀ ▶ turns the pages, and in Sampler mode (or with SHIFT) the bank.
+32. As a DJ, the SLIDE FX strip turns on the FX chosen with FX 1, 2 or 3 (one a side), at the level where I touch it, on its Deck; let go, it goes off, unless HOLD is on. SHIFT and FX 1, 2 or 3 chooses which effect that button gives.
+33. As a DJ, the browse knob moves a cursor through the Track browser's loaded tracks (the arrow keys, the mouse wheel, or its ▲ ▼), and pressing it brings up the loaded list (SHIFT: the folders). LOAD puts the chosen track on the half's Deck; pressed twice, it loads the other half's track at the same place, playing if it is (instant doubles); SHIFT and LOAD loads the next track.
+34. As a DJ, the **Sampler** has four banks of sixteen **Sampler Slots**, shared by every Deck. A pad in Sampler mode plays its slot: once through, while held, or round until stopped, as I set each slot. SHIFT and the pad pauses a sounding slot, or loads the chosen track into a still one. The Sampler has a gain, a cue for the headphones, a meter and STOP ALL, and plays on its own channel into the Master, past the Crossfader. It starts with the Starter Kit's sounds across its first bank and into its second, so it plays out of the box.
+35. As a DJ, I can change what each slot holds: EDIT SLOTS lists the bank's slots, each with its name (to rename it), how it plays, its level, **File…** (a file from my disk), **Chosen track** and **Clear**; or I drop a file from my disk, a file from the Track browser's folders or a loaded track onto a slot or its pad. What is in the slots is kept for next time.
+36. As a DJ, the Pad Controller records: the whole mix, or the Sampler alone, and then **Add to song** puts the take into the Editor's **Project** on a new **Audio Track**, as one undo step, or **Save…** saves it as a file.
 
 ## Platforms
 
-- **Desktop App and Browser Version:** everything above, in both, with one exception below. The headphone cue plays out of a second output device the DJ picks, and out of outputs 3 and 4 wherever the output device has four or more channels.
+- **Desktop App and Browser Version:** everything above, in both, with one exception below. The Pad Controller, the Sampler and Add to song work in both: the desktop decodes a sample off the audio thread in the Tauri shell (`dj_sample_load`), the browser on the page's thread before the AudioWorklet takes it. The headphone cue plays out of a second output device the DJ picks, and out of outputs 3 and 4 wherever the output device has four or more channels.
 - **Browser Version without `setSinkId`** (Firefox, Safari): no second headphone device; outputs 3 and 4 still work. The headphone section says so, and Settings lists it in `desktop-only.ts`. Chrome and Edge have it. A recording is saved through the system's save dialog on the desktop, and through the browser's save picker, or as a download, in the Browser Version.
 
 ## Decisions made while building
@@ -71,7 +84,15 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 - **Booth level** is kept and sent to the engine, but there is no separate booth output yet, so it changes nothing heard.
 - The **Track browser** shows a file's BPM and key once it has been loaded onto a **Deck** (the analysis runs on load), not as soon as it is added.
 - **Slip** applies to a held **Hot Cue**; a plain press of a Hot Cue jumps to it.
-- A recording is held in memory until it is saved, so a very long session could run short of memory.
+- A recording is held in memory until it is saved, so a very long session could run short of memory. The last one is kept after it stops, to save or add to the song.
+- **Add to song** puts the take at the song's start (bar 1): the Mixer page's tempo isn't the song's, so there is no better place to guess. It is a 24-bit WAV copied into the Project's `audio/`, like any imported file.
+- **Pad FX** borrow the mixer's one Beat FX unit, on the Deck's own channel, while their pad is held, and hand it back as the mixer's knobs have it; a SLIDE FX does the same while its strip is touched (or HOLD is on), at the mixer's beat division. The last to borrow it has it. They are, A to P: Echo 1/2, 3/4 and 1; Delay 1/4; Roll 1/4, 1/8, 1/16 and 1/32; Reverb 1; Filter 4; Flanger 4; Phaser 4; Trans 1/4 and 1/8; Vinyl Brake 1; Spiral 1/2. Q to AF: Ping Pong 1/2 and 1/4; Delay 1/2 and 3/4; Slip Roll 1/4, 1/8 and 1/16; Helix 1; Pitch 1/2 and 1; Filter 1; Reverb 4; Vinyl Brake 2 and 1/2; Spiral 1/4; Helix 2. The SLIDE FX start as Filter, Echo and Reverb.
+- **FINE** Beat Jump moves a thirty-second of a beat. Keyboard and Key Shift open on their second page (+7 to −8), Beat Jump on its second (1 beat to 32 bars), as the hardware's default. Keyboard mode plays the last Hot Cue pressed in Hot Cue mode (or the first one set, or the cue point).
+- **INT** only says what it is for: the Decks always play the file itself (INT); REL is for timecode vinyl, which the page doesn't take. SHIFT and INT switches the Deck.
+- **SHIFT** is latched on screen: pressed, the next button or pad does its SHIFT function, and SHIFT lets go. Holding the keyboard's Shift key while pressing works too.
+- The browse knob's press brings up a Track browser's loaded list (SHIFT: its folders); moving through the folder tree itself is the tree's own keyboard's. The cursor goes through the loaded tracks in the order the Track browser last sorted them, and clicking a track's title puts the cursor on it.
+- The **Sampler**'s slots are kept in the app-level library (`dj-sampler/` beside the saved Kits: the app's data folder on the desktop, IndexedDB in the Browser Version), a copy of each sample with them; a slot playing a Starter Kit sound keeps only which one. They play at the engine's rate from the start, without following the Master's BPM.
+- Two Pad Controllers (the Pads page's, and the Mixer page's once shown) each keep their own pad modes, pages and SHIFT; the Decks and the Sampler they drive are the same.
 - When the page opens, the song stops; a live note or a reverb tail already sounding rings out rather than being cut.
 - **Not built yet:** phrase and section colouring of the waveform.
 
@@ -80,8 +101,8 @@ The author first, as a producer who DJs: testing their own tracks in a mix, prep
 - Streaming services, rekordbox library import and USB export.
 - Controllers and MIDI mapping for DJ hardware. The page takes the computer keyboard and the mouse; the Editor's MIDI input keeps playing Instrument Tracks.
 - Video, lighting and DVS (timecode vinyl).
-- Saving a set: **Decks**, cues and loops last as long as the page's session.
-- Putting a mix into a **Project**. A recording is a file; importing it as an **Audio Clip** works as for any file.
+- Saving a set: **Decks**, cues and loops last as long as the app is open (the **Sampler**'s slots are kept).
+- Controlling the Pad Controller from the hardware it is drawn after: it is on screen, played with the mouse, touch and the keyboard, as the rest of the page is.
 
 ## Risks
 

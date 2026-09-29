@@ -165,6 +165,10 @@ impl StereoEffect for TransientShaper {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.current = Self::targets(self.settings);
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let targets = Self::targets(self.settings);
         for (l, r) in left.iter_mut().zip(right.iter_mut()) {

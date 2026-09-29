@@ -64,7 +64,7 @@ function fakeOutput() {
     takeRecordedNotes: () => [],
     resetCounters: () => {},
     close: async () => {},
-    dj: { load, unload: () => {}, takeRecording, headphones: false },
+    dj: { load, unload: () => {}, loadSample: async () => 1, unloadSample: () => {}, takeRecording, headphones: false },
   };
   const dj = (name: string) => sent.filter((c) => c.type === "djSet" && c.name === name);
   return { output, sent, report, load, takeRecording, dj };
@@ -180,6 +180,25 @@ test("a recording of the mix is encoded and saved", async () => {
   expect(kind).toBe("wav");
   expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF");
   expect(await screen.findByText(/Recording saved/)).toBeInTheDocument();
+});
+
+test("a recording of the mix, once stopped, can be added to the song", async () => {
+  const fake = fakeOutput();
+  const onAddToSong = vi.fn<(wav: Uint8Array, name: string) => Promise<string>>(async () => "Mix take 1 is in the song.");
+  render(<DjPage output={fake.output} active saver={saver()} onAddToSong={onAddToSong} />);
+  const mixer = screen.getByRole("region", { name: "Mixer" });
+  const add = within(mixer).getByRole("button", { name: "Add the recording to the song, on a new Audio Track" });
+  expect(add).toBeDisabled();
+  fireEvent.click(within(mixer).getByRole("button", { name: "Record the mix" }));
+  expect(fake.dj("recordSource").at(-1)).toMatchObject({ value: 0 });
+  fake.report[5] = 1;
+  await act(() => new Promise((resolve) => setTimeout(resolve, 60)));
+  fireEvent.click(within(mixer).getByRole("button", { name: "Stop and save the recording" }));
+  fake.report[5] = 0;
+  await waitFor(() => expect(add).toBeEnabled());
+  fireEvent.click(add);
+  await waitFor(() => expect(onAddToSong).toHaveBeenCalledWith(expect.any(Uint8Array), "Mix take"));
+  expect(await screen.findByText("Mix take 1 is in the song.")).toBeInTheDocument();
 });
 
 test("without audio the page offers to start it", () => {

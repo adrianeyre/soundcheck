@@ -137,6 +137,12 @@ impl StereoEffect for Flanger {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        let per_ms = self.sample_rate / 1_000.0;
+        self.delay = self.settings.delay_ms * per_ms;
+        self.depth = self.settings.depth_ms * per_ms;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let FlangerSettings {
             rate_hz,

@@ -7,15 +7,18 @@
 //! alone to hard left and right. The pan is equal power, so the sound is as
 //! loud at the sides as in the middle.
 //!
-//! A synced Auto Pan follows the tempo but not the song position: its sweep
-//! starts in the centre, heading right, when it is made.
+//! A synced Auto Pan follows the song's position while it plays: each note
+//! value of the song starts in the centre, heading right, so the sweep is
+//! on the beat. Stopped, or without a position, and whenever it isn't
+//! synced, it runs free from wherever it got to, starting in the centre
+//! when it is made.
 
 use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
 use super::delay::NOTE_VALUES;
 use super::params::{Param, Settings, choice, number, on, switch, time_coefficient};
-use super::stereo::StereoEffect;
-use super::tremolo::{DEFAULT_TEMPO, LFO_SHAPES, lfo_value, note_hz};
+use super::stereo::{SongPosition, StereoEffect};
+use super::tremolo::{DEFAULT_TEMPO, LFO_SHAPES, lfo_value, note_hz, note_quarters};
 
 const QUARTER: usize = 7;
 
@@ -78,8 +81,14 @@ pub struct AutoPan {
     sample_rate: f32,
     settings: AutoPanSettings,
     tempo: f64,
-    /// Where in its cycle the sweep is, 0..1.
+    /// Where in its cycle the sweep is, 0..1: from the song's position
+    /// while it moves and the Auto Pan is synced.
     phase: f32,
+    song: SongPosition,
+    /// Whether the next frame jumps the gain to where it should be, not
+    /// smoothing it there: the first frame after `settle`, once the song's
+    /// position has placed it.
+    snap: bool,
     /// The level each side is at, following the pan.
     gain: [f32; 2],
     smoothing: f32,
@@ -92,9 +101,22 @@ impl AutoPan {
             settings,
             tempo: DEFAULT_TEMPO,
             phase: 0.0,
+            song: SongPosition::default(),
+            snap: false,
             gain: [1.0; 2],
             smoothing: time_coefficient(GAIN_SMOOTHING_MS, sample_rate),
         }
+    }
+
+    /// The level the pan puts each side at, where the sweep is.
+    fn targets(&self) -> [f32; 2] {
+        let AutoPanSettings { shape, depth, .. } = self.settings;
+        // A quarter of a cycle back, so the sweep starts in the centre.
+        let pan = depth * lfo_value(shape, self.phase - 0.25);
+        // -1 (left) to 1 (right) as a quarter turn, which keeps the power
+        // of the two sides together the same; the centre is unity.
+        let angle = (pan + 1.0) * FRAC_PI_4;
+        [SQRT_2 * angle.cos(), SQRT_2 * angle.sin()]
     }
 
     fn rate_hz(&self) -> f32 {
@@ -123,17 +145,31 @@ impl StereoEffect for AutoPan {
         }
     }
 
+    fn settle(&mut self) {
+        self.gain = self.targets();
+        self.snap = true;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let AutoPanSettings { shape, depth, .. } = self.settings;
+        self.process_stereo_at(left, right, &[]);
+    }
+
+    fn process_stereo_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
         let increment = (self.rate_hz() / self.sample_rate).clamp(0.0, 0.5);
+        let AutoPanSettings { sync, note, .. } = self.settings;
+        let quarters = note_quarters(note);
         let smoothing = self.smoothing;
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            // A quarter of a cycle back, so the sweep starts in the centre.
-            let pan = depth * lfo_value(shape, self.phase - 0.25);
-            // -1 (left) to 1 (right) as a quarter turn, which keeps the power
-            // of the two sides together the same; the centre is unity.
-            let angle = (pan + 1.0) * FRAC_PI_4;
-            let (target_left, target_right) = (SQRT_2 * angle.cos(), SQRT_2 * angle.sin());
+        for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            let moved = self.song.step(ticks, frame);
+            if let Some(moved) = moved.filter(|_| sync) {
+                // A playhead that jumps moves the sweep at once; the
+                // smoother takes each side there without a click.
+                self.phase = moved.phase(quarters) as f32;
+            }
+            let [target_left, target_right] = self.targets();
+            if std::mem::take(&mut self.snap) {
+                self.gain = [target_left, target_right];
+            }
             self.gain[0] = target_left + smoothing * (self.gain[0] - target_left);
             self.gain[1] = target_right + smoothing * (self.gain[1] - target_right);
             self.phase = (self.phase + increment).fract();
@@ -147,6 +183,7 @@ impl StereoEffect for AutoPan {
 mod tests {
     use super::*;
     use crate::dsp::measure::{max_jump, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
 
@@ -239,5 +276,34 @@ mod tests {
                 "{chunk}"
             );
         }
+    }
+
+    #[test]
+    fn synced_and_playing_the_sweep_follows_the_songs_beats() {
+        let half = NOTE_VALUES.iter().position(|&n| n == "1/2").unwrap();
+        let synced = settings(&[("sync", 1.0), ("note", half as f32)]);
+        let dc = vec![1.0; 48_000];
+        let ticks = song_ticks(480.0, 120.0, RATE, dc.len());
+        for chunk in [1, 128] {
+            let mut pan = AutoPan::new(RATE, synced);
+            pan.settle();
+            let (mut left, mut right) = (dc.clone(), dc.clone());
+            for ((l, r), t) in left
+                .chunks_mut(chunk)
+                .zip(right.chunks_mut(chunk))
+                .zip(ticks.chunks(chunk))
+            {
+                pan.process_stereo_at(l, r, t);
+            }
+            // A quarter of the way through a half note, it is hard right;
+            // half way, 12,000 frames on, back in the centre, and hard left
+            // a quarter note after that.
+            assert!(left[0] < 1e-3, "{}", left[0]);
+            assert!((left[12_000] - 1.0).abs() < 1e-2, "{}", left[12_000]);
+            assert!(right[24_000] < 1e-3, "{}", right[24_000]);
+        }
+        // With no position it starts in the centre.
+        let (left, _) = run(&mut AutoPan::new(RATE, synced), &dc, 128);
+        assert!((left[0] - 1.0).abs() < 1e-3 && left[12_000] < 1e-3);
     }
 }

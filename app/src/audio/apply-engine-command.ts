@@ -33,6 +33,8 @@ export function applyEngineCommand(engine: Engine, command: EngineCommand, plugi
       );
     case "setMasterVolume":
       return engine.set_master_volume(command.volume);
+    case "setChannelEq":
+      return engine.set_channel_eq(command.chain, command.low, command.lowMid, command.highMid, command.high);
     case "setBusCount":
       return engine.set_bus_count(command.count);
     case "setBusMixer":

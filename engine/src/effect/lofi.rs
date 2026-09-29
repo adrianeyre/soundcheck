@@ -182,6 +182,18 @@ impl StereoEffect for LoFi {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        let LoFiSettings {
+            wow,
+            flutter,
+            drive,
+            tone_hz,
+            ..
+        } = self.settings;
+        (self.wow, self.flutter, self.drive) = (wow, flutter, drive);
+        self.cut = Self::cut(tone_hz, self.sample_rate);
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let LoFiSettings {
             wow,

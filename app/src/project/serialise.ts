@@ -5,7 +5,7 @@
  */
 import { clampEffectValue, defaultEffectSettings, effectParam } from "../effect/effect-params";
 import { clampSynthValue, SYNTH_PARAMS } from "../instrument/synth-params";
-import { DEFAULT_SYNTH, DEFAULT_TRACK_INPUT, FIRST_STARTER_KIT, type Project, SCHEMA_VERSION } from "./model";
+import { DEFAULT_SYNTH, DEFAULT_TRACK_INPUT, FIRST_STARTER_KIT, FLAT_EQ, type Project, SCHEMA_VERSION } from "./model";
 import { ticksToSeconds } from "./time";
 import { validateProject } from "./validate";
 
@@ -143,9 +143,22 @@ const MIGRATIONS: Record<number, (project: Record<string, unknown>) => Record<st
   18: (project) => project,
   // 19 -> 20: twenty more built-in Effects, from the Flanger to the Beat
   // Repeat. A schema 19 song has none; the new version keeps an older
-  // Soundcheck, which doesn't know them, from opening one.
-  19: (project) => project,
+  // Soundcheck, which doesn't know them, from opening one. And a channel EQ
+  // on every Track, Bus and the Master: a schema 19 song had none, so each
+  // is flat and changes nothing heard.
+  19: (project) => ({
+    ...project,
+    tracks: (project.tracks as Record<string, unknown>[] | undefined)?.map(withFlatEq),
+    buses: (project.buses as Record<string, unknown>[] | undefined)?.map(withFlatEq),
+    master: { ...(project.master as Record<string, unknown> | undefined), eq: { ...FLAT_EQ } },
+  }),
 };
+
+/** A Track or Bus whose mixer has a flat EQ. */
+function withFlatEq(channel: Record<string, unknown>): Record<string, unknown> {
+  const mixer = channel.mixer as Record<string, unknown> | undefined;
+  return mixer === undefined || typeof mixer !== "object" ? channel : { ...channel, mixer: { ...mixer, eq: { ...FLAT_EQ } } };
+}
 
 function migrateAudioClip(clip: unknown, tempo: unknown): unknown {
   const old = clip as Record<string, unknown> | undefined;

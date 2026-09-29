@@ -1,4 +1,4 @@
-import { Award, Cookie, Disc3, LayoutGrid, Music, PersonStanding, RotateCcw, Settings } from "lucide-react";
+import { Award, Cookie, Disc3, Grid3x3, LayoutGrid, Music, PersonStanding, RotateCcw, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { renderOffline } from "./audio/offline-render";
@@ -23,12 +23,13 @@ import type { MenuItem } from "./ui/Menu";
 /** The dialogs about the app itself. */
 type Policy = "cookies" | "accessibility" | "credits";
 
-const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixer", settings: "Settings" };
+const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixer", pads: "Pads", settings: "Settings" };
 
 /** The page the address asks for, so Settings can be linked to directly. */
 function viewFromHash(): SongView {
   if (typeof location === "undefined") return "editor";
   if (location.hash === "#settings") return "settings";
+  if (location.hash === "#pads") return "pads";
   return location.hash === "#mixing" ? "mixing" : "editor";
 }
 
@@ -41,11 +42,13 @@ export function App() {
   // Each page with a Grid keeps its own layout; the Grid menu shows the open page's.
   const editorGrid = useWidgetLayout("editor");
   const mixingGrid = useWidgetLayout("mixing");
-  const gridPage = view === "mixing" ? "mixing" : view === "editor" ? "editor" : null;
-  const grid = gridPage === "mixing" ? mixingGrid : editorGrid;
+  const padsGrid = useWidgetLayout("pads");
+  const gridPage = view === "mixing" ? "mixing" : view === "pads" ? "pads" : view === "editor" ? "editor" : null;
+  const grid = gridPage === "mixing" ? mixingGrid : gridPage === "pads" ? padsGrid : editorGrid;
   // The Widgets with nothing to show just now, which the Grid keeps off the page until they have something.
   const [emptyWidgets, setEmptyWidgets] = useState<readonly WidgetId[]>([]);
   const [emptyMixingWidgets, setEmptyMixingWidgets] = useState<readonly WidgetId[]>([]);
+  const [emptyPadsWidgets, setEmptyPadsWidgets] = useState<readonly WidgetId[]>([]);
   // Where the Editor draws its pinned Widgets: flush against the title bar and the footer, outside the page that scrolls.
   const [pinnedTop, setPinnedTop] = useState<HTMLElement | null>(null);
   const [pinnedBottom, setPinnedBottom] = useState<HTMLElement | null>(null);
@@ -90,8 +93,8 @@ export function App() {
   };
 
   /** The Grid menu for `page`: a checkbox for each of its Widgets, and Reset layout. */
-  const gridMenu = (page: "editor" | "mixing"): MenuItem => {
-    const empty = page === "mixing" ? emptyMixingWidgets : emptyWidgets;
+  const gridMenu = (page: "editor" | "mixing" | "pads"): MenuItem => {
+    const empty = page === "mixing" ? emptyMixingWidgets : page === "pads" ? emptyPadsWidgets : emptyWidgets;
     return {
       kind: "submenu",
       id: "grid",
@@ -134,6 +137,14 @@ export function App() {
       icon: <Disc3 size={16} />,
       checked: view === "mixing",
       onSelect: () => go("mixing"),
+    },
+    {
+      kind: "choice",
+      id: "pads",
+      label: "Pads",
+      icon: <Grid3x3 size={16} />,
+      checked: view === "pads",
+      onSelect: () => go("pads"),
     },
     {
       kind: "choice",
@@ -204,6 +215,8 @@ export function App() {
                     <Music size={16} aria-hidden />
                   ) : view === "mixing" ? (
                     <Disc3 size={16} aria-hidden />
+                  ) : view === "pads" ? (
+                    <Grid3x3 size={16} aria-hidden />
                   ) : (
                     <Settings size={16} aria-hidden />
                   )}
@@ -224,6 +237,12 @@ export function App() {
               onLayout: mixingGrid.setLayout,
               pinned: view === "mixing" ? { top: pinnedTop, bottom: pinnedBottom } : undefined,
               onEmpty: setEmptyMixingWidgets,
+            }}
+            padsGrid={{
+              layout: padsGrid.layout,
+              onLayout: padsGrid.setLayout,
+              pinned: view === "pads" ? { top: pinnedTop, bottom: pinnedBottom } : undefined,
+              onEmpty: setEmptyPadsWidgets,
             }}
             openOutput={platform.openOutput}
             openMidi={platform.openMidi}

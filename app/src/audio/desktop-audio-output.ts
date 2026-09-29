@@ -131,6 +131,12 @@ export function desktopAudioOutput(invoke: Invoke): OpenAudioOutput {
         unload(deck: number) {
           void invoke("dj_unload", { deck }).catch(() => {});
         },
+        async loadSample(slot: number, bytes: Uint8Array): Promise<number> {
+          return invoke<number>("dj_sample_load", { slot, bytes: [...bytes] });
+        },
+        unloadSample(slot: number) {
+          void invoke("dj_sample_unload", { slot }).catch(() => {});
+        },
         async takeRecording(): Promise<Float32Array> {
           const bytes = await invoke<ArrayBuffer>("dj_recording_take");
           return new Float32Array(bytes);

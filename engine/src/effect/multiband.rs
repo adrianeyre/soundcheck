@@ -283,6 +283,21 @@ impl StereoEffect for Multiband {
         self.release = time_coefficient(settings.release, self.sample_rate);
     }
 
+    fn settle(&mut self) {
+        self.output = db_to_gain(self.settings.output_db);
+        let targets = [
+            self.settings.low_crossover_hz,
+            self.settings.high_crossover_hz,
+        ];
+        if self.crossovers_hz != targets {
+            self.crossovers_hz = targets;
+            let [low_hz, high_hz] = targets;
+            for side in &mut self.sides {
+                *side = side.retuned(self.sample_rate, low_hz, high_hz);
+            }
+        }
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let bands = self.bands();
         let output = db_to_gain(self.settings.output_db);

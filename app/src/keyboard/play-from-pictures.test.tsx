@@ -74,7 +74,7 @@ test("the Step Sequencer's piano and a drum Track's kit play what is clicked", (
   expect(onPlay).toHaveBeenLastCalledWith(expect.any(Number), true);
   cleanup();
   sequencer(DRUMS, onPlay);
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Hit Snare, Rimshot, Electric Snare" }));
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Hit Snare" }));
   expect(onPlay).toHaveBeenLastCalledWith(38, true);
 });
 

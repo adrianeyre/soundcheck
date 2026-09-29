@@ -13,6 +13,7 @@ import {
   type Send,
   type Clip,
   type Effect,
+  EQ_BANDS,
   type Instrument,
   isVst3Id,
   type Mixer,
@@ -34,6 +35,8 @@ export const LIMITS = {
   beatsPerBar: [1, 32],
   volume: [0, 2],
   pan: [-1, 1],
+  /** A channel EQ band's gain, in dB: the engine's `EQ_RANGE_DB` either way. */
+  eq: [-12, 12],
   pitch: [0, 127],
   velocity: [0, 1],
   /** Up to the engine's `MAX_PADS`: the Starter Kit's 22, and room for more. */
@@ -177,9 +180,10 @@ function checkProject(project: unknown): asserts project is Project {
   for (const bus of project.buses) checkBus(bus, ids);
   checkRouting(project as unknown as Pick<Project, "tracks" | "buses">);
 
-  exactKeys(project.master, ["volume", "insertChain", "automation"], "The Master");
+  exactKeys(project.master, ["volume", "eq", "insertChain", "automation"], "The Master");
   const master = project.master as Record<string, unknown>;
   inRange(master.volume, LIMITS.volume, "The Master volume");
+  checkEq(master.eq, "The Master");
   checkInsertChain(master.insertChain, ids, "The Master");
 
   // Last, because what a channel can automate depends on its Sends, its
@@ -386,11 +390,17 @@ function checkSends(sends: unknown, buses: Set<string>, what: string): asserts s
 }
 
 function checkMixer(mixer: unknown, what: string): asserts mixer is Mixer {
-  exactKeys(mixer, ["volume", "pan", "mute", "solo"], `${what}'s mixer`);
+  exactKeys(mixer, ["volume", "pan", "mute", "solo", "eq"], `${what}'s mixer`);
   inRange(mixer.volume, LIMITS.volume, `${what}'s volume`);
   inRange(mixer.pan, LIMITS.pan, `${what}'s pan`);
   check(typeof mixer.mute === "boolean", `${what}'s mute must be true or false`);
   check(typeof mixer.solo === "boolean", `${what}'s solo must be true or false`);
+  checkEq(mixer.eq, what);
+}
+
+function checkEq(eq: unknown, what: string) {
+  exactKeys(eq, EQ_BANDS, `${what}'s EQ`);
+  for (const band of EQ_BANDS) inRange(eq[band], LIMITS.eq, `${what}'s EQ ${band} gain`);
 }
 
 function checkInstrument(instrument: unknown, what: string): asserts instrument is Instrument {

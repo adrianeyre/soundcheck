@@ -2,69 +2,20 @@
 //! either EQ curves or an isolator, a one-knob compressor, a Colour FX
 //! knob, a peak meter and a channel fader with a curve of its choice.
 //!
-//! The EQ splits the signal into four bands with Linkwitz-Riley crossovers
-//! (two Butterworth sections each side of every split), which add back up
-//! flat, and scales each band: in EQ mode down to -26 dB, in isolator mode
-//! all the way to silence.
+//! The EQ splits the signal into four bands (`dsp::FourBand`, which the
+//! Editor's channel EQ shares), which add back up flat, and scales each
+//! band: in EQ mode down to -26 dB, in isolator mode all the way to
+//! silence.
 
 use super::colour::ColourFx;
-use crate::dsp::{Biquad, db_to_gain};
+use crate::dsp::{FourBand, db_to_gain};
 use crate::effect::{Compressor, CompressorSettings};
 
-const BUTTERWORTH_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
 /// Where the four bands meet: low, low-mid, high-mid and high.
 pub const SPLITS_HZ: [f32; 3] = [200.0, 1_000.0, 5_000.0];
 /// The EQ knobs' range, in dB.
 pub const EQ_MIN_DB: f32 = -26.0;
 pub const EQ_MAX_DB: f32 = 6.0;
-
-/// A Linkwitz-Riley split into what is below and above a frequency.
-#[derive(Clone, Copy, Debug)]
-struct Split {
-    low: [Biquad; 2],
-    high: [Biquad; 2],
-}
-
-impl Split {
-    fn new(sample_rate: f32, frequency: f32) -> Self {
-        let low = Biquad::low_pass(sample_rate, frequency, BUTTERWORTH_Q);
-        let high = Biquad::high_pass(sample_rate, frequency, BUTTERWORTH_Q);
-        Self {
-            low: [low, low],
-            high: [high, high],
-        }
-    }
-
-    fn process(&mut self, x: f32) -> (f32, f32) {
-        let low = self.low[0].process(x);
-        let low = self.low[1].process(low);
-        let high = self.high[0].process(x);
-        let high = self.high[1].process(high);
-        (low, high)
-    }
-}
-
-/// The four-band EQ of one side.
-#[derive(Clone, Copy, Debug)]
-struct Bands {
-    splits: [Split; 3],
-}
-
-impl Bands {
-    fn new(sample_rate: f32) -> Self {
-        Self {
-            splits: SPLITS_HZ.map(|hz| Split::new(sample_rate, hz)),
-        }
-    }
-
-    /// `x` with each band, low to high, scaled by `gains`.
-    fn process(&mut self, x: f32, gains: [f32; 4]) -> f32 {
-        let (low, rest) = self.splits[0].process(x);
-        let (low_mid, rest) = self.splits[1].process(rest);
-        let (high_mid, high) = self.splits[2].process(rest);
-        low * gains[0] + low_mid * gains[1] + high_mid * gains[2] + high * gains[3]
-    }
-}
 
 /// The shape of a channel fader's travel.
 pub fn fader_gain(position: f32, curve: u8) -> f32 {
@@ -95,7 +46,7 @@ pub struct Channel {
     /// 0 is side A, 1 THRU (past the crossfader), 2 side B.
     pub assign: u8,
     pub cue: bool,
-    bands: [Bands; 2],
+    bands: [FourBand; 2],
     /// The loudest sample before the fader, as a mixer's channel meter
     /// shows it.
     pub peak: f32,
@@ -114,7 +65,10 @@ impl Channel {
             curve: 0,
             assign: 1,
             cue: false,
-            bands: [Bands::new(sample_rate), Bands::new(sample_rate)],
+            bands: [
+                FourBand::new(sample_rate, SPLITS_HZ),
+                FourBand::new(sample_rate, SPLITS_HZ),
+            ],
             peak: 0.0,
         }
     }

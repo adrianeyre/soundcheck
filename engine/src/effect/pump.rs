@@ -1,9 +1,11 @@
 //! The Pump Effect: the level ducks once every note value and swells back,
 //! the breathing of a bass or pad sidechained to the kick.
 //!
-//! It follows the tempo but not the song's position, so its first dip falls
-//! when it starts; Phase moves every dip later by a share of the note, to
-//! line them up with the kick. At each dip the level falls by Depth in a few
+//! While the song plays it follows the song's position, so a dip falls on
+//! every note value of the song: on each beat for 1/4, where the kick is.
+//! Stopped, or without a position, it runs free at the tempo from wherever
+//! it got to. Phase moves every dip later by a share of the note, to line
+//! them up with a kick that isn't on the grid. At each dip the level falls by Depth in a few
 //! milliseconds, then comes back over Release, a share of the note. Curve
 //! shapes the way back: in the middle it rises evenly, towards 0 it stays
 //! down and snaps back late, the hard pump of trance, and towards 1 it
@@ -12,7 +14,7 @@
 
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, choice, number, time_coefficient};
-use super::stereo::StereoEffect;
+use super::stereo::{SongPosition, StereoEffect};
 
 /// The note values the level dips once in, shortest first.
 pub const PUMP_NOTES: &[&str] = &["1/16", "1/8", "1/4", "1/2", "1/1"];
@@ -84,8 +86,14 @@ pub struct Pump {
     sample_rate: f32,
     settings: PumpSettings,
     tempo: f64,
-    /// Where in the note the Pump is, 0..1, counted from when it started.
+    /// Where in the note the Pump is, 0..1: from the song's position while
+    /// it moves, counted on from there when it doesn't.
     position: f64,
+    song: SongPosition,
+    /// Whether the next frame jumps the gain to where it should be, not
+    /// smoothing it there: the first frame after `settle`, once the song's
+    /// position has placed it.
+    snap: bool,
     /// The gain last applied, which follows the shape through a smoother.
     gain: f32,
     smoothing: f32,
@@ -98,15 +106,27 @@ impl Pump {
             settings,
             tempo: DEFAULT_TEMPO,
             position: 0.0,
+            song: SongPosition::default(),
+            snap: false,
             gain: 1.0,
             smoothing: time_coefficient(SMOOTHING_MS, sample_rate),
         }
     }
 
+    /// How many quarter notes one note value lasts.
+    fn note_quarters(&self) -> f64 {
+        PUMP_QUARTERS[self.settings.note.min(PUMP_QUARTERS.len() - 1)]
+    }
+
     /// How many samples one note value lasts at the tempo.
     fn note_samples(&self) -> f64 {
-        let quarters = PUMP_QUARTERS[self.settings.note.min(PUMP_QUARTERS.len() - 1)];
-        quarters * 60.0 / self.tempo * f64::from(self.sample_rate)
+        self.note_quarters() * 60.0 / self.tempo * f64::from(self.sample_rate)
+    }
+
+    /// The gain the shape puts on the Pump where it is.
+    fn target(&self, length: f64) -> f32 {
+        let at = (self.position - f64::from(self.settings.phase)).rem_euclid(1.0) * length;
+        self.shape(at as f32, length as f32)
     }
 
     /// The gain `at` samples into the note, which lasts `length`.
@@ -146,14 +166,30 @@ impl StereoEffect for Pump {
         }
     }
 
+    fn settle(&mut self) {
+        self.gain = self.target(self.note_samples());
+        self.snap = true;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.process_stereo_at(left, right, &[]);
+    }
+
+    fn process_stereo_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
         let length = self.note_samples();
         let increment = 1.0 / length;
-        let phase = f64::from(self.settings.phase);
+        let quarters = self.note_quarters();
         let mix = self.settings.mix;
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            let at = (self.position - phase).rem_euclid(1.0) * length;
-            let target = self.shape(at as f32, length as f32);
+        for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            if let Some(moved) = self.song.step(ticks, frame) {
+                self.position = moved.phase(quarters);
+            }
+            // A playhead that jumps moves the shape at once; the smoother
+            // takes the gain there without a click.
+            let target = self.target(length);
+            if std::mem::take(&mut self.snap) {
+                self.gain = target;
+            }
             self.gain = target + self.smoothing * (self.gain - target);
             self.position = (self.position + increment).fract();
 
@@ -167,7 +203,8 @@ impl StereoEffect for Pump {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dsp::measure::rms;
+    use crate::dsp::measure::{max_jump, rms, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
 
@@ -188,6 +225,21 @@ mod tests {
             pump.process_stereo(l, r);
         }
         assert_eq!(left, right);
+        left
+    }
+
+    /// `gains`, with the song playing at 120 from `start` ticks.
+    fn gains_at(pump: &mut Pump, start: f64, frames: usize, chunk: usize) -> Vec<f32> {
+        let ticks = song_ticks(start, 120.0, RATE, frames);
+        let mut left = vec![1.0; frames];
+        let mut right = vec![1.0; frames];
+        for ((l, r), t) in left
+            .chunks_mut(chunk)
+            .zip(right.chunks_mut(chunk))
+            .zip(ticks.chunks(chunk))
+        {
+            pump.process_stereo_at(l, r, t);
+        }
         left
     }
 
@@ -286,5 +338,38 @@ mod tests {
         pump.set_tempo(f64::NAN);
         pump.set_tempo(1.0);
         assert!(gains(&mut pump, 10_000, 33).iter().all(|g| g.is_finite()));
+    }
+
+    #[test]
+    fn playing_it_dips_on_the_songs_beats() {
+        // Half a beat in, the next beat is 12,000 frames on, and every one
+        // after that a quarter note later, whatever the block size.
+        for chunk in [1, 100, 512] {
+            let mut pump = Pump::new(RATE, settings(&[("depth", 1.0)]));
+            let gains = gains_at(&mut pump, 480.0, 96_000, chunk);
+            for beat in 0..3 {
+                let start = 12_000 + beat * 24_000;
+                let dip = quietest(&gains, start - 6_000, start + 12_000);
+                assert!((start..start + 400).contains(&dip), "{chunk}: {dip}");
+                assert!(gains[start - 1_000] > 0.99);
+            }
+        }
+        // Half a beat in with no position, it dips at once.
+        let mut pump = Pump::new(RATE, settings(&[("depth", 1.0)]));
+        assert!(quietest(&gains(&mut pump, 12_000, 512), 0, 12_000) < 400);
+    }
+
+    #[test]
+    fn a_playhead_that_jumps_does_not_click() {
+        let mut pump = Pump::new(RATE, settings(&[("depth", 1.0)]));
+        let input = sine(150.0, 0.8, RATE, 24_000);
+        // Just after a dip, the song jumps to the middle of a beat.
+        let mut ticks = song_ticks(0.0, 120.0, RATE, 24_000);
+        for tick in &mut ticks[400..] {
+            *tick += 400.0;
+        }
+        let (mut left, mut right) = (input.clone(), input.clone());
+        pump.process_stereo_at(&mut left, &mut right, &ticks);
+        assert!(max_jump(&left) < 0.1, "{}", max_jump(&left));
     }
 }

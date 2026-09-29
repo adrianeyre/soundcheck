@@ -98,6 +98,11 @@ impl StereoEffect for RingMod {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.frequency_hz = self.settings.frequency_hz;
+        self.mix = self.settings.mix;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let RingModSettings {
             frequency_hz,

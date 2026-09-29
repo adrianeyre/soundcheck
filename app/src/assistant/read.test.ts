@@ -198,6 +198,7 @@ test("every setting of the reference song is reachable through read_channel", ()
   expect(read("read_channel", { channel: "master" }, song)).toEqual({
     channel: "master",
     volume: song.master.volume,
+    eq: song.master.eq,
     insertChain: song.master.insertChain.map((effect) => ({ effectId: effect.id, effect: effect.type, bypassed: false, settings: effect.settings })),
     automated: ["volume"],
   });

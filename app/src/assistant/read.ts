@@ -14,8 +14,10 @@ import { instrumentName, isMissingInstrument, pluginInstrumentTable } from "../i
 import {
   type Automation,
   type Bus,
+  type ChannelEq,
   clipLength,
   type Effect,
+  EQ_BANDS,
   type Note,
   type PatternClip,
   type Project,
@@ -93,6 +95,7 @@ export function projectSummary(project: Project) {
       kind: track.kind,
       ...instrumentSummary(track),
       insertChain: track.insertChain.map(effectSummary),
+      ...shaped(track.mixer.eq),
       ...automated(track.automation),
       ...output(track.output),
       ...sends(track.sends),
@@ -112,6 +115,7 @@ export function projectSummary(project: Project) {
         busId: bus.id,
         name: bus.name,
         insertChain: bus.insertChain.map(effectSummary),
+        ...shaped(bus.mixer.eq),
         ...automated(bus.automation),
         ...output(bus.output),
         ...sends(bus.sends),
@@ -119,9 +123,15 @@ export function projectSummary(project: Project) {
     }),
     master: {
       insertChain: project.master.insertChain.map(effectSummary),
+      ...shaped(project.master.eq),
       ...automated(project.master.automation),
     },
   };
+}
+
+/** A channel's EQ, when it isn't flat: a flat one is left out, as most are. */
+function shaped(eq: ChannelEq) {
+  return EQ_BANDS.some((band) => eq[band] !== 0) ? { eq: { ...eq } } : {};
 }
 
 /** Which settings are automated, by what they move, or nothing when none is. */
@@ -225,6 +235,7 @@ export function channelDetail(project: Project, channel: Track | Bus | "master")
     return {
       channel: "master",
       volume: project.master.volume,
+      eq: { ...project.master.eq },
       insertChain: project.master.insertChain.map(effectDetail),
       ...automated(project.master.automation),
     };

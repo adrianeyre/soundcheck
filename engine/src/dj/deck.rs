@@ -91,6 +91,12 @@ pub struct Deck {
     pub peak: f32,
     /// A Beat Grid the DJ set by hand, over the analysis's.
     grid: Option<(f64, f64)>,
+    /// **Silent Cue**: the Deck plays on, muted, until it is turned off or
+    /// a Hot Cue is called.
+    pub silent: bool,
+    /// A Slip Reverse held: whether Slip was on before it, and how many
+    /// frames of the file it has left to play backwards.
+    slip_reverse: Option<(bool, f64)>,
 }
 
 impl Deck {
@@ -121,6 +127,8 @@ impl Deck {
             stretcher: Stretcher::new(sample_rate),
             peak: 0.0,
             grid: None,
+            silent: false,
+            slip_reverse: None,
         }
     }
 
@@ -137,6 +145,7 @@ impl Deck {
         self.scratch = None;
         self.motor = Motor::Steady;
         self.grid = None;
+        self.slip_reverse = None;
         self.stretcher.reset();
         std::mem::replace(&mut self.track, track)
     }
@@ -312,10 +321,12 @@ impl Deck {
     }
 
     /// A Hot Cue held: jump there, and with Slip on, come back on release.
+    /// Calling a Hot Cue ends a Silent Cue, so the Deck is heard from it.
     pub fn jump_hold(&mut self, seconds: f64) {
         if !seconds.is_finite() {
             return;
         }
+        self.silent = false;
         let slip_from = self.position;
         self.holding_jump = true;
         self.position = self.clamp(seconds * self.sample_rate);
@@ -431,6 +442,32 @@ impl Deck {
         }
         self.reverse = on;
         self.end_slip(was);
+    }
+
+    /// **Slip Reverse**, held: the Deck plays backwards with Slip on, so the
+    /// track runs on underneath, and let go (or after 8 beats backwards,
+    /// whichever is first) it goes back to where the track would have been,
+    /// with Slip as it was.
+    pub fn slip_reverse(&mut self, on: bool) {
+        match (on, self.slip_reverse) {
+            (true, None) => {
+                let beat = self.beat_frames().unwrap_or(0.5 * self.sample_rate);
+                let had_slip = self.slip;
+                self.set_slip(true);
+                self.set_reverse(true);
+                self.slip_reverse = Some((had_slip, 8.0 * beat));
+            }
+            (false, Some((had_slip, _))) => {
+                self.slip_reverse = None;
+                self.set_reverse(false);
+                self.set_slip(had_slip);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn slip_reversing(&self) -> bool {
+        self.slip_reverse.is_some()
     }
 
     pub fn set_slip(&mut self, on: bool) {
@@ -575,11 +612,22 @@ impl Deck {
             } else {
                 (read(source_l, self.position), read(source_r, self.position))
             };
+            // Silent Cue plays on, unheard.
+            let (sl, sr) = if self.silent { (0.0, 0.0) } else { (sl, sr) };
             *l = sl;
             *r = sr;
             peak = peak.max(sl.abs()).max(sr.abs());
 
             self.position += speed;
+            if let Some((had_slip, left)) = self.slip_reverse {
+                let left = left - speed.abs();
+                if left <= 0.0 {
+                    self.slip_reverse = Some((had_slip, 0.0));
+                    self.slip_reverse(false);
+                    continue;
+                }
+                self.slip_reverse = Some((had_slip, left));
+            }
             if self.slip {
                 self.slip_position += if self.playing { rate } else { 0.0 };
             }
@@ -804,6 +852,56 @@ mod tests {
             deck.speed() < -0.99,
             "the last speed stays until the next frame"
         );
+    }
+
+    #[test]
+    fn silent_cue_plays_on_unheard_until_a_hot_cue_is_called() {
+        let mut deck = ramp_deck(4.0, 120.0);
+        deck.seek(1.0);
+        deck.play(true);
+        deck.silent = true;
+        let played = render(&mut deck, 4_800);
+        assert!(played.iter().all(|&s| s == 0.0), "muted");
+        assert!((deck.seconds() - 1.1).abs() < 1e-9, "but moving");
+        deck.jump_hold(2.0);
+        deck.jump_release();
+        assert!(!deck.silent, "a Hot Cue ends it");
+        let played = render(&mut deck, 480);
+        assert!(
+            played[10] >= 96_000.0,
+            "heard from the Hot Cue: {}",
+            played[10]
+        );
+    }
+
+    #[test]
+    fn slip_reverse_plays_backwards_and_returns_where_the_track_would_be() {
+        // 120 BPM: a beat is half a second.
+        let mut deck = ramp_deck(20.0, 120.0);
+        deck.seek(5.0);
+        deck.play(true);
+        deck.slip_reverse(true);
+        assert!(deck.slip && deck.reverse && deck.slip_reversing());
+        let played = render(&mut deck, 4_800);
+        assert!(played.windows(2).all(|w| w[1] < w[0]), "backwards");
+        deck.slip_reverse(false);
+        assert!(!deck.slip, "Slip goes back to off");
+        assert!(!deck.reverse);
+        assert!((deck.seconds() - 5.1).abs() < 1e-6, "{}", deck.seconds());
+    }
+
+    #[test]
+    fn slip_reverse_ends_by_itself_after_eight_beats() {
+        let mut deck = ramp_deck(20.0, 120.0);
+        deck.seek(10.0);
+        deck.set_slip(true);
+        deck.play(true);
+        deck.slip_reverse(true);
+        // Eight beats is four seconds; hold it for five.
+        render(&mut deck, 5 * 48_000);
+        assert!(!deck.slip_reversing() && !deck.reverse);
+        assert!(deck.slip, "Slip stays on, as it was");
+        assert!((deck.seconds() - 15.0).abs() < 1e-3, "{}", deck.seconds());
     }
 
     #[test]

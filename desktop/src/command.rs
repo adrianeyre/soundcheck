@@ -45,6 +45,15 @@ pub enum EngineCommand {
     SetMasterVolume {
         volume: f32,
     },
+    /// The channel EQ of a Track, a Bus or the Master, numbered as an
+    /// Insert Chain is: each band's gain in dB.
+    SetChannelEq {
+        chain: i32,
+        low: f32,
+        low_mid: f32,
+        high_mid: f32,
+        high: f32,
+    },
     /// The Automation of one setting of a Track, a Bus or the Master,
     /// numbered as an Insert Chain is (`Engine::set_automation` names the
     /// settings): flat tick, value and hold for each breakpoint.
@@ -305,6 +314,11 @@ pub enum RtCommand {
         solo: bool,
     },
     SetMasterVolume(f32),
+    SetChannelEq {
+        chain: i32,
+        /// Low, low-mid, high-mid and high, in dB.
+        eq: [f32; 4],
+    },
     SetAutomation {
         target: i32,
         automation: PreparedAutomation,
@@ -445,6 +459,12 @@ pub enum RtCommand {
         track: Option<DjTrack>,
     },
     DjSet(DjControl, f64),
+    /// A sample for a Sampler Slot, decoded at the engine's rate, or None to
+    /// empty the slot.
+    DjSample {
+        slot: usize,
+        file: Option<PreparedAudioFile>,
+    },
     /// Where the headphone cue goes for a second output device, or None
     /// when there is none (`headphones.rs`).
     SetHeadphones(Option<Box<rtrb::Producer<f32>>>),
@@ -711,6 +731,18 @@ mod tests {
         assert_eq!(
             parse(r#"{"type":"setMasterVolume","volume":0.8}"#),
             EngineCommand::SetMasterVolume { volume: 0.8 }
+        );
+        assert_eq!(
+            parse(
+                r#"{"type":"setChannelEq","chain":-2,"low":-3,"lowMid":0,"highMid":1.5,"high":12}"#
+            ),
+            EngineCommand::SetChannelEq {
+                chain: -2,
+                low: -3.0,
+                low_mid: 0.0,
+                high_mid: 1.5,
+                high: 12.0
+            }
         );
         assert_eq!(
             parse(r#"{"type":"setAutomation","target":-1,"setting":"volume","points":[0,1,1]}"#),

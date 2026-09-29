@@ -102,6 +102,26 @@ export interface Section {
   bars: number;
 }
 
+/**
+ * A channel EQ: the gain of each of four bands, in dB from -12 to 12, 0
+ * leaving it flat. The bands meet at 200 Hz, 1 kHz and 5 kHz, as the DJ
+ * Mixer's do. It comes after the Insert Chain and before the fader.
+ */
+export interface ChannelEq {
+  low: number;
+  lowMid: number;
+  highMid: number;
+  high: number;
+}
+
+/** The bands of a channel EQ, low to high. */
+export const EQ_BANDS = ["low", "lowMid", "highMid", "high"] as const satisfies readonly (keyof ChannelEq)[];
+
+export type EqBand = (typeof EQ_BANDS)[number];
+
+/** Every band at 0 dB: the EQ changes nothing. */
+export const FLAT_EQ: Readonly<ChannelEq> = Object.freeze({ low: 0, lowMid: 0, highMid: 0, high: 0 });
+
 /** A Track's or Bus's mixer channel. */
 export interface Mixer {
   /** Linear gain: 1 is unity, 2 is +6 dB. */
@@ -110,6 +130,7 @@ export interface Mixer {
   pan: number;
   mute: boolean;
   solo: boolean;
+  eq: ChannelEq;
 }
 
 /**
@@ -147,8 +168,9 @@ export interface Bus {
 /** The final mixer channel every Track and Bus ends up feeding. */
 export interface Master {
   volume: number;
+  eq: ChannelEq;
   insertChain: Effect[];
-  /** Its volume and its Effects' settings can be automated. */
+  /** Its volume, its EQ and its Effects' settings can be automated. */
   automation: Automation[];
 }
 
@@ -165,7 +187,8 @@ interface TrackBase {
 }
 
 /**
- * A setting Automation can move: a channel's volume or pan, its Send to a
+ * A setting Automation can move: a channel's volume or pan, a band of its
+ * EQ (`eq:low`, `eq:lowMid`, `eq:highMid` or `eq:high`), its Send to a
  * Bus (`send:<busId>`), a numeric setting of one of its Effects
  * (`effect:<effectId>:<setting>`) or of its Instrument
  * (`instrument:<setting>`), a Drum Sampler Pad's by the note that plays it
@@ -176,6 +199,7 @@ interface TrackBase {
 export type AutomatedSetting =
   | "volume"
   | "pan"
+  | `eq:${EqBand}`
   | `send:${string}`
   | `effect:${string}:${string}`
   | `instrument:${string}`;
@@ -393,7 +417,8 @@ export type Effect = BuiltInEffect | PluginEffect;
 
 // Defaults match the Audio Engine's.
 
-export const DEFAULT_MIXER: Mixer = { volume: 1, pan: 0, mute: false, solo: false };
+/** Its EQ is `FLAT_EQ` itself, frozen: a new channel takes a copy. */
+export const DEFAULT_MIXER: Mixer = { volume: 1, pan: 0, mute: false, solo: false, eq: FLAT_EQ };
 
 /** The Synth's defaults, as its settings table declares them. */
 export const DEFAULT_SYNTH: SynthSettings = defaultSynthSettings();
@@ -438,6 +463,26 @@ export const STARTER_KIT: readonly DrumPad[] = [
  * Project, whose pads held only a sample and a volume, was playing.
  */
 export const FIRST_STARTER_KIT: readonly DrumPad[] = STARTER_KIT.slice(0, 8);
+
+/**
+ * The Pad a Drum Sampler gains next, after `pads`: the Starter Kit's Pad at
+ * that position, which is the kit sound an unloaded Pad there plays, or past
+ * the kit's end an empty "Pad N", silent until a sample is loaded onto it.
+ * Either answers a note no other Pad has: its own, or else the lowest one
+ * free above the kit's.
+ */
+export function nextDrumPad(pads: readonly DrumPad[]): DrumPad {
+  const taken = new Set(pads.map((pad) => pad.note));
+  const kit = STARTER_KIT[pads.length];
+  const pad = kit ? { ...kit } : drumPad(`Pad ${pads.length + 1}`, 0);
+  if (kit && !taken.has(kit.note)) return pad;
+  const afterTheKit = Math.max(...STARTER_KIT.map((candidate) => candidate.note)) + 1;
+  // Up from the kit's highest note, then down from it: a Drum Sampler holds
+  // far fewer Pads than there are notes, so one is always free.
+  for (let note = afterTheKit; note <= 127; note++) if (!taken.has(note)) return { ...pad, note };
+  for (let note = afterTheKit - 1; note >= 0; note--) if (!taken.has(note)) return { ...pad, note };
+  return pad;
+}
 
 function drumPad(name: string, note: number, chokeGroup = 0): DrumPad {
   return { name, note, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup };
@@ -484,7 +529,7 @@ export function createProject(name = "Untitled"): Project {
     sections: [],
     tracks: [],
     buses: [],
-    master: { volume: 1, insertChain: [], automation: [] },
+    master: { volume: 1, eq: { ...FLAT_EQ }, insertChain: [], automation: [] },
     referenceTrack: null,
   };
 }
@@ -494,7 +539,7 @@ export function createInstrumentTrack(name: string, id = newId()): InstrumentTra
     id,
     kind: "instrument",
     name,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],
@@ -549,7 +594,7 @@ export function createAudioTrack(name: string, id = newId()): AudioTrack {
     name,
     input: { ...DEFAULT_TRACK_INPUT },
     monitoring: false,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],
@@ -563,7 +608,7 @@ export function createBus(name: string, id = newId()): Bus {
   return {
     id,
     name,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],

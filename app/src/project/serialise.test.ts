@@ -667,3 +667,51 @@ test("Input Monitoring survives a save and open, and one that isn't on or off is
   const unsaved = parseProject(JSON.stringify(without));
   expect(!unsaved.ok && unsaved.error).toMatch(/missing: monitoring/);
 });
+
+/** A Track or Bus as schema 19 saved it, with no EQ. */
+function withoutEq<T extends { mixer: object }>(channel: T) {
+  const { eq: _, ...mixer } = channel.mixer as { eq: unknown };
+  return { ...channel, mixer };
+}
+
+test("a schema 19 Project opens with a flat EQ on every Track, Bus and the Master", () => {
+  const project = sampleProject();
+  expect(project.buses.length).toBeGreaterThan(0);
+  const { eq: __, ...master } = project.master;
+  const schema19 = {
+    ...project,
+    schemaVersion: 19,
+    tracks: project.tracks.map(withoutEq),
+    buses: project.buses.map(withoutEq),
+    master,
+  };
+  const result = parseProject(JSON.stringify(schema19));
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.project).toEqual({ ...project, schemaVersion: SCHEMA_VERSION });
+  const flat = { low: 0, lowMid: 0, highMid: 0, high: 0 };
+  for (const channel of [...result.project.tracks, ...result.project.buses]) expect(channel.mixer.eq).toEqual(flat);
+  expect(result.project.master.eq).toEqual(flat);
+});
+
+test("a channel's EQ survives a save and open, and one out of range or missing a band is refused", () => {
+  const project = sampleProject();
+  project.tracks[0]!.mixer.eq = { low: -12, lowMid: 3.5, highMid: 0, high: 12 };
+  project.buses[0]!.mixer.eq.lowMid = -4;
+  project.master.eq.high = 1.5;
+  project.master.automation.push({ setting: "eq:low", breakpoints: [{ tick: 0, value: -6, hold: false }] });
+  expect(parseProject(serialiseProject(project))).toEqual({ ok: true, project });
+
+  expect(refused((p) => (p.tracks[0]!.mixer.eq.low = 12.5))).toMatch(/EQ low gain must be a number from -12 to 12/);
+  expect(refused((p) => (p.master.eq.high = Number.NaN))).toMatch(/The Master's EQ high gain/);
+  expect(
+    refused((p) => {
+      const { high: _, ...rest } = p.buses[0]!.mixer.eq;
+      p.buses[0]!.mixer.eq = rest as typeof p.buses[0]["mixer"]["eq"];
+    }),
+  ).toMatch(/EQ is missing: high/);
+  expect(
+    refused((p) => p.master.automation.push({ setting: "eq:low", breakpoints: [{ tick: 0, value: 20, hold: false }] })),
+  ).not.toBe("opened");
+});

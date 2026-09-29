@@ -11,6 +11,7 @@
 use crate::audio_clip::AudioClips;
 use crate::automation::{Automatable, Automation, ChannelAutomation, Line, TableAutomation};
 use crate::bus::{BusSend, Output, feeds};
+use crate::channel_eq::ChannelEq;
 use crate::effect::InsertChain;
 use crate::instrument::{
     Instrument, KEYS_PARAM_COUNT, KEYS_PARAMS, KeysSettings, MAX_PADS, PARAMS, PadParam,
@@ -70,7 +71,10 @@ pub struct Track {
     audio: bool,
     clips: AudioClips,
     mixer: Mixer,
-    /// What moves the fader, the pan and the Sends while the song plays.
+    /// The channel EQ, between the Insert Chain and the fader.
+    eq: ChannelEq,
+    /// What moves the fader, the pan, the EQ and the Sends while the song
+    /// plays.
     automation: ChannelAutomation,
     /// What moves the Synth's settings, by their place in its table. It
     /// stays with the Track when its Instrument changes, and only a Synth
@@ -164,6 +168,7 @@ impl Track {
             audio: false,
             clips: AudioClips::default(),
             mixer: Mixer::default(),
+            eq: ChannelEq::new(sample_rate),
             automation: ChannelAutomation::default(),
             synth_automation: TableAutomation::new(PARAMS.len()),
             synth_fixed: SynthSettings::default(),
@@ -236,6 +241,16 @@ impl Track {
 
     pub fn set_mixer(&mut self, mixer: Mixer) {
         self.mixer = mixer;
+    }
+
+    /// The channel EQ's bands, low to high, in dB.
+    pub fn eq(&self) -> [f32; 4] {
+        self.eq.db()
+    }
+
+    /// Set the channel EQ's bands, low to high, in dB. Allocates nothing.
+    pub fn set_eq(&mut self, db: [f32; 4]) {
+        self.eq.set(db);
     }
 
     pub fn output(&self) -> Output {
@@ -539,6 +554,12 @@ impl Track {
             }
         }
         self.chain.process_at(chain_left, chain_right, ticks);
+        self.eq.process(
+            chain_left,
+            chain_right,
+            self.automation.eq().lines(ticks),
+            ticks,
+        );
 
         let gains = ChannelGains::new(self.mixer, gain, &self.automation, ticks);
         let mut meter = self.meter;

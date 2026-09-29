@@ -2247,9 +2247,20 @@ h3.kind-stripe {
   color: var(--text-muted);
 }
 
+/* A switch sits beside its label, as a checkbox does. */
+.param.param-switch {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
 .param > :is(select, input) {
   color: var(--text);
   width: 100%;
+}
+
+.param.param-switch > input {
+  width: auto;
 }
 
 .pad-table input[type="range"] {
@@ -2324,6 +2335,43 @@ input.strip-name {
   flex: 1;
   min-width: 0;
   padding: 0;
+}
+
+/* A channel's EQ: four small knobs, two by two, drawn in the Editor's own
+   colours rather than the DJ Mixer's hardware ones. */
+.channel-eq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.channel-eq-head {
+  justify-content: space-between;
+}
+
+.channel-eq-head > button {
+  flex: none;
+  padding: 0 var(--space-1);
+}
+
+.channel-eq-knobs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  justify-items: center;
+  row-gap: var(--space-1);
+}
+
+.channel-eq .dj-knob-body {
+  fill: var(--surface-3);
+  stroke: var(--border);
+}
+
+.channel-eq .dj-knob-track {
+  stroke: var(--lane-line);
+}
+
+.channel-eq .dj-knob-pointer {
+  stroke: var(--text);
 }
 
 /* Sends: each Bus's name, level and remove button, then a picker to add one. */
@@ -4219,6 +4267,29 @@ button[data-clipping="true"] {
 
 .drum-kit-piece[data-shape="cymbal"] .drum-kit-label {
   fill: var(--text);
+}
+
+.drum-kit-pedal {
+  fill: var(--control-border);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.drum-kit-piece[data-shape="pedal"] .drum-kit-label {
+  font-size: 7px;
+  fill: var(--text);
+}
+
+.drum-kit-chip-label {
+  font-size: 7px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: var(--text);
+  pointer-events: none;
+}
+
+.drum-kit-piece[data-hit="true"] .drum-kit-pedal {
+  fill: var(--play);
 }
 
 .drum-kit-piece[data-empty="true"] {
@@ -6124,5 +6195,426 @@ button[data-clipping="true"] {
 @media (prefers-reduced-motion: reduce) {
   .keys-drop {
     transition: none;
+  }
+}
+
+/* ---- The Pad Controller: a two-deck pad controller's panel, SLIDE FX at each outer edge, the browse knob
+   between the halves and sixteen lit pads a side. Narrower than two halves side by side, the halves stack. ---- */
+
+.dj-pc {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+.dj-pc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.dj-pc-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.dj-pc-half {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dj-pc-half[data-side="right"] {
+  flex-direction: row-reverse;
+}
+
+.dj-pc-fx {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 64px;
+  padding-inline: 4px;
+  border-inline: 1px solid #0b0c10;
+}
+
+.dj-pc-fx .dj-hw-button {
+  min-height: 34px;
+}
+
+.dj-pc-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-height: 180px;
+}
+
+/* A long vertical strip, lit along its length as it is touched. */
+.dj-pc-strip input[type="range"] {
+  flex: 1;
+  width: 28px;
+  min-height: 160px;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  accent-color: var(--dj-amber);
+  border-radius: 6px;
+  background: linear-gradient(90deg, #0b0c10, #1a1d24 50%, #0b0c10);
+  box-shadow: inset 0 0 0 1px #050608;
+}
+
+.dj-pc-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dj-pc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dj-pc-half[data-side="right"] .dj-pc-row {
+  flex-direction: row-reverse;
+}
+
+.dj-pc-loop,
+.dj-pc-parameter,
+.dj-pc-key,
+.dj-pc-load {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dj-pc-key-caption {
+  display: block;
+}
+
+.dj-pc-key-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.dj-hw-button[data-light] .dj-pc-key-sub {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.dj-pc-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--dj-screen);
+  color: var(--dj-screen-ink);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+.dj-pc-display-title {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--dj-screen-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-pc-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dj-pc-mode {
+  white-space: normal;
+}
+
+.dj-pc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* A rubber pad: dark until lit, lit dim or full in its mode's colour. */
+.dj-pc-pad {
+  --pad: #3b404c;
+  --pad-dim: #1c1f26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  aspect-ratio: 1;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid #050608;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 40%, #4a4f5b, #2a2e37 70%);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: center;
+  touch-action: none;
+  user-select: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 3px 4px rgb(0 0 0 / 0.55);
+}
+
+.dj-pc-pad[data-lit="dim"] {
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--pad) 45%, #2a2e37), var(--pad-dim) 75%);
+  color: var(--text);
+}
+
+.dj-pc-pad[data-lit="on"],
+.dj-pc-pad[data-lit="blink"] {
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--pad) 70%, #fff), var(--pad) 70%);
+  color: #07080b;
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--pad) 60%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+}
+
+.dj-pc-pad:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+.dj-pc-pad:disabled {
+  opacity: 0.5;
+}
+
+.dj-pc-pad-caption {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.dj-pc-pad-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-pc-centre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 120px;
+  padding-top: 8px;
+}
+
+/* The browse knob: a knurled rotary selector, turned by the wheel or the arrow keys. */
+.dj-pc-knob {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid #050608;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(#3b404c 0 6deg, #22252d 6deg 12deg);
+  box-shadow:
+    0 4px 8px rgb(0 0 0 / 0.6),
+    inset 0 1px 0 rgb(255 255 255 / 0.15);
+}
+
+.dj-pc-knob-cap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #6b7180, #2a2e37 70%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.dj-pc-cursor {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--dj-screen);
+  color: var(--dj-screen-ink);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-pc-sampler,
+.dj-pc-rec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dj-pc-sampler {
+  padding-top: var(--space-2);
+  border-top: 1px solid #0b0c10;
+}
+
+.dj-pc-rec {
+  margin-inline-start: auto;
+}
+
+.dj-pc-gain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dj-pc-meter {
+  width: 80px;
+}
+
+.dj-pc-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dj-pc-slot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dj-pc-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.25);
+}
+
+.dj-pc-slot[data-state="playing"] {
+  box-shadow: inset 3px 0 0 #4aa8ff;
+}
+
+.dj-pc-slot input[type="text"] {
+  width: 10em;
+  min-width: 0;
+  background: #0b0e17;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+}
+
+.dj-pc-slot select {
+  background: #0b0e17;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+}
+
+.dj-pc-slot-number {
+  min-width: 1.6em;
+  font-weight: 800;
+}
+
+/* The row the browse knob is on, in the Track browser's loaded list. */
+.dj-browser-table tr[data-cursor="true"] {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.dj-track-select {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.dj-track-select[aria-pressed="true"] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* Too narrow for the two halves side by side: they stack, the browse knob and SHIFT between them. */
+@container (max-width: 860px) {
+  .dj-pc-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dj-pc-centre {
+    flex-flow: row wrap;
+    justify-content: center;
+    width: auto;
+    padding-top: 0;
+  }
+
+  .dj-pc-half[data-side="right"],
+  .dj-pc-half[data-side="right"] .dj-pc-row {
+    flex-direction: row;
+  }
+}
+
+@container (max-width: 420px) {
+  .dj-pc-half {
+    flex-direction: column;
+  }
+
+  .dj-pc-half[data-side="right"] {
+    flex-direction: column;
+  }
+
+  .dj-pc-fx {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: auto;
+    border-inline: 0;
+  }
+
+  .dj-pc-strip {
+    min-height: 0;
+    flex-direction: row;
+  }
+
+  .dj-pc-strip input[type="range"] {
+    width: 100%;
+    min-height: 0;
+    writing-mode: horizontal-tb;
+    direction: ltr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dj-pc-pad:active:not(:disabled) {
+    transform: none;
   }
 }

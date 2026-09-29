@@ -126,6 +126,19 @@ impl StereoEffect for Haas {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        let HaasSettings {
+            side,
+            delay_ms,
+            level_db,
+            ..
+        } = self.settings;
+        let longest = (self.lines[0].len() - 2) as f32;
+        self.delay = (delay_ms / 1_000.0 * self.sample_rate).clamp(0.0, longest);
+        self.level = db_to_gain(level_db);
+        self.amounts = side_amounts(side);
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let HaasSettings {
             side,

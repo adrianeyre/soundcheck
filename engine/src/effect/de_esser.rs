@@ -144,6 +144,18 @@ impl StereoEffect for DeEsser {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.listening = self.settings.listen;
+        if self.frequency_hz != self.settings.frequency_hz {
+            self.frequency_hz = self.settings.frequency_hz;
+            for band in &mut self.bands {
+                let old = *band;
+                *band = Biquad::band_pass(self.sample_rate, self.frequency_hz, BAND_Q);
+                band.restore_state(&old);
+            }
+        }
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let DeEsserSettings {
             threshold_db,

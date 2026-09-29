@@ -7,7 +7,7 @@
  * each file they play, once however many Clips play it. Every Track gets its
  * mixer channel, its Sends and its Insert Chain, and the Project its tempo map (the
  * starting tempo and time signature, then each Tempo Change), and the
- * Master's volume and Insert Chain.
+ * Master's volume, EQ and Insert Chain.
  *
  * Replacing a Track's notes or its Instrument releases whatever it is
  * sounding, so only what actually changed is sent.
@@ -21,7 +21,10 @@ import { keysSettingsToFlat } from "../instrument/keys-params";
 import { synthSettingsToFlat } from "../instrument/synth-params";
 import { parsePadSetting, parseSetting } from "./automation";
 import {
+  type ChannelEq,
   DEFAULT_MIXER,
+  EQ_BANDS,
+  FLAT_EQ,
   type AudioTrack,
   type Automation,
   type DrumPad,
@@ -268,6 +271,8 @@ export class EngineSync {
   #signature: string | null = null;
   #tempoChanges = "[]";
   #masterVolume: number | null = null;
+  /** The engine's Master starts flat. */
+  #masterEq: ChannelEq = { ...FLAT_EQ };
   #masterChain: SentEffect[] = [];
   #masterAutomation: SentAutomation = {};
   #buses: SentBus[] = [];
@@ -301,6 +306,10 @@ export class EngineSync {
     if (project.master.volume !== this.#masterVolume) {
       this.#masterVolume = project.master.volume;
       commands.push({ type: "setMasterVolume", volume: project.master.volume });
+    }
+    if (!sameEq(this.#masterEq, project.master.eq)) {
+      this.#masterEq = { ...project.master.eq };
+      commands.push({ type: "setChannelEq", chain: MASTER_CHAIN, ...project.master.eq });
     }
     const busIndex = new Map(project.buses.map((bus, index) => [bus.id, index]));
     commands.push(...updateChain(this.#plugins, MASTER_CHAIN, this.#masterChain, project.master.insertChain, project.master.automation));
@@ -387,10 +396,8 @@ export class EngineSync {
     }
     buses.forEach((bus, index) => {
       const sent = this.#buses[index]!;
-      if (!sameMixer(sent.mixer, bus.mixer)) {
-        commands.push({ type: "setBusMixer", bus: index, ...bus.mixer });
-        sent.mixer = { ...bus.mixer };
-      }
+      commands.push(...mixerCommands({ bus: index }, sent.mixer, bus.mixer));
+      sent.mixer = copyMixer(bus.mixer);
       commands.push(...updateChain(this.#plugins, busChain(index), sent.chain, bus.insertChain, bus.automation));
     });
     // The engine refuses a loop even for a moment, so every Bus whose output
@@ -465,11 +472,11 @@ export class EngineSync {
     if (monitoring !== sent.monitoring) commands.push({ type: "setTrackMonitoring", track: index, on: monitoring });
 
     const { mixer } = track;
-    if (!sameMixer(sent.mixer, mixer)) commands.push({ type: "setTrackMixer", track: index, ...mixer });
+    commands.push(...mixerCommands({ track: index }, sent.mixer, mixer));
 
     commands.push(...updateChain(this.#plugins, index, sent.chain, track.insertChain, track.automation));
 
-    this.#sent[index] = { ...sent, clips, monitoring, mixer: { ...mixer } };
+    this.#sent[index] = { ...sent, clips, monitoring, mixer: copyMixer(mixer) };
     return commands;
   }
 
@@ -558,7 +565,7 @@ export class EngineSync {
     }
 
     const { mixer } = track;
-    if (!sameMixer(sent.mixer, mixer)) commands.push({ type: "setTrackMixer", track: index, ...mixer });
+    commands.push(...mixerCommands({ track: index }, sent.mixer, mixer));
 
     commands.push(...updateChain(this.#plugins, index, sent.chain, track.insertChain, track.automation));
 
@@ -574,7 +581,7 @@ export class EngineSync {
       pads: pads.map((pad) => ({ ...pad })),
       samples: pads.map((_, padIndex) => sample(padIndex)),
       notes,
-      mixer: { ...mixer },
+      mixer: copyMixer(mixer),
       chain: sent.chain,
       output: sent.output,
       sends: sent.sends,
@@ -734,4 +741,30 @@ function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
 
 function sameMixer(a: Mixer, b: Mixer): boolean {
   return a.volume === b.volume && a.pan === b.pan && a.mute === b.mute && a.solo === b.solo;
+}
+
+function sameEq(a: ChannelEq, b: ChannelEq): boolean {
+  return EQ_BANDS.every((band) => a[band] === b[band]);
+}
+
+function copyMixer(mixer: Mixer): Mixer {
+  return { ...mixer, eq: { ...mixer.eq } };
+}
+
+/**
+ * What brings a Track's or Bus's mixer channel from `sent` to `mixer`: its
+ * fader, pan and buttons in one command, and its EQ in another, each only
+ * when it changed.
+ */
+function mixerCommands(channel: { track: number } | { bus: number }, sent: Mixer, mixer: Mixer): EngineCommand[] {
+  const { eq, ...fader } = mixer;
+  const commands: EngineCommand[] = [];
+  if (!sameMixer(sent, mixer)) {
+    commands.push("track" in channel ? { type: "setTrackMixer", ...channel, ...fader } : { type: "setBusMixer", ...channel, ...fader });
+  }
+  if (!sameEq(sent.eq, eq)) {
+    const chain = "track" in channel ? channel.track : busChain(channel.bus);
+    commands.push({ type: "setChannelEq", chain, ...eq });
+  }
+  return commands;
 }

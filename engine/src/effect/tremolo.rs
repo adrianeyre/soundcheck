@@ -8,14 +8,16 @@
 //! Stereo phase runs the right side's pulse behind the left's, up to half a
 //! cycle, so the sound throbs from side to side.
 //!
-//! A synced Tremolo follows the tempo but not the song position: its pulse
-//! starts from the top of the level when it is made.
+//! A synced Tremolo follows the song's position while it plays: each note
+//! value of the song starts at the top of the level, so the pulse is on the
+//! beat. Stopped, or without a position, and whenever it isn't synced, it
+//! runs free from wherever it got to, starting at the top when it is made.
 
 use std::f32::consts::TAU;
 
 use super::delay::NOTE_VALUES;
 use super::params::{Param, Settings, choice, number, on, switch, time_coefficient};
-use super::stereo::StereoEffect;
+use super::stereo::{SongPosition, StereoEffect};
 
 /// The shapes an LFO of the Tremolo or the Auto Pan can take.
 pub const LFO_SHAPES: &[&str] = &["sine", "triangle", "square"];
@@ -48,11 +50,15 @@ pub(super) const DEFAULT_TEMPO: f64 = 120.0;
 /// edge, slow enough that it doesn't click.
 const GAIN_SMOOTHING_MS: f32 = 2.0;
 
+/// How many quarter notes `NOTE_VALUES[note]` lasts.
+pub(super) fn note_quarters(note: usize) -> f64 {
+    f64::from(NOTE_QUARTERS[note.min(NOTE_QUARTERS.len() - 1)])
+}
+
 /// The rate, in cycles per second, of one cycle per `NOTE_VALUES[note]` at
 /// `tempo` quarter notes per minute.
 pub(super) fn note_hz(note: usize, tempo: f64) -> f32 {
-    let quarters = NOTE_QUARTERS[note.min(NOTE_QUARTERS.len() - 1)];
-    tempo as f32 / 60.0 / quarters
+    (tempo / 60.0 / note_quarters(note)) as f32
 }
 
 /// An LFO's value, -1..=1, at `phase` (0..1) of its cycle, for the shape at
@@ -132,8 +138,14 @@ pub struct Tremolo {
     sample_rate: f32,
     settings: TremoloSettings,
     tempo: f64,
-    /// Where in its cycle the left side's LFO is, 0..1.
+    /// Where in its cycle the left side's LFO is, 0..1: from the song's
+    /// position while it moves and the Tremolo is synced.
     phase: f32,
+    song: SongPosition,
+    /// Whether the next frame jumps the gain to where it should be, not
+    /// smoothing it there: the first frame after `settle`, once the song's
+    /// position has placed it.
+    snap: bool,
     /// The level each side is at, following the LFO.
     gain: [f32; 2],
     smoothing: f32,
@@ -146,9 +158,24 @@ impl Tremolo {
             settings,
             tempo: DEFAULT_TEMPO,
             phase: 0.0,
+            song: SongPosition::default(),
+            snap: false,
             gain: [1.0; 2],
             smoothing: time_coefficient(GAIN_SMOOTHING_MS, sample_rate),
         }
+    }
+
+    /// The level each side's LFO puts it at, where it is.
+    fn targets(&self) -> [f32; 2] {
+        let TremoloSettings {
+            shape,
+            depth,
+            stereo_phase,
+            ..
+        } = self.settings;
+        // The LFO's top is full level, its bottom `1 - depth`.
+        let level = |phase: f32| 1.0 - depth * 0.5 * (1.0 - lfo_value(shape, phase));
+        [level(self.phase), level(self.phase - stereo_phase / 360.0)]
     }
 
     fn rate_hz(&self) -> f32 {
@@ -177,20 +204,31 @@ impl StereoEffect for Tremolo {
         }
     }
 
+    fn settle(&mut self) {
+        self.gain = self.targets();
+        self.snap = true;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let TremoloSettings {
-            shape,
-            depth,
-            stereo_phase,
-            ..
-        } = self.settings;
+        self.process_stereo_at(left, right, &[]);
+    }
+
+    fn process_stereo_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
         let increment = (self.rate_hz() / self.sample_rate).clamp(0.0, 0.5);
-        let offset = stereo_phase / 360.0;
+        let TremoloSettings { sync, note, .. } = self.settings;
+        let quarters = note_quarters(note);
         let smoothing = self.smoothing;
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            // The LFO's top is full level, its bottom `1 - depth`.
-            let target_left = 1.0 - depth * 0.5 * (1.0 - lfo_value(shape, self.phase));
-            let target_right = 1.0 - depth * 0.5 * (1.0 - lfo_value(shape, self.phase - offset));
+        for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            let moved = self.song.step(ticks, frame);
+            if let Some(moved) = moved.filter(|_| sync) {
+                // A playhead that jumps moves the LFO at once; the smoother
+                // takes the level there without a click.
+                self.phase = moved.phase(quarters) as f32;
+            }
+            let [target_left, target_right] = self.targets();
+            if std::mem::take(&mut self.snap) {
+                self.gain = [target_left, target_right];
+            }
             self.gain[0] = target_left + smoothing * (self.gain[0] - target_left);
             self.gain[1] = target_right + smoothing * (self.gain[1] - target_right);
             self.phase = (self.phase + increment).fract();
@@ -204,6 +242,7 @@ impl StereoEffect for Tremolo {
 mod tests {
     use super::*;
     use crate::dsp::measure::{max_jump, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
 
@@ -222,6 +261,20 @@ mod tests {
             tremolo.process_stereo(l, r);
         }
         (left, right)
+    }
+
+    /// `run`, with the song playing at 120 from `start` ticks.
+    fn run_at(tremolo: &mut Tremolo, input: &[f32], start: f64, chunk: usize) -> Vec<f32> {
+        let ticks = song_ticks(start, 120.0, RATE, input.len());
+        let (mut left, mut right) = (input.to_vec(), input.to_vec());
+        for ((l, r), t) in left
+            .chunks_mut(chunk)
+            .zip(right.chunks_mut(chunk))
+            .zip(ticks.chunks(chunk))
+        {
+            tremolo.process_stereo_at(l, r, t);
+        }
+        left
     }
 
     /// How many times a level that pulses crosses its middle going down.
@@ -316,5 +369,61 @@ mod tests {
             "a triangle's bottom"
         );
         assert!((lfo_value(1, 0.25)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn synced_and_playing_the_pulse_follows_the_songs_beats() {
+        let quarter = NOTE_VALUES.iter().position(|&n| n == "1/4").unwrap();
+        let synced = settings(&[("sync", 1.0), ("note", quarter as f32), ("depth", 1.0)]);
+        let dc = vec![1.0; 48_000];
+        for chunk in [1, 128] {
+            let mut tremolo = Tremolo::new(RATE, synced);
+            tremolo.settle();
+            // Half a beat in, the level is at its bottom; each beat, 12,000
+            // frames on, it is back at the top.
+            let left = run_at(&mut tremolo, &dc, 480.0, chunk);
+            assert!(left[0] < 1e-3, "{}", left[0]);
+            assert!((left[12_000] - 1.0).abs() < 1e-3, "{}", left[12_000]);
+            assert!(left[24_000] < 1e-3, "{}", left[24_000]);
+            assert!((left[36_000] - 1.0).abs() < 1e-3);
+        }
+        // With no position it starts at the top.
+        let mut tremolo = Tremolo::new(RATE, synced);
+        let (left, _) = run(&mut tremolo, &dc, 128);
+        assert!((left[0] - 1.0).abs() < 1e-3 && left[12_000] < 1e-3);
+    }
+
+    #[test]
+    fn unsynced_it_runs_free_while_the_song_plays() {
+        let changes = [("rateHz", 3.0), ("depth", 0.7)];
+        let input = sine(220.0, 0.8, RATE, 20_000);
+        let free = run(&mut Tremolo::new(RATE, settings(&changes)), &input, 128).0;
+        let playing = run_at(
+            &mut Tremolo::new(RATE, settings(&changes)),
+            &input,
+            480.0,
+            128,
+        );
+        assert_eq!(playing, free);
+    }
+
+    #[test]
+    fn settled_it_starts_at_its_stereo_phase_and_later_changes_glide() {
+        let changes = [("depth", 1.0), ("stereoPhase", 180.0)];
+        let mut tremolo = Tremolo::new(RATE, TremoloSettings::default());
+        tremolo.set_settings(settings(&changes));
+        tremolo.settle();
+        // The right side starts at the bottom, not gliding down from the top.
+        let (_, right) = run(&mut tremolo, &vec![1.0; 100], 100);
+        assert!(right[0] < 1e-3, "{}", right[0]);
+
+        tremolo.set_settings(settings(&[("depth", 0.0)]));
+        let (_, right) = run(&mut tremolo, &vec![1.0; 1_000], 1_000);
+        assert!(
+            right[0] < 0.1 && right[999] > 0.99,
+            "{} {}",
+            right[0],
+            right[999]
+        );
     }
 }

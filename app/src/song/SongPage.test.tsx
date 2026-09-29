@@ -355,7 +355,7 @@ test("the mixer sets a Track's channel and the Master, and the engine hears it",
   fireEvent.change(screen.getByLabelText("Synth 1 pan"), { target: { value: "-1" } });
   click("Mute Synth 1");
   click("Solo Synth 1");
-  expect(tracks()[0]!.mixer).toEqual({ volume: 0.5, pan: -1, mute: true, solo: true });
+  expect(tracks()[0]!.mixer).toEqual({ volume: 0.5, pan: -1, mute: true, solo: true, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } });
   expect(output.send).toHaveBeenCalledWith({
     type: "setTrackMixer",
     track: 0,
@@ -553,7 +553,7 @@ test("clicking a key or a drum wherever one is drawn plays it through the engine
 
   click("Add Drum Track");
   fireEvent.click(screen.getAllByRole("button", { name: "Add Pattern Clip" }).at(-1)!);
-  const snares = screen.getAllByRole("button", { name: "Hit Snare, Rimshot, Electric Snare" });
+  const snares = screen.getAllByRole("button", { name: "Hit Snare" });
   expect(snares.length).toBeGreaterThanOrEqual(2);
   for (const snare of snares) {
     output.send.mockClear();
@@ -601,6 +601,23 @@ test("a Drum Track is programmed by pad name, and its pads are edited and loaded
   expect(pads()[2]!.sample).toBe("audio/clap.wav");
   click(/^Undo Load sample$/);
   expect(pads()[2]!.sample).toBeNull();
+
+  // A Pad added past the kit's end is a row of the grid too, and the engine
+  // builds the kit again at its new size; taking it off undoes like any edit.
+  output.send.mockClear();
+  click("Add Pad");
+  expect(pads()).toHaveLength(STARTER_KIT.length + 1);
+  expect(cells("Pad 23")).toHaveLength(64);
+  await waitFor(() =>
+    expect(output.send).toHaveBeenCalledWith({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: STARTER_KIT.length + 1 }),
+  );
+  click("Remove last Pad");
+  expect(screen.queryAllByLabelText(/^Pad 23 step /)).toHaveLength(0);
+  await waitFor(() =>
+    expect(output.send).toHaveBeenCalledWith({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: STARTER_KIT.length }),
+  );
+  click(/^Undo Remove Pad$/);
+  expect(pads()).toHaveLength(STARTER_KIT.length + 1);
 });
 
 test("a WAV loaded onto a pad is saved with the Project and plays again when it is opened", async () => {

@@ -50,3 +50,9 @@ The Mixer page (ADR 0013) is Widgets on a Grid too: its waveforms, each Deck, it
 - **The Grid menu is the open page's:** its Widgets, which are empty, and a Reset layout for that page. Settings has no Grid, so it has no Grid menu.
 - **Only the open page's pinned Widgets are drawn** in the slots under the title bar and above the footer. A hidden page's pinned Widgets are drawn in their own page, which is hidden, and stay mounted.
 - A new Widget on either page follows the steps above, in its page's list.
+
+## Amended: the Pads page's Grid
+
+The Pads page is a third page with a Grid of its own, as the Mixer page is: its Widgets are listed in `PADS_WIDGETS` (the Pad Controller the Grid's whole width, a Track browser under it), its layout is kept under `soundcheck.grid.pads`, listed in the Cookie Policy, and the Grid menu and Reset layout are its own while it is open.
+
+A Widget can start hidden (`startsHidden` in its spec): it is on its page's Grid menu, unticked, until the musician shows it, and Reset layout hides it again. The Mixer page's Pad Controller starts that way, so the Mixer page opens as it did.

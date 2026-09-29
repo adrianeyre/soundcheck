@@ -1,5 +1,5 @@
 import { FilePlus2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { camelotName, formatBpm, formatTime, keyName } from "./dj-logic";
 import { DJ_TRACK_DRAG_TYPE, type LibraryTrack, titleOf } from "./dj-state";
@@ -42,6 +42,11 @@ export interface TrackBrowserProps {
   canLoad: boolean;
   onAdd: (files: File[]) => void;
   onLoad: (trackId: string, deck: number) => void;
+  /** The track the Pad Controller's browse knob is on, marked; clicking a title moves it there. */
+  cursor?: string | null;
+  onCursor?: (trackId: string) => void;
+  /** Told the order the tracks are shown in, whenever it changes. */
+  onOrder?: (ids: readonly string[]) => void;
 }
 
 /**
@@ -49,10 +54,14 @@ export interface TrackBrowserProps {
  * Camelot notation too) and length once a Deck has analysed it, sortable by
  * any column. A row loads onto a Deck by its buttons, or is dragged onto one.
  */
-export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBrowserProps) {
+export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad, cursor = null, onCursor, onOrder }: TrackBrowserProps) {
   const [sort, setSort] = useState<{ column: Column; ascending: boolean }>({ column: "title", ascending: true });
   const input = useRef<HTMLInputElement>(null);
   const sorted = sortTracks(tracks, sort.column, sort.ascending);
+  const orderKey = sorted.map((t) => t.id).join("\u0000");
+  useEffect(() => {
+    onOrder?.(orderKey ? orderKey.split("\u0000") : []);
+  }, [orderKey, onOrder]);
 
   return (
     <div
@@ -115,9 +124,25 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad }: TrackBro
                 <tr
                   key={track.id}
                   draggable
+                  aria-current={cursor === track.id || undefined}
+                  data-cursor={cursor === track.id || undefined}
                   onDragStart={(event) => event.dataTransfer.setData(DJ_TRACK_DRAG_TYPE, track.id)}
                 >
-                  <th scope="row">{titleOf(track.name)}</th>
+                  <th scope="row">
+                    {onCursor ? (
+                      <button
+                        type="button"
+                        className="dj-track-select"
+                        aria-label={`Choose ${titleOf(track.name)}${cursor === track.id ? ", chosen" : ""}`}
+                        aria-pressed={cursor === track.id}
+                        onClick={() => onCursor(track.id)}
+                      >
+                        {titleOf(track.name)}
+                      </button>
+                    ) : (
+                      titleOf(track.name)
+                    )}
+                  </th>
                   <td className="num">{track.analysis ? formatBpm(track.analysis.bpm) : "—"}</td>
                   <td className="num">
                     {track.analysis?.key ? `${keyName(track.analysis.key)} · ${camelotName(track.analysis.key)}` : "—"}

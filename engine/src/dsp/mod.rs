@@ -2,12 +2,14 @@
 
 mod biquad;
 mod envelope;
+mod four_band;
 mod lfo;
 mod oscillator;
 mod resample;
 
 pub use biquad::{Biquad, FilterKind};
 pub use envelope::Envelope;
+pub use four_band::FourBand;
 pub use lfo::Lfo;
 pub use oscillator::{Oscillator, Waveform};
 pub use resample::{resample, resample_range};

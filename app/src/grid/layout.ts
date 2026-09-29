@@ -58,17 +58,32 @@ export interface WidgetPlacement extends Cell {
 }
 
 /**
- * A page with a Grid of its own: the Editor's Widgets, and the Mixing
- * page's. Each page keeps its own layout, holding only its own Widgets, and
- * the Grid menu lists the Widgets of the page that is open.
+ * A page with a Grid of its own: the Editor's Widgets, the Mixer page's and
+ * the Pads page's. Each page keeps its own layout, holding only its own
+ * Widgets, and the Grid menu lists the Widgets of the page that is open.
  */
-export type GridPage = "editor" | "mixing";
+export type GridPage = "editor" | "mixing" | "pads";
 
-/** Every Widget there is, on either page. A new one is added here and in its page's list below (ADR 0004). */
-export type WidgetId = EditorWidgetId | MixingWidgetId;
+/** Every Widget there is, on any page. A new one is added here and in its page's list below (ADR 0004). */
+export type WidgetId = EditorWidgetId | MixingWidgetId | PadsWidgetId;
 
-/** The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer and two Track browsers. */
-export type MixingWidgetId = "djWaveforms" | "deck1" | "deck2" | "deck3" | "deck4" | "djMixer" | "djBrowser" | "djBrowser2";
+/**
+ * The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer, two Track browsers,
+ * and the Pad Controller, hidden until the DJ shows it.
+ */
+export type MixingWidgetId =
+  | "djWaveforms"
+  | "deck1"
+  | "deck2"
+  | "deck3"
+  | "deck4"
+  | "djMixer"
+  | "djBrowser"
+  | "djBrowser2"
+  | "djPadController";
+
+/** The Pads page's Widgets: the Pad Controller across the Grid, and a Track browser under it. */
+export type PadsWidgetId = "padController" | "padsBrowser";
 
 export type EditorWidgetId =
   | "transport"
@@ -113,6 +128,8 @@ export interface WidgetSpec {
   tuck?: { under: WidgetId; downTo: WidgetId };
   /** Rows it is drawn taller than its content, a band of its own space under it: none unless given. */
   extra?: number;
+  /** Hidden until the musician shows it from the Grid menu, and again after "Reset layout". */
+  startsHidden?: boolean;
 }
 
 const MIN = { w: 4, h: 3 };
@@ -173,10 +190,26 @@ export const MIXING_WIDGETS: readonly WidgetSpec[] = [
     min: { w: 6, h: 5 },
     tuck: { under: "deck2", downTo: "djMixer" },
   },
+  // The Pads page's controller, here too for a DJ who wants it beside the Decks; hidden until then.
+  { id: "djPadController", title: "Pad Controller", initial: { x: 0, y: 110, w: 24, h: 40 }, min: { w: 12, h: 10 }, startsHidden: true },
+];
+
+/**
+ * The Pads page's: the Pad Controller the Grid's whole width, so there is
+ * room to play it, and a Track browser under it to load the Sampler Slots
+ * and the Decks from.
+ */
+export const PADS_WIDGETS: readonly WidgetSpec[] = [
+  { id: "padController", title: "Pad Controller", initial: { x: 0, y: 0, w: 24, h: 40 }, min: { w: 12, h: 10 } },
+  { id: "padsBrowser", title: "Track browser", initial: { x: 0, y: 40, w: 24, h: 14 }, min: { w: 6, h: 5 } },
 ];
 
 /** Each page's Widgets. */
-export const PAGE_WIDGETS: Readonly<Record<GridPage, readonly WidgetSpec[]>> = { editor: WIDGETS, mixing: MIXING_WIDGETS };
+export const PAGE_WIDGETS: Readonly<Record<GridPage, readonly WidgetSpec[]>> = {
+  editor: WIDGETS,
+  mixing: MIXING_WIDGETS,
+  pads: PADS_WIDGETS,
+};
 
 /**
  * Where each Widget of one page sits. It holds only that page's Widgets,
@@ -184,7 +217,7 @@ export const PAGE_WIDGETS: Readonly<Record<GridPage, readonly WidgetSpec[]>> = {
  */
 export type WidgetLayout = Record<WidgetId, WidgetPlacement>;
 
-const ALL_WIDGETS: readonly WidgetSpec[] = [...WIDGETS, ...MIXING_WIDGETS];
+const ALL_WIDGETS: readonly WidgetSpec[] = [...WIDGETS, ...MIXING_WIDGETS, ...PADS_WIDGETS];
 const SPECS = new Map(ALL_WIDGETS.map((spec) => [spec.id, spec]));
 
 export function widgetSpec(id: WidgetId): WidgetSpec {
@@ -198,7 +231,10 @@ export function specsOf(layout: WidgetLayout): WidgetSpec[] {
 
 export function defaultLayout(page: GridPage = "editor"): WidgetLayout {
   return Object.fromEntries(
-    PAGE_WIDGETS[page].map((spec) => [spec.id, { ...spec.initial, zone: "main", hidden: false, ...(spec.tuck && { tucked: true }) }]),
+    PAGE_WIDGETS[page].map((spec) => [
+      spec.id,
+      { ...spec.initial, zone: "main", hidden: spec.startsHidden === true, ...(spec.tuck && { tucked: true }) },
+    ]),
   ) as WidgetLayout;
 }
 

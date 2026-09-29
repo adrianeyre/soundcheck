@@ -175,6 +175,10 @@ impl StereoEffect for Vowel {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.position = self.settings.vowel as f32 + self.settings.morph;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let mix = self.settings.mix;
         for (l, r) in left.iter_mut().zip(right.iter_mut()) {

@@ -208,6 +208,17 @@ impl StereoEffect for Resonator {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        let damping = damping(self.settings.brightness);
+        for (index, (cycle, level)) in targets(&self.settings, self.sample_rate)
+            .into_iter()
+            .enumerate()
+        {
+            self.lengths[index] = line_length(cycle, damping);
+            self.levels[index] = level;
+        }
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let ResonatorSettings {
             decay,

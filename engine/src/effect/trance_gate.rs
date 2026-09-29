@@ -1,16 +1,19 @@
 //! The Trance Gate Effect: chops the signal into a rhythm, the stuttering
 //! pads and supersaws of trance.
 //!
-//! A bar of 16 steps, each a Step length long, runs in time with the tempo
-//! from when the Gate starts, since it has no song position. Pattern picks
-//! which steps are open. Each open step fades in over Attack and out over
+//! A pattern of 16 steps, each a Step length long, runs in time with the
+//! tempo. While the song plays it follows the song's position, so with
+//! sixteenth steps the first step lands on each bar (of four beats); with
+//! eighths, on every other bar. Stopped, or without a position, it runs free
+//! from wherever it got to, from the first step when it is made. Pattern
+//! picks which steps are open. Each open step fades in over Attack and out over
 //! Release, so the chops don't click and two open steps in a row are still
 //! heard as two; closed steps fall by Depth, all the way to silence at 1.
 //! Mix blends it with the dry signal.
 
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, choice, number, time_coefficient};
-use super::stereo::StereoEffect;
+use super::stereo::{SongPosition, StereoEffect};
 
 /// How long each step lasts, shortest first.
 pub const GATE_STEPS: &[&str] = &["1/32", "1/16", "1/8"];
@@ -116,9 +119,14 @@ pub struct TranceGate {
     sample_rate: f32,
     settings: TranceGateSettings,
     tempo: f64,
-    /// Where in the bar the Gate is, in steps, 0..16, counted from when it
-    /// started.
+    /// Where in the pattern the Gate is, in steps, 0..16: from the song's
+    /// position while it moves, counted on from there when it doesn't.
     position: f64,
+    song: SongPosition,
+    /// Whether the next frame jumps the gain to where it should be, not
+    /// smoothing it there: the first frame after `settle`, once the song's
+    /// position has placed it.
+    snap: bool,
     gain: f32,
     smoothing: f32,
 }
@@ -130,14 +138,52 @@ impl TranceGate {
             settings,
             tempo: DEFAULT_TEMPO,
             position: 0.0,
+            song: SongPosition::default(),
+            snap: false,
             gain: 1.0,
             smoothing: time_coefficient(SMOOTHING_MS, sample_rate),
         }
     }
 
+    /// How many quarter notes one step lasts.
+    fn step_quarters(&self) -> f64 {
+        STEP_QUARTERS[self.settings.step.min(STEP_QUARTERS.len() - 1)]
+    }
+
     fn step_samples(&self) -> f64 {
-        let quarters = STEP_QUARTERS[self.settings.step.min(STEP_QUARTERS.len() - 1)];
-        quarters * 60.0 / self.tempo * f64::from(self.sample_rate)
+        self.step_quarters() * 60.0 / self.tempo * f64::from(self.sample_rate)
+    }
+
+    /// The gain the pattern puts on the Gate where it is, with its steps
+    /// `length` samples long.
+    fn target(&self, length: f64) -> f32 {
+        let TranceGateSettings {
+            pattern,
+            attack_ms,
+            release_ms,
+            depth,
+            ..
+        } = self.settings;
+        let open = &PATTERN_STEPS[pattern.min(PATTERN_STEPS.len() - 1)];
+        let per_ms = self.sample_rate / 1_000.0;
+        let (mut attack, mut release) = (
+            (attack_ms * per_ms).max(1.0),
+            (release_ms * per_ms).max(1.0),
+        );
+        // Short steps squeeze both fades to fit, keeping their balance.
+        let fit = length as f32 / (attack + release);
+        if fit < 1.0 {
+            attack *= fit;
+            release *= fit;
+        }
+        let floor = 1.0 - depth;
+        let step = (self.position as usize).min(STEPS - 1);
+        if open[step] {
+            let at = (self.position - step as f64) * length;
+            floor + depth * Self::envelope(at as f32, length as f32, attack, release)
+        } else {
+            floor
+        }
     }
 
     /// How open a step is `at` samples in, 0..=1, when it fades in over
@@ -164,38 +210,30 @@ impl StereoEffect for TranceGate {
         }
     }
 
+    fn settle(&mut self) {
+        self.gain = self.target(self.step_samples());
+        self.snap = true;
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let TranceGateSettings {
-            pattern,
-            attack_ms,
-            release_ms,
-            depth,
-            mix,
-            ..
-        } = self.settings;
-        let open = &PATTERN_STEPS[pattern.min(PATTERN_STEPS.len() - 1)];
+        self.process_stereo_at(left, right, &[]);
+    }
+
+    fn process_stereo_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
+        let mix = self.settings.mix;
         let length = self.step_samples();
-        let per_ms = self.sample_rate / 1_000.0;
-        let (mut attack, mut release) = (
-            (attack_ms * per_ms).max(1.0),
-            (release_ms * per_ms).max(1.0),
-        );
-        // Short steps squeeze both fades to fit, keeping their balance.
-        let fit = length as f32 / (attack + release);
-        if fit < 1.0 {
-            attack *= fit;
-            release *= fit;
-        }
-        let floor = 1.0 - depth;
+        let pattern_quarters = self.step_quarters() * STEPS as f64;
         let increment = 1.0 / length;
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            let step = (self.position as usize).min(STEPS - 1);
-            let target = if open[step] {
-                let at = (self.position - step as f64) * length;
-                floor + depth * Self::envelope(at as f32, length as f32, attack, release)
-            } else {
-                floor
-            };
+        for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            if let Some(moved) = self.song.step(ticks, frame) {
+                // A playhead that jumps moves the pattern at once; the
+                // smoother takes the gain there without a click.
+                self.position = moved.phase(pattern_quarters) * STEPS as f64;
+            }
+            let target = self.target(length);
+            if std::mem::take(&mut self.snap) {
+                self.gain = target;
+            }
             self.gain = target + self.smoothing * (self.gain - target);
             self.position += increment;
             if self.position >= STEPS as f64 {
@@ -213,6 +251,7 @@ impl StereoEffect for TranceGate {
 mod tests {
     use super::*;
     use crate::dsp::measure::{max_jump, rms, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
     /// A sixteenth at 120 is 6,000 frames.
@@ -238,6 +277,20 @@ mod tests {
             gate.process_stereo(l, r);
         }
         assert_eq!(left, right);
+        left
+    }
+
+    /// `run`, with the song playing at 120 from `start` ticks.
+    fn run_at(gate: &mut TranceGate, input: &[f32], start: f64, chunk: usize) -> Vec<f32> {
+        let ticks = song_ticks(start, 120.0, RATE, input.len());
+        let (mut left, mut right) = (input.to_vec(), input.to_vec());
+        for ((l, r), t) in left
+            .chunks_mut(chunk)
+            .zip(right.chunks_mut(chunk))
+            .zip(ticks.chunks(chunk))
+        {
+            gate.process_stereo_at(l, r, t);
+        }
         left
     }
 
@@ -325,5 +378,51 @@ mod tests {
             );
         }
         assert_eq!(GATE_PATTERNS.len(), PATTERN_STEPS.len());
+    }
+
+    #[test]
+    fn playing_the_pattern_starts_on_each_bar() {
+        let build = pattern("build");
+        let open = PATTERN_STEPS[build as usize];
+        // A beat and a half into a bar is its seventh sixteenth, step 6.
+        for chunk in [1, 256] {
+            let mut gate = TranceGate::new(RATE, settings(&[("pattern", build)]));
+            let out = run_at(&mut gate, &vec![1.0; STEP * 24], 1_440.0, chunk);
+            for frame_step in 0..24 {
+                let middle = out[frame_step * STEP + STEP / 2];
+                let expected = if open[(frame_step + 6) % 16] {
+                    1.0
+                } else {
+                    0.0
+                };
+                assert!(
+                    (middle - expected).abs() < 1e-4,
+                    "{chunk}: step {}: {middle}",
+                    frame_step + 6
+                );
+            }
+        }
+        // With no position, the pattern starts where the Gate does.
+        let mut gate = TranceGate::new(RATE, settings(&[("pattern", build)]));
+        let out = run(&mut gate, &vec![1.0; STEP * 16], 256);
+        for step in 0..16 {
+            let expected = if open[step] { 1.0 } else { 0.0 };
+            assert!((out[step * STEP + STEP / 2] - expected).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn a_playhead_that_jumps_does_not_click() {
+        // From the middle of an open step to the middle of a closed one.
+        let input = sine(150.0, 0.8, RATE, STEP * 4);
+        let mut ticks = song_ticks(0.0, 120.0, RATE, input.len());
+        for tick in &mut ticks[STEP / 2..] {
+            *tick += 240.0;
+        }
+        let mut gate = TranceGate::new(RATE, settings(&[]));
+        let (mut left, mut right) = (input.clone(), input.clone());
+        gate.process_stereo_at(&mut left, &mut right, &ticks);
+        assert!(left[STEP / 2 + 200].abs() < 1e-3, "it did jump");
+        assert!(max_jump(&left) < 0.1, "{}", max_jump(&left));
     }
 }

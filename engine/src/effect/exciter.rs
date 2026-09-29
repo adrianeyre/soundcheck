@@ -174,6 +174,16 @@ impl StereoEffect for Exciter {
         self.settings = settings;
     }
 
+    fn settle(&mut self) {
+        self.current = Self::targets(self.settings);
+        if self.frequency_hz != self.settings.frequency_hz {
+            self.frequency_hz = self.settings.frequency_hz;
+            for side in &mut self.sides {
+                *side = side.retuned(self.sample_rate, self.frequency_hz);
+            }
+        }
+    }
+
     fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         let targets = Self::targets(self.settings);
         for (l, r) in left.iter_mut().zip(right.iter_mut()) {
