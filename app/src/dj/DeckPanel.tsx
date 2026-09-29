@@ -14,6 +14,7 @@ import {
   formatBpm,
   formatTempo,
   formatTime,
+  DECK_HOT_CUE_PADS,
   HOT_CUE_COLOURS,
   HOT_CUE_NAMES,
   keyName,
@@ -311,7 +312,7 @@ export function DeckPanel(props: DeckPanelProps) {
 
       <div className="dj-pads-row">
         <div className="dj-hot-cues" role="group" aria-label={`${name} Hot Cues`}>
-          {state.hotCues.map((hot, index) => {
+          {state.hotCues.slice(0, DECK_HOT_CUE_PADS).map((hot, index) => {
             const letter = HOT_CUE_NAMES[index]!;
             return (
               <button

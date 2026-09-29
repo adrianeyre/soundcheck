@@ -99,9 +99,12 @@ fn check_and_download(
     target: &str,
 ) -> (Option<String>, Result<usize, String>) {
     let address = serve(|address| manifest(address, announced));
+    // Older than the stand-in, whatever version the app has been released at.
+    let mut context = context();
+    context.package_info_mut().version = "1.0.0".parse().unwrap();
     let app = mock_builder()
         .plugin(tauri_plugin_updater::Builder::new().pubkey(pubkey).build())
-        .build(context())
+        .build(context)
         .expect("the app builds");
     let updater = app
         .updater_builder()

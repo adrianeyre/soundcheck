@@ -26,8 +26,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::audio_clip::{AudioClip, AudioClips};
 use crate::audio_file::{AudioFile, AudioFileError};
-use crate::automation::{Automatable, Automation, Line};
+use crate::automation::{Automatable, Automation, EqAutomation, Line};
 use crate::bus::{Bus, BusSend, MAX_BUSES, Output, add_following, add_scaled};
+use crate::channel_eq::ChannelEq;
 use crate::dj::{DJ_REPORT_LEN, DjControl, DjMixer, DjTrack};
 use crate::effect::{Effect, EffectKind, InsertChain};
 use crate::instrument::{
@@ -124,6 +125,10 @@ pub struct Engine {
     /// The Master's Insert Chain, which the whole mix goes through before
     /// the fader.
     master_chain: InsertChain,
+    /// The Master's channel EQ, after its Insert Chain and before its
+    /// fader, and what moves it while the song plays.
+    master_eq: ChannelEq,
+    master_eq_automation: EqAutomation,
     /// The loudest sample of the last output, for the Master's meter.
     master_meter: f32,
     /// While set, only this Track renders: nothing else, not even the live
@@ -172,6 +177,8 @@ impl Engine {
             master_gain: Vec::new(),
             ticks: Vec::new(),
             master_chain: InsertChain::default(),
+            master_eq: ChannelEq::new(sample_rate),
+            master_eq_automation: EqAutomation::default(),
             master_meter: 0.0,
             isolate: None,
             offline: None,
@@ -208,10 +215,45 @@ impl Engine {
         self.master_volume
     }
 
+    /// Set the channel EQ of a Track, a Bus or the Master, numbered as an
+    /// Insert Chain is (see `insert_effect`): each band's gain in dB, from
+    /// -12 to 12, 0 leaving it flat. A value that isn't a number leaves its
+    /// band as it was, and a channel that doesn't exist is ignored.
+    /// Allocates nothing, so a native host's audio thread calls it directly.
+    pub fn set_channel_eq(&mut self, chain: i32, low: f32, low_mid: f32, high_mid: f32, high: f32) {
+        let db = [low, low_mid, high_mid, high];
+        match ChainOwner::of(chain) {
+            ChainOwner::Track(track) => {
+                if let Some(track) = self.tracks.get_mut(track) {
+                    track.set_eq(db);
+                }
+            }
+            ChainOwner::Bus(bus) => {
+                if let Some(bus) = self.buses.get_mut(bus) {
+                    bus.set_eq(db);
+                }
+            }
+            ChainOwner::Master => self.master_eq.set(db),
+        }
+    }
+
+    /// A channel's EQ, low to high, in dB, numbered as `set_channel_eq`
+    /// takes it, or none if there is no such channel.
+    pub fn channel_eq(&self, chain: i32) -> Vec<f32> {
+        match ChainOwner::of(chain) {
+            ChainOwner::Track(track) => self.tracks.get(track).map(|track| track.eq()),
+            ChainOwner::Bus(bus) => self.buses.get(bus).map(|bus| bus.eq()),
+            ChainOwner::Master => Some(self.master_eq.db()),
+        }
+        .map(Vec::from)
+        .unwrap_or_default()
+    }
+
     /// Replace the Automation of one setting of a Track, a Bus or the
     /// Master, numbered as an Insert Chain is (see `insert_effect`). The
-    /// setting is "volume", "pan", "send:<bus>" for the level of the Send
-    /// to that Bus, "effect:<index>:<setting>" for a number in the Effect
+    /// setting is "volume", "pan", "eq:<band>" for a band of the channel EQ
+    /// ("low", "lowMid", "highMid" or "high", in dB), "send:<bus>" for the
+    /// level of the Send to that Bus, "effect:<index>:<setting>" for a number in the Effect
     /// there's table, "instrument:<setting>" for a number in the Synth's
     /// table, or "pad:<pad>:<setting>" for the "volume", "pan" or "pitch" of
     /// the Drum Sampler's pad there, counting from 0 (see
@@ -366,7 +408,9 @@ impl Engine {
             self.remove_bus();
         }
         while self.buses.len() < count {
-            self.buses.push(Box::new(Bus::new()));
+            let mut bus = Box::new(Bus::new());
+            bus.set_sample_rate(self.sample_rate);
+            self.buses.push(bus);
             self.route();
         }
     }
@@ -488,8 +532,8 @@ impl Engine {
     /// Give Track `track` the Instrument the UI names: "synth", or
     /// "drumSampler" for the Drum Sampler with the bundled starter kit on
     /// its pads. `pads` is how many pads that kit has, for a Drum Sampler
-    /// the Project says is bigger than the bundled 8 (8 to 16, PRD #10);
-    /// leave it out for the bundled kit's own size. Answers whether it
+    /// the Project says is smaller or bigger than the bundled kit (up to
+    /// `MAX_PADS`); leave it out for the bundled kit's own size. Answers whether it
     /// happened: an unknown name, or a Track that doesn't exist, changes
     /// nothing.
     pub fn set_track_instrument(
@@ -1062,6 +1106,23 @@ impl Engine {
         self.swap_dj_track(deck, None);
     }
 
+    /// Put a sample in a Sampler Slot from its samples, already at the
+    /// engine's rate (`dj_prepare_sample`), so the audio thread only moves
+    /// them in.
+    pub fn dj_load_sample_samples(&mut self, slot: usize, left: Vec<f32>, right: Vec<f32>) {
+        let frames = left.len().min(right.len());
+        let (mut left, mut right) = (left, right);
+        left.truncate(frames);
+        right.truncate(frames);
+        let file = PreparedAudioFile::from_file(AudioFile::from_samples(left, right));
+        self.swap_dj_sample(slot, Some(file));
+    }
+
+    /// Empty a Sampler Slot.
+    pub fn dj_unload_sample(&mut self, slot: usize) {
+        self.swap_dj_sample(slot, None);
+    }
+
     /// Set the DJ Mixer's control `name` of a `kind` ("deck", "channel" or
     /// "mixer"), numbered by `index`, to `value`. Answers whether there is
     /// such a control.
@@ -1225,7 +1286,7 @@ pub struct PreparedInstrument(Instrument);
 impl PreparedInstrument {
     /// The Instrument the UI names ("synth" or "drumSampler"), with the
     /// bundled kit already decoded where that is the Drum Sampler, on `pads`
-    /// pads (8 to 16, PRD #10) or the kit's own size where the host doesn't
+    /// pads (up to `MAX_PADS`) or the kit's own size where the host doesn't
     /// say.
     pub fn named(kind: &str, sample_rate: f32, pads: Option<usize>) -> Option<Self> {
         let pads = pads.unwrap_or(DEFAULT_PADS).clamp(1, MAX_PADS);
@@ -1409,6 +1470,27 @@ impl Engine {
         }
     }
 
+    /// Put a prepared sample in a Sampler Slot, or empty it with None,
+    /// handing back the one it replaces. Without a DJ Mixer on a native host
+    /// the sample comes back.
+    pub fn swap_dj_sample(
+        &mut self,
+        slot: usize,
+        file: Option<PreparedAudioFile>,
+    ) -> Option<PreparedAudioFile> {
+        match &mut self.dj {
+            Some(dj) => dj.load_sample(slot, file),
+            None if cfg!(target_arch = "wasm32") => {
+                file.as_ref()?;
+                let mut dj = Box::new(DjMixer::new(self.sample_rate));
+                let back = dj.load_sample(slot, file);
+                self.dj = Some(dj);
+                back
+            }
+            None => file,
+        }
+    }
+
     /// Set a DJ Mixer control. Allocates nothing on a native host, which
     /// installs the mixer first; the browser builds it on first use.
     pub fn dj_apply(&mut self, control: DjControl, value: f64) {
@@ -1576,8 +1658,9 @@ impl Engine {
     /// Give a Track, Bus or the Master (`target` is numbered as an Insert
     /// Chain is: see `insert_effect`) Automation built elsewhere, handing
     /// back what it replaces, or `automation` itself when there is no such
-    /// channel or setting. The Master has only its volume and its Effects'
-    /// settings to automate, and a Bus has no Instrument. Allocates nothing.
+    /// channel or setting. The Master has only its volume, its EQ and its
+    /// Effects' settings to automate, and a Bus has no Instrument.
+    /// Allocates nothing.
     pub fn swap_automation(
         &mut self,
         target: i32,
@@ -1599,6 +1682,9 @@ impl Engine {
             },
             (ChainOwner::Master, Automatable::Volume) => {
                 std::mem::replace(&mut self.master_automation, automation)
+            }
+            (ChainOwner::Master, Automatable::Eq(band)) => {
+                self.master_eq_automation.set(band, automation)
             }
             (ChainOwner::Master, Automatable::Effect { index, param }) => {
                 match self.master_chain.effect_mut(index) {
@@ -1657,7 +1743,9 @@ impl Engine {
         if self.buses.len() >= self.buses.capacity().min(MAX_BUSES) {
             return Err(bus);
         }
-        self.buses.push(bus.0);
+        let mut bus = bus.0;
+        bus.set_sample_rate(self.sample_rate);
+        self.buses.push(bus);
         self.route();
         Ok(())
     }
@@ -1950,6 +2038,13 @@ impl Engine {
             &mut self.right[start..end],
             &self.ticks[start..end],
         );
+        let ticks = &self.ticks[start..end];
+        self.master_eq.process(
+            &mut self.left[start..end],
+            &mut self.right[start..end],
+            self.master_eq_automation.lines(ticks),
+            ticks,
+        );
     }
 
     fn mix_buses(&mut self, start: usize, end: usize) {
@@ -2030,6 +2125,7 @@ impl Engine {
             .filter_map(|t| t.next_breakpoint(from))
             .chain(self.buses.iter().filter_map(|b| b.next_breakpoint(from)))
             .chain(self.master_automation.next_point(from))
+            .chain(self.master_eq_automation.next_point(from))
             .chain(self.master_chain.next_breakpoint(from))
             .min();
         [notes, beat, loop_end, tempo_change, breakpoint]
@@ -2098,7 +2194,8 @@ impl Engine {
         // Automation follows the song across the segment, which has no
         // breakpoint inside it, frame by frame: each frame's tick depends
         // only on where it is in the song, so export and playback agree
-        // however their blocks fall.
+        // however their blocks fall. The same ticks line an Effect synced to
+        // the song (a Pump, a Trance Gate...) up with its beats.
         let ticks = &mut self.ticks[start..end];
         for (frame, tick) in ticks.iter_mut().enumerate() {
             *tick = self.transport.position_after(frame as u64);
@@ -2254,6 +2351,8 @@ mod automation_tests;
 #[cfg(test)]
 mod bus_tests;
 #[cfg(test)]
+mod channel_eq_tests;
+#[cfg(test)]
 mod delay_tests;
 mod export;
 #[cfg(test)]
@@ -2264,6 +2363,8 @@ mod plugin_tests;
 mod send_tests;
 #[cfg(test)]
 mod settings_automation_tests;
+#[cfg(test)]
+mod synced_effect_tests;
 #[cfg(test)]
 mod tempo_change_tests;
 #[cfg(test)]

@@ -2,12 +2,17 @@ import { ChevronLeft, ChevronRight, Plus, SlidersHorizontal, Trash2, X } from "l
 import { type ReactNode, useState } from "react";
 
 import type { Meters } from "../audio/audio-output";
+import { Knob } from "../dj/Knob";
 import { InsertChainPanel } from "../effect/InsertChainPanel";
-import type { Command } from "../project/commands";
+import { EQ_BAND_LABELS } from "../project/automation";
+import type { Command, MixerChange } from "../project/commands";
 import {
   type AutomatedSetting,
   type Automation,
+  type ChannelEq as ChannelEqSettings,
   createBus,
+  EQ_BANDS,
+  FLAT_EQ,
   type Mixer as MixerSettings,
   type Output,
   type Project,
@@ -26,7 +31,7 @@ export interface MixerProps {
   project: Project;
   /** The engine's own peak levels, or null when no audio is running. */
   meters: Meters | null;
-  onTrackMixer: (trackId: string, mixer: Partial<MixerSettings>) => void;
+  onTrackMixer: (trackId: string, mixer: MixerChange) => void;
   onMasterVolume: (volume: number) => void;
   /** Edits to an Insert Chain, as Project commands so they undo. */
   onCommand: (command: Command) => void;
@@ -132,11 +137,14 @@ export function Mixer({ project, meters, onTrackMixer, onMasterVolume, onCommand
           <Channel
             name="Master"
             master
-            mixer={{ volume: project.master.volume, pan: 0, mute: false, solo: false }}
+            mixer={{ volume: project.master.volume, pan: 0, mute: false, solo: false, eq: project.master.eq }}
             automated={project.master.automation.map((lane) => lane.setting)}
             level={meters?.master ?? 0}
             silenced={false}
-            onChange={({ volume }) => volume !== undefined && onMasterVolume(volume)}
+            onChange={({ volume, eq }) => {
+              if (volume !== undefined) onMasterVolume(volume);
+              if (eq) onCommand({ type: "setMasterEq", eq });
+            }}
             effects={project.master.insertChain.length}
             chainOpen={open === "master"}
             onChain={() => toggle("master")}
@@ -312,7 +320,7 @@ interface ChannelProps {
   automated?: readonly AutomatedSetting[];
   level: number;
   silenced: boolean;
-  onChange: (mixer: Partial<MixerSettings>) => void;
+  onChange: (mixer: MixerChange) => void;
   /** How many Effects its Insert Chain holds. */
   effects: number;
   chainOpen: boolean;
@@ -331,7 +339,7 @@ interface ChannelProps {
   place?: { index: number; count: number };
 }
 
-/** One channel strip: fader, pan, mute, solo, meter, Insert Chain, output and Sends. */
+/** One channel strip: fader, pan, mute, solo, meter, Insert Chain, EQ, output and Sends. */
 function Channel(props: ChannelProps) {
   const { name, master = false, bus = false, mixer, level, silenced, onChange, effects, chainOpen, onChain, output, sends } = props;
   const [minVolume, maxVolume] = LIMITS.volume;
@@ -384,6 +392,7 @@ function Channel(props: ChannelProps) {
       >
         FX{effects > 0 ? ` (${effects})` : ""}
       </button>
+      <ChannelEq name={name} eq={mixer.eq} automated={automated} onChange={(eq) => onChange({ eq })} />
       {!master && (
         <>
           <label className="param">
@@ -458,6 +467,77 @@ function Channel(props: ChannelProps) {
           {silenced && <span className="hint">Silent</span>}
         </>
       )}
+    </div>
+  );
+}
+
+/** What each band's knob is captioned on the strip, low to high. */
+const EQ_CAPTIONS: Record<(typeof EQ_BANDS)[number], string> = { low: "LOW", lowMid: "LO MID", highMid: "HI MID", high: "HI" };
+
+const [EQ_MIN_DB, EQ_MAX_DB] = LIMITS.eq;
+
+function eqText(db: number): string {
+  if (db === 0) return "0 dB";
+  return `${db > 0 ? "+" : "−"}${Math.abs(db).toFixed(1)} dB`;
+}
+
+/**
+ * A channel's EQ, after its Insert Chain and before its fader: four knobs,
+ * high to low as a console's strip has them, each ±12 dB. A double-click or
+ * Delete puts one back to 0 dB, and Flat puts them all back.
+ */
+function ChannelEq({
+  name,
+  eq,
+  automated,
+  onChange,
+}: {
+  name: string;
+  eq: ChannelEqSettings;
+  automated: readonly AutomatedSetting[];
+  onChange: (eq: Partial<ChannelEqSettings>) => void;
+}) {
+  const flat = EQ_BANDS.every((band) => eq[band] === 0);
+  const anyAutomated = EQ_BANDS.some((band) => automated.includes(`eq:${band}`));
+  return (
+    <div className="channel-eq" role="group" aria-label={`${name} EQ`}>
+      <span className="strip-row channel-eq-head">
+        <span>
+          EQ{" "}
+          {anyAutomated && (
+            <span className="automated" title="Its Automation overrides this while the song plays">
+              Automated
+            </span>
+          )}
+        </span>
+        <button
+          type="button"
+          className="btn-sm"
+          aria-label={`Flatten ${name} EQ`}
+          title="Put every band back to 0 dB"
+          disabled={flat}
+          onClick={() => onChange({ ...FLAT_EQ })}
+        >
+          Flat
+        </button>
+      </span>
+      <div className="channel-eq-knobs">
+        {EQ_BANDS.toReversed().map((band) => (
+          <Knob
+            key={band}
+            label={`${name} EQ ${EQ_BAND_LABELS[band].toLowerCase()}`}
+            caption={EQ_CAPTIONS[band]}
+            value={eq[band]}
+            min={EQ_MIN_DB}
+            max={EQ_MAX_DB}
+            centre={0}
+            step={0.5}
+            format={eqText}
+            size={28}
+            onChange={(value) => onChange({ [band]: Math.round(value * 10) / 10 })}
+          />
+        ))}
+      </div>
     </div>
   );
 }

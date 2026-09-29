@@ -1,14 +1,33 @@
 /**
  * The DJ Mixer's report, as the engine lays it out (`DjMixer::report` in
  * `engine/src/dj/mod.rs`): `GLOBAL_FIELDS` numbers for the mixer, then
- * `DECK_FIELDS` for each of the `DECKS` Decks. A test checks the lengths
- * against the engine's own.
+ * `DECK_FIELDS` for each of the `DECKS` Decks, then `SAMPLER_FIELDS` for the
+ * Sampler. A test checks the lengths against the engine's own.
  */
 
 export const DECKS = 4;
 export const GLOBAL_FIELDS = 8;
-export const DECK_FIELDS = 24;
-export const DJ_REPORT_LEN = GLOBAL_FIELDS + DECKS * DECK_FIELDS;
+export const DECK_FIELDS = 26;
+/** Sampler Slots in a bank, and banks: 64 slots in all. */
+export const SAMPLER_BANK_SLOTS = 16;
+export const SAMPLER_BANKS = 4;
+export const SAMPLER_SLOTS = SAMPLER_BANK_SLOTS * SAMPLER_BANKS;
+export const SAMPLER_FIELDS = 4 + SAMPLER_SLOTS;
+export const DJ_REPORT_LEN = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS;
+
+/** Where a Sampler Slot is: `SlotState` in `engine/src/dj/sampler.rs`. */
+export type SlotState = "empty" | "stopped" | "playing" | "paused";
+const SLOT_STATES: readonly SlotState[] = ["empty", "stopped", "playing", "paused"];
+
+export interface SamplerReport {
+  /** The Sampler's meter, 1 is full scale. */
+  level: number;
+  gain: number;
+  cue: boolean;
+  /** What a recording takes: the whole Master, or the Sampler alone. */
+  recordSource: "master" | "sampler";
+  slots: SlotState[];
+}
 
 /** One Deck, as the engine last reported it. Times are seconds into the file. */
 export interface DeckReport {
@@ -42,6 +61,10 @@ export interface DeckReport {
   gainReduction: number;
   /** The tempo fader: 0.05 is +5%. */
   tempo: number;
+  /** Silent Cue: playing on, muted, until a Hot Cue is called. */
+  silent: boolean;
+  /** Slip Reverse held (or running out its 8 beats). */
+  slipReverse: boolean;
 }
 
 export interface DjReport {
@@ -55,6 +78,7 @@ export interface DjReport {
   recording: boolean;
   beatFx: { type: number; on: boolean };
   decks: DeckReport[];
+  sampler: SamplerReport;
 }
 
 const EMPTY_DECK: DeckReport = {
@@ -80,6 +104,8 @@ const EMPTY_DECK: DeckReport = {
   quantize: true,
   gainReduction: 0,
   tempo: 0,
+  silent: false,
+  slipReverse: false,
 };
 
 /** What the page shows before the engine has reported. */
@@ -91,6 +117,13 @@ export const EMPTY_REPORT: DjReport = {
   recording: false,
   beatFx: { type: 0, on: false },
   decks: Array.from({ length: DECKS }, () => EMPTY_DECK),
+  sampler: {
+    level: 0,
+    gain: 1,
+    cue: false,
+    recordSource: "master",
+    slots: Array.from({ length: SAMPLER_SLOTS }, () => "empty"),
+  },
 };
 
 /** Read the engine's flat report; null (or too short) is the empty one. */
@@ -131,7 +164,19 @@ export function readDjReport(flat: readonly number[] | null | undefined): DjRepo
         quantize: on(21),
         gainReduction: f(22),
         tempo: f(23),
+        silent: on(24),
+        slipReverse: on(25),
       };
     }),
+    sampler: (() => {
+      const base = GLOBAL_FIELDS + DECKS * DECK_FIELDS;
+      return {
+        level: at(base),
+        gain: at(base + 1),
+        cue: flag(base + 2),
+        recordSource: at(base + 3) >= 0.5 ? "sampler" : "master",
+        slots: Array.from({ length: SAMPLER_SLOTS }, (_, slot) => SLOT_STATES[Math.round(at(base + 4 + slot))] ?? "empty"),
+      };
+    })(),
   };
 }

@@ -31,7 +31,13 @@ const STORED = [
   {
     name: gridKey("mixing"),
     type: "Functional",
-    purpose: "Remembers the same for the Mixer page's widgets: the waveforms, the Decks, the mixer and the Track browser.",
+    purpose:
+      "Remembers the same for the Mixer page's widgets: the waveforms, the Decks, the mixer, the Track browsers and the Pad Controller.",
+  },
+  {
+    name: gridKey("pads"),
+    type: "Functional",
+    purpose: "Remembers the same for the Pads page's widgets: the Pad Controller and its Track browser.",
   },
   {
     name: HEADPHONES_KEY,
@@ -102,6 +108,11 @@ export function CookiePolicy() {
       <p>
         Projects are saved only where you choose, as folders on your own disk. They are never uploaded and never
         hold your API keys.
+      </p>
+      <p>
+        The samples you put in the Sampler&apos;s slots, with their names and settings, are kept in the app&apos;s
+        own library (the app&apos;s data folder on the desktop, the browser&apos;s IndexedDB in the Browser Version),
+        with your saved Presets and Kits, so they are there next time. They never leave your device.
       </p>
 
       <h3>Third-party services</h3>

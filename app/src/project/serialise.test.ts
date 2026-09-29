@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import { sampleProject } from "./fixtures";
 import { EFFECT_TYPES } from "../effect/effect-params";
-import { createEffect, DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
+import { createEffect, DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, FIRST_STARTER_KIT, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
 import { EngineSync } from "./engine-sync";
 import { parseProject, serialiseProject } from "./serialise";
 
@@ -72,9 +72,10 @@ test("a schema 1 Project with a Drum Track opens, its pads filled in from the st
   drums.pads = [
     { sample: null, volume: 1 },
     { sample: "audio/my-snare.wav", volume: 0.8 },
-    ...STARTER_KIT.slice(2).map(() => ({ sample: null, volume: 1 })),
-    // A ninth pad, past the bundled kit's end: it still needs a name and a
-    // note of its own, and no other pad's note.
+    ...FIRST_STARTER_KIT.slice(2).map(() => ({ sample: null, volume: 1 })),
+    // A ninth pad, past the end of the kit those Projects played: it still
+    // needs a name and a note of its own, and no other pad's note, as it
+    // always did, although the Starter Kit has since grown past eight.
     { sample: "audio/shaker.wav", volume: 0.5 },
   ];
   const saved = JSON.stringify({ ...project, schemaVersion: 1, tracks });
@@ -98,6 +99,26 @@ test("a schema 1 Project with a Drum Track opens, its pads filled in from the st
     chokeGroup: 0,
   });
   expect(new Set(pads.map((pad) => pad.note)).size).toBe(pads.length);
+  expect(pads[8]!.note).toBe(57);
+  expect(pads).toHaveLength(9);
+});
+
+test("a Project saved with the eight-pad Starter Kit opens with its eight pads, as saved", () => {
+  // Before the kit grew, a new Drum Sampler got its first eight pads: such a
+  // Project keeps them, and gains none of the new ones.
+  const project = sampleProject();
+  const tracks = structuredClone(project.tracks);
+  const drums = tracks.find((track) => track.kind === "instrument" && track.instrument.type === "drumSampler");
+  if (!drums || drums.kind !== "instrument" || drums.instrument.type !== "drumSampler") throw new Error("a Drum Sampler");
+  drums.instrument.pads = FIRST_STARTER_KIT.map((pad) => ({ ...pad }));
+  const result = parseProject(serialiseProject({ ...project, tracks }));
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const opened = result.project.tracks.find((track) => track.id === drums.id)!;
+  if (opened.kind !== "instrument" || opened.instrument.type !== "drumSampler") throw new Error("a Drum Sampler");
+  expect(opened.instrument.pads).toEqual(FIRST_STARTER_KIT);
+  // A new Drum Sampler has the whole kit.
+  expect(STARTER_KIT.length).toBe(22);
 });
 
 test("a schema 2 Project opens with its EQs' bands kept under their new names", () => {
@@ -452,8 +473,12 @@ test("a schema 17 Project opens as it was: the Saturator and seven more Effects 
 
 test("every built-in Effect saves and opens with its settings", () => {
   const project = sampleProject();
+  // More than one Insert Chain holds: the first sixteen on a Track, the rest on the Master.
   const index = project.tracks.findIndex((track) => track.kind === "instrument");
-  project.tracks[index]!.insertChain = EFFECT_TYPES.map((type) => createEffect(type, `fx-${type}`));
+  const effects = EFFECT_TYPES.map((type) => createEffect(type, `fx-${type}`));
+  project.tracks[index]!.insertChain = effects.slice(0, 16);
+  project.master.insertChain = effects.slice(16);
+  expect(project.master.insertChain.length).toBeLessThanOrEqual(16);
   const result = parseProject(serialiseProject(project));
 
   expect(result.ok).toBe(true);
@@ -641,4 +666,52 @@ test("Input Monitoring survives a save and open, and one that isn't on or off is
   const without = { ...project, tracks: project.tracks.map((track) => (track === vocals ? missing : track)) };
   const unsaved = parseProject(JSON.stringify(without));
   expect(!unsaved.ok && unsaved.error).toMatch(/missing: monitoring/);
+});
+
+/** A Track or Bus as schema 19 saved it, with no EQ. */
+function withoutEq<T extends { mixer: object }>(channel: T) {
+  const { eq: _, ...mixer } = channel.mixer as { eq: unknown };
+  return { ...channel, mixer };
+}
+
+test("a schema 19 Project opens with a flat EQ on every Track, Bus and the Master", () => {
+  const project = sampleProject();
+  expect(project.buses.length).toBeGreaterThan(0);
+  const { eq: __, ...master } = project.master;
+  const schema19 = {
+    ...project,
+    schemaVersion: 19,
+    tracks: project.tracks.map(withoutEq),
+    buses: project.buses.map(withoutEq),
+    master,
+  };
+  const result = parseProject(JSON.stringify(schema19));
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.project).toEqual({ ...project, schemaVersion: SCHEMA_VERSION });
+  const flat = { low: 0, lowMid: 0, highMid: 0, high: 0 };
+  for (const channel of [...result.project.tracks, ...result.project.buses]) expect(channel.mixer.eq).toEqual(flat);
+  expect(result.project.master.eq).toEqual(flat);
+});
+
+test("a channel's EQ survives a save and open, and one out of range or missing a band is refused", () => {
+  const project = sampleProject();
+  project.tracks[0]!.mixer.eq = { low: -12, lowMid: 3.5, highMid: 0, high: 12 };
+  project.buses[0]!.mixer.eq.lowMid = -4;
+  project.master.eq.high = 1.5;
+  project.master.automation.push({ setting: "eq:low", breakpoints: [{ tick: 0, value: -6, hold: false }] });
+  expect(parseProject(serialiseProject(project))).toEqual({ ok: true, project });
+
+  expect(refused((p) => (p.tracks[0]!.mixer.eq.low = 12.5))).toMatch(/EQ low gain must be a number from -12 to 12/);
+  expect(refused((p) => (p.master.eq.high = Number.NaN))).toMatch(/The Master's EQ high gain/);
+  expect(
+    refused((p) => {
+      const { high: _, ...rest } = p.buses[0]!.mixer.eq;
+      p.buses[0]!.mixer.eq = rest as typeof p.buses[0]["mixer"]["eq"];
+    }),
+  ).toMatch(/EQ is missing: high/);
+  expect(
+    refused((p) => p.master.automation.push({ setting: "eq:low", breakpoints: [{ tick: 0, value: 20, hold: false }] })),
+  ).not.toBe("opened");
 });

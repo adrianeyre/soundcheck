@@ -176,7 +176,11 @@ export class TapTempo {
   }
 }
 
-/** The eight Hot Cues' colours, A to H, as the CDJ-3000 lights them. */
+/**
+ * The sixteen Hot Cues' colours, A to P: A to H as the CDJ-3000 lights them,
+ * whose eight pads a Deck has, and I to P, which the Pad Controller's sixteen
+ * pads reach too.
+ */
 export const HOT_CUE_COLOURS: readonly string[] = [
   "#3ddc97",
   "#ff5c8a",
@@ -186,9 +190,21 @@ export const HOT_CUE_COLOURS: readonly string[] = [
   "#ff7a3d",
   "#2ee6e6",
   "#f5e642",
+  "#7cf55a",
+  "#ff9ec4",
+  "#ffd07a",
+  "#8fd0ff",
+  "#d9b8ff",
+  "#ffae85",
+  "#8ff5f5",
+  "#fff38f",
 ];
 
-export const HOT_CUE_NAMES: readonly string[] = ["A", "B", "C", "D", "E", "F", "G", "H"];
+export const HOT_CUE_NAMES: readonly string[] = "ABCDEFGHIJKLMNOP".split("");
+
+/** How many Hot Cues a Deck has, and how many its own pads show. */
+export const HOT_CUES = 16;
+export const DECK_HOT_CUE_PADS = 8;
 
 /** A Hot Cue the DJ has set: where, in seconds, and what it is called. */
 export interface HotCue {

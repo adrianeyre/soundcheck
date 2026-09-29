@@ -40,6 +40,17 @@ export interface DjLoadMessage {
   firstBeat: number;
 }
 
+/**
+ * A sample for a Sampler Slot of the DJ Mixer, decoded on the page's thread
+ * (`dj_prepare_sample`); or, with no samples, the slot emptied.
+ */
+export interface DjSampleMessage {
+  type: "djSample";
+  slot: number;
+  left: Float32Array | null;
+  right: Float32Array | null;
+}
+
 export interface ProcessorOptions {
   module: WebAssembly.Module;
   trackCount: number;
@@ -83,8 +94,14 @@ class EngineProcessor extends AudioWorkletProcessor {
     // Plugins are compiled here, synchronously, as `loadPlugin` brings them:
     // the worklet scope can't wait for a promise mid-stream.
     const plugins = new WasmPluginHost(sampleRate);
-    this.port.addEventListener("message", (event: MessageEvent<EngineCommand | DjLoadMessage>) => {
+    this.port.addEventListener("message", (event: MessageEvent<EngineCommand | DjLoadMessage | DjSampleMessage>) => {
       const message = event.data;
+      if (message.type === "djSample") {
+        this.#djInUse = true;
+        if (message.left && message.right) this.#engine.dj_load_sample_samples(message.slot, message.left, message.right);
+        else this.#engine.dj_unload_sample(message.slot);
+        return;
+      }
       if (message.type === "djLoad") {
         this.#djInUse = true;
         if (message.left && message.right) {

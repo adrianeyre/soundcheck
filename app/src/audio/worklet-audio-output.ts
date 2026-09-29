@@ -5,7 +5,7 @@
 // The raw module: compiled here and handed to the worklet, which can't fetch.
 import wasmUrl from "../../../engine/pkg/soundcheck_engine_bg.wasm?url";
 
-import init, { dj_prepare } from "@engine";
+import init, { dj_prepare, dj_prepare_sample } from "@engine";
 
 import type {
   AudioOutput,
@@ -18,7 +18,7 @@ import type {
   RecordedNoteEvent,
   UnderrunStats,
 } from "./audio-output";
-import type { DjLoadMessage, ProcessorMessage, ProcessorOptions } from "./engine-processor";
+import type { DjLoadMessage, DjSampleMessage, ProcessorMessage, ProcessorOptions } from "./engine-processor";
 // Vite bundles the processor and gives back its URL; oxlint can't see that.
 // oxlint-disable-next-line import/default
 import processorUrl from "./engine-processor.ts?worker&url";
@@ -215,6 +215,24 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
         },
         unload(deck: number) {
           const message: DjLoadMessage = { type: "djLoad", deck, left: null, right: null, bpm: 0, firstBeat: 0 };
+          // oxlint-disable-next-line unicorn/require-post-message-target-origin
+          node.port.postMessage(message);
+        },
+        async loadSample(slot: number, bytes: Uint8Array): Promise<number> {
+          // Decoded here, as a Deck's file is, so the audio thread only moves it in.
+          await init({ module_or_path: module });
+          const prepared = dj_prepare_sample(bytes, context.sampleRate);
+          try {
+            const message: DjSampleMessage = { type: "djSample", slot, left: prepared.left(), right: prepared.right() };
+            // oxlint-disable-next-line unicorn/require-post-message-target-origin
+            node.port.postMessage(message, [message.left!.buffer, message.right!.buffer]);
+            return prepared.seconds(context.sampleRate);
+          } finally {
+            prepared.free();
+          }
+        },
+        unloadSample(slot: number) {
+          const message: DjSampleMessage = { type: "djSample", slot, left: null, right: null };
           // oxlint-disable-next-line unicorn/require-post-message-target-origin
           node.port.postMessage(message);
         },

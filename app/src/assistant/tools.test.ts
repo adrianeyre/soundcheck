@@ -79,9 +79,11 @@ test("every tool is described to the model with a closed schema", () => {
     "move_section",
     "set_track_volume",
     "set_track_pan",
+    "set_track_eq",
     "set_track_mute",
     "set_track_solo",
     "set_master_volume",
+    "set_master_eq",
     "add_bus",
     "rename_bus",
     "delete_bus",
@@ -91,6 +93,7 @@ test("every tool is described to the model with a closed schema", () => {
     "set_send_level",
     "set_bus_volume",
     "set_bus_pan",
+    "set_bus_eq",
     "set_bus_mute",
     "set_bus_solo",
     "set_automation",
@@ -127,9 +130,11 @@ test("the core is reading, Tracks, Clips, the mixer basics, listening and load_t
     "delete_clip",
     "set_track_volume",
     "set_track_pan",
+    "set_track_eq",
     "set_track_mute",
     "set_track_solo",
     "set_master_volume",
+    "set_master_eq",
     "load_tools",
     "analyse_audio",
     "compare_audio",
@@ -157,6 +162,7 @@ test("the core is reading, Tracks, Clips, the mixer basics, listening and load_t
       "set_send_level",
       "set_bus_volume",
       "set_bus_pan",
+      "set_bus_eq",
       "set_bus_mute",
       "set_bus_solo",
     ],
@@ -208,15 +214,17 @@ function toolNames(definitions: readonly ToolDefinition[]): string[] {
   return definitions.map((tool) => tool.name);
 }
 
-test("the smaller core leaves read_automation, set_track_solo, set_master_volume and compare_to_reference to their groups", () => {
-  const moved = ["read_automation", "set_track_solo", "set_master_volume", "compare_to_reference"];
+test("the smaller core leaves read_automation, set_track_solo, the EQs, set_master_volume and compare_to_reference to their groups", () => {
+  const moved = ["read_automation", "set_track_eq", "set_track_solo", "set_master_volume", "set_master_eq", "compare_to_reference"];
   expect(toolNames(SMALL_CORE_TOOL_DEFINITIONS)).toEqual(toolNames(CORE_TOOL_DEFINITIONS).filter((name) => !moved.includes(name)));
   expect(toolNames(toolDefinitions(["automation"], true))).toContain("read_automation");
-  expect(toolNames(toolDefinitions(["routing"], true))).toEqual(expect.arrayContaining(["set_track_solo", "set_master_volume"]));
+  expect(toolNames(toolDefinitions(["routing"], true))).toEqual(
+    expect.arrayContaining(["set_track_eq", "set_track_solo", "set_master_volume", "set_master_eq"]),
+  );
   expect(toolGroupOf("read_automation", true)).toBe("automation");
   expect(toolGroupOf("read_automation")).toBeUndefined();
   expect(toolGroupOf("compare_to_reference", true)).toBe("sounds");
-  expect(groupToolNames("routing", true)).toEqual([...groupToolNames("routing"), "set_track_solo", "set_master_volume"].toSorted(
+  expect(groupToolNames("routing", true)).toEqual([...groupToolNames("routing"), "set_track_eq", "set_track_solo", "set_master_volume", "set_master_eq"].toSorted(
     (a, b) => toolNames(TOOL_DEFINITIONS).indexOf(a) - toolNames(TOOL_DEFINITIONS).indexOf(b),
   ));
   expect(loadedReport("automation", true)).toContain("read_automation, set_automation, clear_automation");
@@ -1041,17 +1049,46 @@ test("naming a Track that isn't there lists the ones that are", () => {
 
 test("a Track is panned, muted and soloed, and the rest of its mixer stays as it was", () => {
   const panned = planned("set_track_pan", { trackId: "bass", pan: -0.3 });
-  expect(panned.tracks[1]!.mixer).toEqual({ volume: 1, pan: -0.3, mute: false, solo: false });
+  expect(panned.tracks[1]!.mixer).toEqual({ volume: 1, pan: -0.3, mute: false, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } });
   expect(plan("set_track_pan", { trackId: "bass", pan: -0.3 }).change).toBe("Panned “Bass” 30% left");
   expect(plan("set_track_pan", { trackId: "bass", pan: 0 }).change).toBe("Panned “Bass” to the centre");
 
   const muted = planned("set_track_mute", { trackId: "bass", mute: true }, panned);
-  expect(muted.tracks[1]!.mixer).toEqual({ volume: 1, pan: -0.3, mute: true, solo: false });
+  expect(muted.tracks[1]!.mixer).toEqual({ volume: 1, pan: -0.3, mute: true, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } });
   expect(planned("set_track_mute", { trackId: "bass", mute: false }, muted).tracks[1]!.mixer.mute).toBe(false);
 
   const soloed = planned("set_track_solo", { trackId: "keys", solo: true }, muted);
   expect(soloed.tracks[0]!.mixer.solo).toBe(true);
   expect(plan("set_track_solo", { trackId: "keys", solo: true }).change).toBe("Soloed “Keys”");
+});
+
+test("a Track's, a Bus's and the Master's EQ is set a band at a time, and read_channel and the summary report it", () => {
+  const eqd = plan("set_track_eq", { trackId: "bass", low: -6, high: 3.5 });
+  expect(eqd.commands).toEqual([{ type: "setTrackMixer", trackId: "bass", mixer: { eq: { low: -6, high: 3.5 } } }]);
+  expect(eqd.change).toBe("Set the EQ of “Bass” to low -6 dB, lowMid 0 dB, highMid 0 dB, high +3.5 dB");
+  const project = planned("set_track_eq", { trackId: "bass", low: -6, high: 3.5 });
+  expect(project.tracks[1]!.mixer).toEqual({ volume: 1, pan: 0, mute: false, solo: false, eq: { low: -6, lowMid: 0, highMid: 0, high: 3.5 } });
+  // Only the bands given change.
+  const again = planned("set_track_eq", { trackId: "bass", lowMid: 2 }, project);
+  expect(again.tracks[1]!.mixer.eq).toEqual({ low: -6, lowMid: 2, highMid: 0, high: 3.5 });
+
+  expect(channelDetail(again, again.tracks[1]!)).toMatchObject({ eq: { low: -6, lowMid: 2, highMid: 0, high: 3.5 } });
+  const summary = projectSummary(again);
+  expect(summary.tracks[1]).toMatchObject({ eq: { low: -6, lowMid: 2, highMid: 0, high: 3.5 } });
+  expect(summary.tracks[0]).not.toHaveProperty("eq");
+
+  const bus = planned("set_bus_eq", { busId: "band", highMid: -4 });
+  expect(bus.buses[0]!.mixer.eq).toEqual({ low: 0, lowMid: 0, highMid: -4, high: 0 });
+  const master = planned("set_master_eq", { low: 1.5 });
+  expect(master.master.eq).toEqual({ low: 1.5, lowMid: 0, highMid: 0, high: 0 });
+  expect(channelDetail(master, "master")).toMatchObject({ eq: { low: 1.5, lowMid: 0, highMid: 0, high: 0 } });
+  expect(projectSummary(master).master).toMatchObject({ eq: { low: 1.5 } });
+
+  expect(() => plan("set_track_eq", { trackId: "bass" })).toThrow(/give at least one of low, lowMid, highMid, high/);
+  expect(() => plan("set_master_eq", { high: 13 })).toThrow(/high must be a number from -12 to 12/);
+  const automated = sampleProject();
+  automated.master.automation.push({ setting: "eq:low", breakpoints: [{ tick: 0, value: 0, hold: false }] });
+  expect(plan("set_master_eq", { low: 3 }, automated).report).toMatch(/its EQ low band is automated/);
 });
 
 test("the Master's volume is set as a linear gain", () => {
@@ -1223,7 +1260,7 @@ test("a Compressor or Reverb setting outside the range its Effect declares is re
 test("the model is told it can add a Compressor or a Reverb, and every one of their settings", () => {
   const add = TOOL_DEFINITIONS.find((tool) => tool.name === "add_effect")!;
   expect((add.input_schema as unknown as { properties: { effect: { description: string } } }).properties.effect.description).toContain(
-    "eq, compressor, reverb, delay, saturator, chorus, phaser, filter, gate, limiter, bitcrusher, utility, or plugin:<id> for one of the installed Plugins",
+    "eq, compressor, reverb, delay, saturator, chorus, phaser, filter, gate, limiter, bitcrusher, utility, flanger, tremolo, autopan, ringmod, vibrato, transient, deesser, exciter, multiband, clipper, freqshift, autowah, haas, resonator, vowel, pump, trancegate, pitchshift, lofi, beatrepeat, or plugin:<id> for one of the installed Plugins",
   );
   for (const description of [add.description, TOOL_DEFINITIONS.find((tool) => tool.name === "set_effect_settings")!.description]) {
     expect(description).toContain(
@@ -1318,6 +1355,7 @@ test("the model sees each Bus, and where every Track and Bus sends its signal", 
     pan: 0,
     mute: false,
     solo: false,
+    eq: { low: 0, lowMid: 0, highMid: 0, high: 0 },
     insertChain: [],
     output: "band",
     sends: [],
@@ -1820,7 +1858,7 @@ test("a Bus's volume, pan, mute and solo are set on its own, leaving the rest of
   expect(volume.commands).toEqual([{ type: "setBusMixer", busId: "band", mixer: { volume: 0.5 } }]);
   expect(volume.change).toBe("Set the Bus “Band” to -6.0 dB");
   expect(volume.report).toMatch(/its Automation overrides this value/);
-  expect(planned("set_bus_pan", { busId: "band", pan: -0.5 }, project).buses[0]!.mixer).toEqual({ volume: 1, pan: -0.5, mute: false, solo: false });
+  expect(planned("set_bus_pan", { busId: "band", pan: -0.5 }, project).buses[0]!.mixer).toEqual({ volume: 1, pan: -0.5, mute: false, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } });
   expect(plan("set_bus_pan", { busId: "band", pan: -0.5 }, project).change).toBe("Panned the Bus “Band” 50% left");
   expect(planned("set_bus_mute", { busId: "band", mute: true }, project).buses[0]!.mixer.mute).toBe(true);
   expect(plan("set_bus_mute", { busId: "band", mute: true }, project).change).toBe("Muted the Bus “Band”");
@@ -1922,7 +1960,7 @@ test("an unknown channel or setting, or a value out of the setting's range, is a
   expect(drawing({ channel: "strings" })).toThrow(/There is no Track or Bus strings/);
   expect(drawing({ setting: "mute" })).toThrow(InvalidToolCall);
   expect(drawing({ setting: "mute" })).toThrow(
-    /^Track keys \(“Keys”\) has no setting "mute" to automate: mute, solo, bypass and settings that pick from a list or switch on and off never are\. It can automate: volume \(Volume, 0 to 2\); pan \(Pan, -1 to 1\); effect:keys-eq:/,
+    /^Track keys \(“Keys”\) has no setting "mute" to automate: mute, solo, bypass and settings that pick from a list or switch on and off never are\. It can automate: volume \(Volume, 0 to 2\); pan \(Pan, -1 to 1\); eq:low \(Channel EQ: Low, -12 dB to 12 dB\); eq:lowMid .*; effect:keys-eq:/,
   );
   expect(drawing({ setting: "mute" })).toThrow(/instrument:cutoffHz \(Synth: Cutoff, 20 Hz to 20000 Hz\)/);
   expect(drawing({ setting: "effect:keys-eq:nonsense" })).toThrow(/has no setting "effect:keys-eq:nonsense" to automate/);

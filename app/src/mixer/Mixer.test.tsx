@@ -377,3 +377,51 @@ test("each Track's strip has its kind's stripe; a Bus's and the Master's have no
   expect(stripOf("Band volume")).not.toHaveAttribute("data-track-kind");
   expect(stripOf("Master volume")).not.toHaveAttribute("data-track-kind");
 });
+
+test("every Track, Bus and the Master has four EQ knobs, high to low, each sending a single band", () => {
+  const { project: shown, onTrackMixer, onCommand } = show({ project: withBus() });
+  const bass = shown.tracks[0]!;
+  expect(screen.getByRole("group", { name: "Bass EQ" })).toBeInTheDocument();
+  const knobs = screen.getAllByRole("slider", { name: /^Bass EQ / });
+  expect(knobs.map((knob) => knob.getAttribute("aria-label"))).toEqual(["Bass EQ high", "Bass EQ high mid", "Bass EQ low mid", "Bass EQ low"]);
+  expect(knobs[0]).toHaveAttribute("aria-valuetext", "0 dB");
+  expect(knobs[0]).toHaveAttribute("aria-valuemin", "-12");
+  expect(knobs[0]).toHaveAttribute("aria-valuemax", "12");
+
+  fireEvent.keyDown(screen.getByRole("slider", { name: "Bass EQ low" }), { key: "ArrowDown" });
+  expect(onTrackMixer).toHaveBeenLastCalledWith(bass.id, { eq: { low: -0.5 } });
+  fireEvent.keyDown(screen.getByRole("slider", { name: "Bass EQ high" }), { key: "ArrowUp", shiftKey: true });
+  expect(onTrackMixer).toHaveBeenLastCalledWith(bass.id, { eq: { high: 5 } });
+
+  fireEvent.keyDown(screen.getByRole("slider", { name: "Band EQ low mid" }), { key: "End" });
+  expect(onCommand).toHaveBeenLastCalledWith({ type: "setBusMixer", busId: "band", mixer: { eq: { lowMid: 12 } } });
+  fireEvent.keyDown(screen.getByRole("slider", { name: "Master EQ high mid" }), { key: "Home" });
+  expect(onCommand).toHaveBeenLastCalledWith({ type: "setMasterEq", eq: { highMid: -12 } });
+});
+
+test("an EQ knob reads its gain, goes back to 0 dB on a double-click, and Flat resets every band", () => {
+  const errors: string[] = [];
+  const start = project();
+  start.tracks[0]!.mixer.eq = { low: -6, lowMid: 0, highMid: 2.5, high: 0 };
+  render(<Live start={start} errors={errors} />);
+  const low = screen.getByRole("slider", { name: "Bass EQ low" });
+  expect(low).toHaveAttribute("aria-valuetext", "−6.0 dB");
+  expect(screen.getByRole("slider", { name: "Bass EQ high mid" })).toHaveAttribute("aria-valuetext", "+2.5 dB");
+
+  fireEvent.doubleClick(low);
+  expect(screen.getByRole("slider", { name: "Bass EQ low" })).toHaveAttribute("aria-valuetext", "0 dB");
+  expect(screen.getByRole("button", { name: "Flatten Lead EQ" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Flatten Bass EQ" }));
+  expect(screen.getByRole("slider", { name: "Bass EQ high mid" })).toHaveAttribute("aria-valuetext", "0 dB");
+  expect(screen.getByRole("button", { name: "Flatten Bass EQ" })).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
+test("an automated EQ band is marked on its strip", () => {
+  const start = project();
+  start.master.automation.push({ setting: "eq:high", breakpoints: [{ tick: 0, value: 3, hold: false }] });
+  show({ project: start });
+  const master = screen.getByRole("group", { name: "Master EQ" });
+  expect(master).toHaveTextContent("Automated");
+  expect(screen.getByRole("group", { name: "Bass EQ" })).not.toHaveTextContent("Automated");
+});

@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { arrange } from "./arrangement";
 import type { Command, CommandType } from "./commands";
 import { applyCommand, applyCommands } from "./commands";
+import { LIMITS } from "./validate";
 import { deepFreeze, sampleProject } from "./fixtures";
 import { ProjectHistory } from "./history";
 import { keysPreset } from "../instrument/keys-presets";
@@ -14,6 +15,7 @@ import {
   createEffect,
   createInstrumentTrack,
   createKeysTrack,
+  type Clip,
   DEFAULT_SYNTH,
   type Project,
   STARTER_KIT,
@@ -44,6 +46,19 @@ const buses: Command[] = [
 
 /** The Track "keys" given the Keys, for the commands that change them. */
 const KEYS_ON_TRACK: Command = { type: "setInstrument", trackId: "keys", instrument: createKeysTrack("Piano").instrument };
+
+/** The Track "drums" with only the first eight Pads, as a song saved before the kit grew has. */
+const EIGHT_PADS: Command = {
+  type: "setInstrument",
+  trackId: "drums",
+  instrument: { type: "drumSampler", preset: "Starter Kit", pads: STARTER_KIT.slice(0, 8).map((pad) => ({ ...pad })) },
+};
+
+/** The Pads of the Track "drums". */
+function drumPads(project: Project) {
+  const drums = project.tracks.find((track) => track.id === "drums")!;
+  return drums.kind === "instrument" && drums.instrument.type === "drumSampler" ? drums.instrument.pads : [];
+}
 
 /**
  * One case per command: the command, and what should be true afterwards. The
@@ -210,6 +225,16 @@ const cases: Record<CommandType, { command: Command; check: (p: Project) => void
       expect(keys && keys.settings).toMatchObject({ source: "sample", rootNote: 57 });
     },
   },
+  addDrumPad: {
+    before: [EIGHT_PADS],
+    command: { type: "addDrumPad", trackId: "drums" },
+    // The ninth is the Starter Kit's ninth, which a Pad there with no sample plays.
+    check: (p) => expect(drumPads(p)).toEqual(STARTER_KIT.slice(0, 9)),
+  },
+  removeDrumPad: {
+    command: { type: "removeDrumPad", trackId: "drums" },
+    check: (p) => expect(drumPads(p)).toEqual(STARTER_KIT.slice(0, -1)),
+  },
   setDrumPad: {
     command: { type: "setDrumPad", trackId: "drums", pad: 4, settings: { pan: -0.5, pitch: -2, chokeGroup: 2 } },
     check: (p) => {
@@ -230,11 +255,15 @@ const cases: Record<CommandType, { command: Command; check: (p: Project) => void
   },
   setTrackMixer: {
     command: { type: "setTrackMixer", trackId: "keys", mixer: { volume: 0.5, solo: true } },
-    check: (p) => expect(p.tracks[0]!.mixer).toEqual({ volume: 0.5, pan: 0, mute: false, solo: true }),
+    check: (p) => expect(p.tracks[0]!.mixer).toEqual({ volume: 0.5, pan: 0, mute: false, solo: true, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } }),
   },
   setMasterVolume: {
     command: { type: "setMasterVolume", volume: 0.8 },
     check: (p) => expect(p.master.volume).toBe(0.8),
+  },
+  setMasterEq: {
+    command: { type: "setMasterEq", eq: { high: -3 } },
+    check: (p) => expect(p.master.eq).toEqual({ low: 0, lowMid: 0, highMid: 0, high: -3 }),
   },
   setTrackOutput: {
     command: { type: "setTrackOutput", trackId: "vocals", output: "band" },
@@ -272,7 +301,7 @@ const cases: Record<CommandType, { command: Command; check: (p: Project) => void
   setBusMixer: {
     command: { type: "setBusMixer", busId: "band", mixer: { pan: -0.5, mute: true } },
     before: buses,
-    check: (p) => expect(p.buses[0]!.mixer).toEqual({ volume: 1, pan: -0.5, mute: true, solo: false }),
+    check: (p) => expect(p.buses[0]!.mixer).toEqual({ volume: 1, pan: -0.5, mute: true, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } }),
   },
   setBusOutput: {
     command: { type: "setBusOutput", busId: "drum-bus", output: null },
@@ -474,6 +503,8 @@ describe("invalid commands are rejected and change nothing", () => {
     ["Automation on a Track that doesn't exist", { type: "setAutomation", target: { trackId: "nope" }, setting: "volume", breakpoints: [] }],
     ["an Instrument on an Audio Track", { type: "setInstrument", trackId: "vocals", instrument: createInstrumentTrack("x").instrument }],
     ["a volume too high", { type: "setTrackMixer", trackId: "keys", mixer: { volume: 3 } }],
+    ["an EQ band past +12 dB", { type: "setTrackMixer", trackId: "keys", mixer: { eq: { low: 13 } } }],
+    ["a Master EQ band below -12 dB", { type: "setMasterEq", eq: { high: -12.5 } }],
     ["a Clip of no length", { type: "trimClip", clipId: "keys-1", start: 0, length: 0 }],
     ["a file offset on a Pattern Clip", { type: "trimClip", clipId: "keys-1", start: 0, length: 960, fileOffset: 1 }],
     ["a position outside the list", { type: "moveTrack", trackId: "keys", index: 9 }],
@@ -493,6 +524,8 @@ describe("invalid commands are rejected and change nothing", () => {
     ["a pad's pan out of range", { type: "setDrumPad", trackId: "drums", pad: 0, settings: { pan: 2 } }],
     ["a pad transposed further than the engine goes", { type: "setDrumPad", trackId: "drums", pad: 0, settings: { pitch: 36 } }],
     ["two pads answering to one note", { type: "setDrumPad", trackId: "drums", pad: 0, settings: { note: 38 } }],
+    ["a Pad added to a Track playing the Synth", { type: "addDrumPad", trackId: "keys" }],
+    ["a Pad removed from a Track playing the Synth", { type: "removeDrumPad", trackId: "keys" }],
     ["a Tempo Change at the song's start", { type: "addTempoChange", tempoChange: { id: "t", tick: 0, tempo: 90, timeSignature: null } }],
     ["a Tempo Change that changes nothing", { type: "addTempoChange", tempoChange: { id: "t", tick: 960, tempo: null, timeSignature: null } }],
     ["a Tempo Change's tempo out of range", { type: "addTempoChange", tempoChange: { id: "t", tick: 960, tempo: 1000, timeSignature: null } }],
@@ -865,10 +898,102 @@ describe("taking a setting away takes its Automation, undoably", () => {
   });
 });
 
+describe("adding and removing Pads", () => {
+  test("Pads are added a kit Pad at a time, then empty ones on free notes, up to the most a Drum Sampler holds", () => {
+    const history = new ProjectHistory(sampleProject());
+    expect(history.execute(EIGHT_PADS).ok).toBe(true);
+    while (drumPads(history.project).length < LIMITS.drumPads[1]) {
+      expect(history.execute({ type: "addDrumPad", trackId: "drums" })).toMatchObject({ ok: true });
+    }
+    const pads = drumPads(history.project);
+    expect(pads.slice(0, STARTER_KIT.length)).toEqual(STARTER_KIT);
+    // Past the kit, no sample: the engine plays nothing on them until one is loaded.
+    expect(pads[STARTER_KIT.length]).toEqual({ name: "Pad 23", note: 76, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup: 0 });
+    expect(pads.at(-1)).toMatchObject({ name: "Pad 32", note: 85, sample: null });
+    expect(new Set(pads.map((pad) => pad.note)).size).toBe(pads.length);
+
+    const full = history.project;
+    const refused = history.execute({ type: "addDrumPad", trackId: "drums" });
+    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining("the most a Drum Sampler holds") });
+    expect(history.project).toBe(full);
+
+    // Undoing each goes back to the eight.
+    while (drumPads(history.project).length > 8) expect(history.undo()).toBe(true);
+    expect(drumPads(history.project)).toEqual(STARTER_KIT.slice(0, 8));
+  });
+
+  test("a kit Pad whose note another Pad has takes a free one", () => {
+    const result = applyCommands(sampleProject(), [
+      EIGHT_PADS,
+      { type: "setDrumPad", trackId: "drums", pad: 0, settings: { note: 35 } },
+      { type: "addDrumPad", trackId: "drums" },
+    ]);
+    if (!result.ok) throw new Error(result.error);
+    expect(drumPads(result.project)[8]).toMatchObject({ name: "Hard Kick", note: 76 });
+  });
+
+  test("removing takes only the last Pad, and its Automation, and keeps the Clips' notes on it", () => {
+    const history = new ProjectHistory(sampleProject());
+    const claves = STARTER_KIT.at(-1)!.note;
+    const clip = drumClip(claves);
+    expect(history.execute({ type: "addClip", trackId: "drums", clip }).ok).toBe(true);
+    const lanes = ["instrument:pad75.volume", "instrument:pad36.volume"] as const;
+    for (const setting of lanes) {
+      expect(history.execute({ type: "setAutomation", target: { trackId: "drums" }, setting, breakpoints: point(0.5) }).ok).toBe(true);
+    }
+    const before = history.project;
+
+    expect(history.execute({ type: "removeDrumPad", trackId: "drums" }).ok).toBe(true);
+    expect(drumPads(history.project)).toEqual(STARTER_KIT.slice(0, -1));
+    const drums = history.project.tracks.find((track) => track.id === "drums")!;
+    expect(drums.automation.map((lane) => lane.setting)).toEqual(["instrument:pad36.volume"]);
+    expect(drums.clips).toEqual(before.tracks.find((track) => track.id === "drums")!.clips);
+
+    expect(history.undo()).toBe(true);
+    expect(history.project).toEqual(before);
+  });
+
+  test("a Drum Sampler keeps at least its one Pad", () => {
+    const history = new ProjectHistory(sampleProject());
+    while (drumPads(history.project).length > LIMITS.drumPads[0]) {
+      expect(history.execute({ type: "removeDrumPad", trackId: "drums" }).ok).toBe(true);
+    }
+    expect(drumPads(history.project)).toEqual([STARTER_KIT[0]]);
+    expect(history.execute({ type: "removeDrumPad", trackId: "drums" })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("keeps at least 1"),
+    });
+  });
+});
+
+/** A one-bar Pattern Clip hitting `note` once. */
+function drumClip(note: number): Clip {
+  return { kind: "pattern", id: "beat", start: 0, length: 3840, notes: [{ pitch: note, start: 0, length: 240, velocity: 1 }] };
+}
+
 test("moving an Effect keeps its Automation", () => {
   const result = applyCommands(sampleProject(), [
     { type: "setAutomation", target: { trackId: "keys" }, setting: "effect:keys-eq:lowShelfGainDb", breakpoints: point(6) },
     { type: "moveEffect", effectId: "keys-eq", index: 1 },
   ]);
   expect(result.ok && result.project.tracks[0]!.automation.map((a) => a.setting)).toEqual(["effect:keys-eq:lowShelfGainDb"]);
+});
+
+test("an EQ band changes alone, on a Track, a Bus or the Master, and undoes as one step", () => {
+  const original = deepFreeze(sampleProject());
+  const history = new ProjectHistory(original);
+  history.execute({ type: "setTrackMixer", trackId: "keys", mixer: { eq: { low: -6 } } });
+  history.execute({ type: "setTrackMixer", trackId: "keys", mixer: { eq: { high: 4.5 } } });
+  history.execute({ type: "setMasterEq", eq: { lowMid: 2 } });
+  const keys = history.project.tracks.find((track) => track.id === "keys")!;
+  expect(keys.mixer.eq).toEqual({ low: -6, lowMid: 0, highMid: 0, high: 4.5 });
+  expect(keys.mixer.volume).toBe(original.tracks.find((track) => track.id === "keys")!.mixer.volume);
+  expect(history.project.master.eq).toEqual({ low: 0, lowMid: 2, highMid: 0, high: 0 });
+  expect(history.undoLabel).toBe("Change Master EQ");
+
+  history.undo();
+  history.undo();
+  expect(history.project.tracks.find((track) => track.id === "keys")!.mixer.eq.high).toBe(0);
+  history.undo();
+  expect(history.project).toEqual(original);
 });

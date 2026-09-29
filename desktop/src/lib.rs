@@ -180,6 +180,34 @@ fn dj_load(app: State<'_, App>, deck: usize, bytes: Vec<u8>) -> Result<String, S
     }
 }
 
+/// Put a sample in a Sampler Slot of the Mixer page's DJ Mixer. It is
+/// decoded here, outside the lock and off the audio thread; what is wrong with
+/// it comes back as the error. Answers how long it plays, in seconds.
+#[tauri::command]
+fn dj_sample_load(app: State<'_, App>, slot: usize, bytes: Vec<u8>) -> Result<f64, String> {
+    let rate = match lock(&app.audio).as_ref() {
+        Some(output) => output.controller.sample_rate(),
+        None => return Err("Start audio to load a Sampler Slot".into()),
+    };
+    let file = soundcheck_engine::PreparedAudioFile::decode(&bytes, rate)
+        .map_err(|error| format!("The sample can't be loaded: {}", error.message()))?;
+    let seconds = file.left().len() as f64 / f64::from(rate);
+    match lock(&app.audio).as_mut() {
+        Some(output) if output.controller.sample_rate() == rate => {
+            output.controller.dj_put_sample(slot, file);
+            Ok(seconds)
+        }
+        _ => Err("The audio stopped while the sample was loading".into()),
+    }
+}
+
+#[tauri::command]
+fn dj_sample_unload(app: State<'_, App>, slot: usize) {
+    if let Some(output) = lock(&app.audio).as_mut() {
+        output.controller.dj_unload_sample(slot);
+    }
+}
+
 #[tauri::command]
 fn dj_unload(app: State<'_, App>, deck: usize) {
     if let Some(output) = lock(&app.audio).as_mut() {
@@ -914,6 +942,8 @@ pub fn run() {
             audio_audition_stop,
             dj_load,
             dj_unload,
+            dj_sample_load,
+            dj_sample_unload,
             dj_recording_take,
             dj_save_recording,
             headphones_devices,

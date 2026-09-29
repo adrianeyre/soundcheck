@@ -990,24 +990,24 @@ fn taking_a_loaded_sample_off_a_pad_puts_the_kits_own_sound_back() {
 }
 
 #[test]
-fn a_kit_of_more_than_eight_pads_plays_the_pads_past_the_bundled_ones() {
-    // A Project may have 8 to 16 pads (PRD #10); the pads past the bundled
-    // kit start empty, for the musician's own samples.
-    let mut engine = drums(Some(16));
-    assert_eq!(engine.load_track_pad_sample(0, 12, SNARE_WAV), None);
-    engine.set_track_pad(0, 12, 60, 1.0, 0.0, 0.0, 0);
+fn a_kit_bigger_than_the_bundled_one_plays_the_pads_past_the_bundled_ones() {
+    // A Project may have more pads than the bundled kit's 22, up to 32; the
+    // pads past it start empty, for the musician's own samples.
+    let mut engine = drums(Some(32));
+    assert_eq!(engine.load_track_pad_sample(0, 24, SNARE_WAV), None);
+    engine.set_track_pad(0, 24, 60, 1.0, 0.0, 0.0, 0);
     engine.set_track_notes(0, &[0.0, BEAT / 4.0, 60.0, 1.0]);
     assert!(
         peak(&left_of(&engine.render_range(0.0, BEAT))) > 0.1,
-        "pad 13"
+        "pad 25"
     );
 
     // The kit has no sound of its own that far up, so taking the sample off
     // leaves the pad silent.
-    let mut engine = drums(Some(16));
-    assert_eq!(engine.load_track_pad_sample(0, 12, SNARE_WAV), None);
-    engine.clear_track_pad_sample(0, 12);
-    engine.set_track_pad(0, 12, 60, 1.0, 0.0, 0.0, 0);
+    let mut engine = drums(Some(32));
+    assert_eq!(engine.load_track_pad_sample(0, 24, SNARE_WAV), None);
+    engine.clear_track_pad_sample(0, 24);
+    engine.set_track_pad(0, 24, 60, 1.0, 0.0, 0.0, 0);
     engine.set_track_notes(0, &[0.0, BEAT / 4.0, 60.0, 1.0]);
     assert!(
         peak(&left_of(&engine.render_range(0.0, BEAT))) < 0.01,
@@ -1017,7 +1017,7 @@ fn a_kit_of_more_than_eight_pads_plays_the_pads_past_the_bundled_ones() {
     // A kit the other way round: eight pads, and nothing past them.
     let mut engine = drums(Some(8));
     assert_eq!(
-        engine.load_track_pad_sample(0, 12, SNARE_WAV).as_deref(),
+        engine.load_track_pad_sample(0, 24, SNARE_WAV).as_deref(),
         Some("This kit has no such pad")
     );
 }
@@ -1191,7 +1191,7 @@ fn effect_settings_are_clamped_and_change_the_render() {
 
     let mut engine = Engine::new(RATE);
     engine.set_track_count(1);
-    assert!(!engine.insert_effect(0, 0, "flanger"), "no such Effect");
+    assert!(!engine.insert_effect(0, 0, "wobbulator"), "no such Effect");
     assert!(!engine.insert_effect(3, 0, "eq"), "no such Track");
     assert!(
         engine.insert_effect(0, 99, "compressor"),
@@ -1285,7 +1285,7 @@ fn prepared_effects_move_in_and_out_of_a_chain() {
         engine.insert_prepared_effect(5, 0, eq).is_err(),
         "no such Track"
     );
-    assert!(PreparedEffect::named("flanger", RATE).is_none());
+    assert!(PreparedEffect::named("wobbulator", RATE).is_none());
     assert!(engine.take_effect(0, 0).is_some());
     assert!(engine.take_effect(0, 0).is_none());
     for _ in 0..crate::effect::MAX_EFFECTS {

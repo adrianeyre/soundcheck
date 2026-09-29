@@ -18,6 +18,7 @@ pub const MAX_BREAKPOINTS: usize = 4_096;
 /// The widest a fader or a Send goes, matching the Project's own limit.
 const MAX_VOLUME: f32 = 2.0;
 
+use crate::channel_eq::{EQ_BANDS, EQ_RANGE_DB};
 use crate::instrument::{MAX_PADS, PadParam};
 
 /// A setting Automation can move. Only settings that are numbers: mute,
@@ -30,6 +31,9 @@ pub enum Automatable {
     Pan,
     /// The level of the Send to Bus `n`, a linear gain from 0 to 2.
     Send(usize),
+    /// The gain of band `n` of the channel EQ (low, low-mid, high-mid,
+    /// high), in dB.
+    Eq(usize),
     /// The setting called `param` of the Effect at `index` in the channel's
     /// Insert Chain: a built-in's or a Plugin's, which the Effect looks up
     /// in its own table. The Effect keeps its Automation wherever it moves,
@@ -47,9 +51,11 @@ pub enum Automatable {
 
 impl Automatable {
     /// The setting a host names: "volume", "pan", "send:<bus>",
-    /// "effect:<index>:<setting>" or "instrument:<setting>", with a setting
-    /// by the name its table gives it, or "pad:<index>:<setting>" for a
-    /// pad's "volume", "pan" or "pitch".
+    /// "eq:<band>" for a band of the channel EQ ("low", "lowMid",
+    /// "highMid" or "high"), "effect:<index>:<setting>" or
+    /// "instrument:<setting>", with a setting by the name its table gives
+    /// it, or "pad:<index>:<setting>" for a pad's "volume", "pan" or
+    /// "pitch".
     pub fn named(name: &str) -> Option<Self> {
         match name {
             "volume" => return Some(Self::Volume),
@@ -59,6 +65,7 @@ impl Automatable {
         let (kind, rest) = name.split_once(':')?;
         match kind {
             "send" => rest.parse().ok().map(Self::Send),
+            "eq" => EQ_BANDS.iter().position(|&band| band == rest).map(Self::Eq),
             "effect" => {
                 let (index, param) = rest.split_once(':')?;
                 let index = index.parse().ok()?;
@@ -82,6 +89,7 @@ impl Automatable {
         match self {
             Self::Volume | Self::Send(_) => (0.0, MAX_VOLUME),
             Self::Pan => (-1.0, 1.0),
+            Self::Eq(_) => (-EQ_RANGE_DB, EQ_RANGE_DB),
             Self::Effect { .. } | Self::Instrument(_) | Self::Pad { .. } => (f32::MIN, f32::MAX),
         }
     }
@@ -242,13 +250,40 @@ impl Line {
 /// The most Sends a channel can have automated: one per Bus.
 const MAX_SENDS: usize = crate::bus::MAX_BUSES;
 
+/// What moves the four bands of a channel EQ, low to high.
+#[derive(Clone, Debug, Default)]
+pub struct EqAutomation([Automation; 4]);
+
+impl EqAutomation {
+    /// Replace band `band`'s Automation, handing back the old one, or
+    /// `automation` itself for a band there isn't.
+    pub fn set(&mut self, band: usize, automation: Automation) -> Automation {
+        match self.0.get_mut(band) {
+            Some(lane) => std::mem::replace(lane, automation),
+            None => automation,
+        }
+    }
+
+    pub fn next_point(&self, from: u64) -> Option<u64> {
+        self.0.iter().filter_map(|lane| lane.next_point(from)).min()
+    }
+
+    /// Each band's line over `ticks`, which has no breakpoint between its
+    /// first and last, or none where it isn't automated.
+    pub fn lines(&self, ticks: &[f64]) -> [Option<Line>; 4] {
+        [0, 1, 2, 3].map(|band| over(&self.0[band], ticks))
+    }
+}
+
 /// What moves a Track's or Bus's mixer channel while the song plays: its
-/// fader, its pan and the levels of its Sends. Building it allocates, so a
-/// native host does it off the audio thread; changing it then doesn't.
+/// fader, its pan, its EQ and the levels of its Sends. Building it
+/// allocates, so a native host does it off the audio thread; changing it
+/// then doesn't.
 #[derive(Clone, Debug)]
 pub struct ChannelAutomation {
     volume: Automation,
     pan: Automation,
+    eq: EqAutomation,
     /// Each automated Send, by the Bus it feeds.
     sends: Vec<(usize, Automation)>,
 }
@@ -258,18 +293,21 @@ impl Default for ChannelAutomation {
         Self {
             volume: Automation::default(),
             pan: Automation::default(),
+            eq: EqAutomation::default(),
             sends: Vec::with_capacity(MAX_SENDS),
         }
     }
 }
 
 impl ChannelAutomation {
-    /// Replace the Automation of the fader, the pan or a Send, handing back
-    /// the old one, or `automation` itself for any other setting.
+    /// Replace the Automation of the fader, the pan, an EQ band or a Send,
+    /// handing back the old one, or `automation` itself for any other
+    /// setting.
     pub fn set(&mut self, setting: Automatable, automation: Automation) -> Automation {
         match setting {
             Automatable::Volume => std::mem::replace(&mut self.volume, automation),
             Automatable::Pan => std::mem::replace(&mut self.pan, automation),
+            Automatable::Eq(band) => self.eq.set(band, automation),
             Automatable::Send(bus) if bus < MAX_SENDS => {
                 let at = self.sends.iter().position(|(to, _)| *to == bus);
                 match at {
@@ -293,7 +331,13 @@ impl ChannelAutomation {
             .into_iter()
             .chain(sends)
             .filter_map(|automation| automation.next_point(from))
+            .chain(self.eq.next_point(from))
             .min()
+    }
+
+    /// What moves the channel's EQ.
+    pub fn eq(&self) -> &EqAutomation {
+        &self.eq
     }
 
     /// The fader's and the pan's lines over `ticks`, which has no breakpoint
@@ -492,10 +536,13 @@ mod tests {
                 param: PadParam::Pitch
             })
         );
-        // A pad's note and choke group pick, and a kit has at most 16 pads.
+        // A pad's note and choke group pick, and a kit has at most 32 pads.
         assert_eq!(Automatable::named("pad:0:note"), None);
         assert_eq!(Automatable::named("pad:0:chokeGroup"), None);
-        assert_eq!(Automatable::named("pad:16:volume"), None);
+        assert_eq!(Automatable::named("pad:32:volume"), None);
         assert_eq!(Automatable::named("pad:x:volume"), None);
+        assert_eq!(Automatable::named("eq:low"), Some(Automatable::Eq(0)));
+        assert_eq!(Automatable::named("eq:high"), Some(Automatable::Eq(3)));
+        assert_eq!(Automatable::named("eq:mid"), None);
     }
 }

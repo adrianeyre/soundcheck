@@ -286,6 +286,436 @@ export const EFFECT_PRESETS: { readonly [T in EffectType]: readonly EffectPreset
       settings: { ...defaultEffectSettings("utility"), invertLeft: "on", invertRight: "on" },
     },
   ],
+  flanger: [
+    {
+      name: "Jet sweep",
+      description: "A slow, deep whoosh with a strong ring, like a jet passing overhead",
+      settings: { rateHz: 0.15, delayMs: 0.5, depthMs: 5, feedback: 0.8, stereoPhase: 90, mix: 0.5 },
+    },
+    {
+      name: "Metallic",
+      description: "Negative feedback on a short, quick sweep, for a hollow, tinny ring",
+      settings: { rateHz: 0.8, delayMs: 0.3, depthMs: 1.5, feedback: -0.7, stereoPhase: 180, mix: 0.5 },
+    },
+    {
+      name: "Gentle movement",
+      description: "A soft, subtle sweep that adds motion to pads and guitars without a ring",
+      settings: { rateHz: 0.25, delayMs: 2, depthMs: 2, feedback: 0.2, stereoPhase: 90, mix: 0.35 },
+    },
+  ],
+  tremolo: [
+    {
+      name: "Vintage amp",
+      description: "A smooth, steady throb, like the tremolo on an old guitar amp",
+      settings: { sync: "off", note: "1/8", rateHz: 5.5, shape: "sine", depth: 0.5, stereoPhase: 0 },
+    },
+    {
+      name: "Sixteenth chop",
+      description: "A square gate in sixteenth notes that chops a pad or chord in time with the song",
+      settings: { sync: "on", note: "1/16", rateHz: 5, shape: "square", depth: 1, stereoPhase: 0 },
+    },
+    {
+      name: "Stereo shimmer",
+      description: "The sides pulse against each other in eighth notes, so the sound throbs from side to side",
+      settings: { sync: "on", note: "1/8", rateHz: 5, shape: "triangle", depth: 0.7, stereoPhase: 180 },
+    },
+  ],
+  autopan: [
+    {
+      name: "Slow drift",
+      description: "A gentle, slow sweep that lets a pad or texture wander across the stereo image",
+      settings: { sync: "off", note: "1/4", rateHz: 0.2, shape: "sine", depth: 0.6 },
+    },
+    {
+      name: "Bar sweep",
+      description: "One full sweep left and right per bar, in time with the song",
+      settings: { sync: "on", note: "1/1", rateHz: 0.5, shape: "triangle", depth: 1 },
+    },
+    {
+      name: "Ping-pong eighths",
+      description: "Jumps hard left and right on eighth notes, for a bouncing, rhythmic part",
+      settings: { sync: "on", note: "1/4", rateHz: 0.5, shape: "square", depth: 1 },
+    },
+  ],
+  ringmod: [
+    {
+      name: "Robot voice",
+      description: "A low, steady carrier that turns a voice metallic and robotic",
+      settings: { frequencyHz: 60, driftRateHz: 0.5, driftDepth: 0, mix: 1 },
+    },
+    {
+      name: "Bell tones",
+      description: "A high carrier blended with the dry signal, for inharmonic, bell-like overtones",
+      settings: { frequencyHz: 1200, driftRateHz: 0.5, driftDepth: 0, mix: 0.5 },
+    },
+    {
+      name: "Sci-fi drift",
+      description: "A carrier that slowly bends up and down, so the ring sighs and swoops",
+      settings: { frequencyHz: 400, driftRateHz: 0.3, driftDepth: 7, mix: 0.8 },
+    },
+  ],
+  vibrato: [
+    {
+      name: "Singer",
+      description: "A natural, gentle waver, like a held note from a singer or a violin",
+      settings: { rateHz: 5.5, depthCents: 25, stereoPhase: 0 },
+    },
+    {
+      name: "Warped tape",
+      description: "A slow, deep wobble, like a worn cassette or a warped record",
+      settings: { rateHz: 0.8, depthCents: 40, stereoPhase: 0 },
+    },
+    {
+      name: "Wide swim",
+      description: "The sides bend opposite ways, which widens the sound and makes it swim",
+      settings: { rateHz: 3, depthCents: 15, stereoPhase: 180 },
+    },
+  ],
+  transient: [
+    {
+      name: "Punchy Kick",
+      description: "Sharpens the click of each hit and trims the boom after it.",
+      settings: { attack: 60, sustain: -30, outputDb: 0, mix: 1 },
+    },
+    {
+      name: "Tight Drums",
+      description: "Cuts the ring and room from a drum loop so it sits tight in the groove.",
+      settings: { attack: 20, sustain: -70, outputDb: 1, mix: 1 },
+    },
+    {
+      name: "Soft Pluck",
+      description: "Rounds off a sharp pluck's start and lets its tail bloom.",
+      settings: { attack: -50, sustain: 40, outputDb: 0, mix: 0.8 },
+    },
+  ],
+  deesser: [
+    {
+      name: "Gentle Vocal",
+      description: "Takes the edge off a singer's s sounds without dulling the voice.",
+      settings: { frequencyHz: 6500, thresholdDb: -24, rangeDb: 6, listen: "off" },
+    },
+    {
+      name: "Harsh Esses",
+      description: "Clamps down hard on bright, spitty sibilance.",
+      settings: { frequencyHz: 7500, thresholdDb: -32, rangeDb: 14, listen: "off" },
+    },
+    {
+      name: "Cymbal Tamer",
+      description: "Calms splashy cymbals and hats that jump out of a drum bus.",
+      settings: { frequencyHz: 10000, thresholdDb: -28, rangeDb: 8, listen: "off" },
+    },
+  ],
+  exciter: [
+    {
+      name: "Vocal Air",
+      description: "Adds a breathy shine above the voice without making it harsh.",
+      settings: { frequencyHz: 8000, driveDb: 9, amount: 0.25, mix: 1 },
+    },
+    {
+      name: "Bright Lead",
+      description: "Gives a dull synth lead new top end so it cuts through the mix.",
+      settings: { frequencyHz: 3000, driveDb: 15, amount: 0.4, mix: 1 },
+    },
+    {
+      name: "Hat Sizzle",
+      description: "Pushes hi-hats and shakers for extra sizzle at the very top.",
+      settings: { frequencyHz: 10000, driveDb: 18, amount: 0.35, mix: 0.8 },
+    },
+  ],
+  multiband: [
+    {
+      name: "Master Glue",
+      description: "Gentle control across all three bands to hold a full mix together.",
+      settings: {
+        lowCrossoverHz: 150,
+        highCrossoverHz: 4000,
+        lowThresholdDb: -18,
+        lowRatio: 2,
+        midThresholdDb: -20,
+        midRatio: 1.5,
+        highThresholdDb: -22,
+        highRatio: 2,
+        attack: 20,
+        release: 200,
+        outputDb: 2,
+      },
+    },
+    {
+      name: "Tame the Bass",
+      description: "Holds a boomy low end steady while the mids and highs pass as they are.",
+      settings: {
+        lowCrossoverHz: 120,
+        highCrossoverHz: 3000,
+        lowThresholdDb: -28,
+        lowRatio: 6,
+        midThresholdDb: 0,
+        midRatio: 1,
+        highThresholdDb: 0,
+        highRatio: 1,
+        attack: 15,
+        release: 150,
+        outputDb: 1,
+      },
+    },
+    {
+      name: "Smooth Top",
+      description: "Rides down harsh highs and sibilance on a bright bus.",
+      settings: {
+        lowCrossoverHz: 200,
+        highCrossoverHz: 5000,
+        lowThresholdDb: 0,
+        lowRatio: 1,
+        midThresholdDb: -24,
+        midRatio: 1.5,
+        highThresholdDb: -30,
+        highRatio: 4,
+        attack: 2,
+        release: 80,
+        outputDb: 0,
+      },
+    },
+  ],
+  clipper: [
+    {
+      name: "Hard Trance Kick",
+      description: "Drives the kick hard into a flat ceiling for a loud, cutting thump.",
+      settings: { inputDb: 9, ceilingDb: -1, softness: 0, outputDb: 0, mix: 1 },
+    },
+    {
+      name: "Soft Peak Shave",
+      description: "Rounds off the loudest peaks of a bus for a few dB more level, barely heard.",
+      settings: { inputDb: 3, ceilingDb: -0.5, softness: 0.6, outputDb: 0, mix: 1 },
+    },
+    {
+      name: "Parallel Grit",
+      description: "Crushes a copy of the drums and blends it under the clean ones.",
+      settings: { inputDb: 18, ceilingDb: -6, softness: 0.2, outputDb: 3, mix: 0.35 },
+    },
+  ],
+  freqshift: [
+    {
+      name: "Slow swirl",
+      description: "A shift of a couple of hertz, blended with the dry signal, for a slow phaser-like swirl",
+      settings: { shiftHz: 2, feedback: 0, mix: 0.5 },
+    },
+    {
+      name: "Metallic clang",
+      description: "Pulls the harmonics apart into an inharmonic, bell-like and metallic tone",
+      settings: { shiftHz: 330, feedback: 0.2, mix: 1 },
+    },
+    {
+      name: "Falling spiral",
+      description: "A small downward shift fed back on itself, so the sound seems to fall endlessly",
+      settings: { shiftHz: -25, feedback: 0.7, mix: 0.6 },
+    },
+  ],
+  autowah: [
+    {
+      name: "Funk guitar",
+      description: "A quick, vocal band-pass wah that opens on every strum",
+      settings: {
+        mode: "band-pass",
+        lowHz: 350,
+        highHz: 2200,
+        sensitivityDb: 12,
+        attackMs: 3,
+        releaseMs: 120,
+        resonance: 5,
+        mix: 1,
+      },
+    },
+    {
+      name: "Squelchy bass",
+      description: "A resonant low-pass that snaps open on each bass note and closes slowly",
+      settings: {
+        mode: "low-pass",
+        lowHz: 120,
+        highHz: 1800,
+        sensitivityDb: 18,
+        attackMs: 2,
+        releaseMs: 250,
+        resonance: 8,
+        mix: 1,
+      },
+    },
+    {
+      name: "Gentle quack",
+      description: "A wide, soft wah blended with the dry signal, for a subtle movement on keys",
+      settings: {
+        mode: "band-pass",
+        lowHz: 400,
+        highHz: 1600,
+        sensitivityDb: 6,
+        attackMs: 15,
+        releaseMs: 300,
+        resonance: 2,
+        mix: 0.6,
+      },
+    },
+  ],
+  haas: [
+    {
+      name: "Subtle width",
+      description: "A few milliseconds on one side, for a little width that still sums well to mono",
+      settings: { side: "right", delayMs: 8, levelDb: -3, mix: 1 },
+    },
+    {
+      name: "Wide double",
+      description: "A long delay at nearly full level, which spreads a mono part right across the image",
+      settings: { side: "right", delayMs: 25, levelDb: -1, mix: 1 },
+    },
+    {
+      name: "Lean left",
+      description: "Delays the left side, so the part sits wide and towards the right",
+      settings: { side: "left", delayMs: 15, levelDb: -2, mix: 1 },
+    },
+  ],
+  resonator: [
+    {
+      name: "Tuned drums",
+      description: "Rings a drum loop at C, so the hits sing a low note under the groove",
+      settings: {
+        tuneBy: "note",
+        note: "C",
+        octave: 2,
+        frequencyHz: 220,
+        chord: "octave",
+        decay: 0.6,
+        brightness: 0.4,
+        mix: 0.4,
+      },
+    },
+    {
+      name: "Minor chord pad",
+      description: "Turns noise or a voice into a long, ringing A minor chord",
+      settings: {
+        tuneBy: "note",
+        note: "A",
+        octave: 3,
+        frequencyHz: 220,
+        chord: "minor",
+        decay: 4,
+        brightness: 0.6,
+        mix: 0.7,
+      },
+    },
+    {
+      name: "Metal bar",
+      description: "A bright, high, long-ringing tone, like a struck metal bar",
+      settings: {
+        tuneBy: "frequency",
+        note: "C",
+        octave: 3,
+        frequencyHz: 880,
+        chord: "unison",
+        decay: 2.5,
+        brightness: 1,
+        mix: 0.5,
+      },
+    },
+  ],
+  vowel: [
+    {
+      name: "Talking lead",
+      description: "Swings between A and I at an easy pace, so a synth lead says \"yah-yee\"",
+      settings: { vowel: "E", morph: 0, resonance: 8, lfoRateHz: 1.5, lfoDepth: 1, mix: 1 },
+    },
+    {
+      name: "Wobble bass",
+      description: "A fast, deep sweep through the vowels, for a talking, wobbling bass",
+      settings: { vowel: "O", morph: 0.5, resonance: 10, lfoRateHz: 4, lfoDepth: 1.5, mix: 1 },
+    },
+    {
+      name: "Choir ooh",
+      description: "A still, soft O-U vowel blended with the dry signal, for a pad that sounds sung",
+      settings: { vowel: "O", morph: 0.5, resonance: 5, lfoRateHz: 0.2, lfoDepth: 0.1, mix: 0.6 },
+    },
+  ],
+  pump: [
+    {
+      name: "Hard trance pump",
+      description: "Deep quarter-note ducking that stays down and snaps back late, for rolling basslines and supersaws",
+      settings: { note: "1/4", depth: 0.9, release: 0.8, curve: 0.2, phase: 0, mix: 1 },
+    },
+    {
+      name: "Gentle breathing",
+      description: "A light, quick sidechain feel that glues pads to the kick without drawing attention",
+      settings: { note: "1/4", depth: 0.4, release: 0.5, curve: 0.7, phase: 0, mix: 1 },
+    },
+    {
+      name: "Eighth-note chop",
+      description: "Short dips twice a beat, a fast pumping groove for plucks and off-beat bass",
+      settings: { note: "1/8", depth: 0.8, release: 0.6, curve: 0.4, phase: 0, mix: 1 },
+    },
+  ],
+  trancegate: [
+    {
+      name: "Classic gate",
+      description: "Tight sixteenth-note chops on every step, the stuttering supersaw pad of trance",
+      settings: { step: "1/16", pattern: "sixteenths", attackMs: 1, releaseMs: 15, depth: 1, mix: 1 },
+    },
+    {
+      name: "Gallop",
+      description: "A driving one-and-two gallop rhythm for leads and hard-trance stabs",
+      settings: { step: "1/16", pattern: "gallop", attackMs: 1, releaseMs: 10, depth: 1, mix: 1 },
+    },
+    {
+      name: "Soft tresillo",
+      description: "A smoother three-three-two pulse that leaves some of the pad between the steps",
+      settings: { step: "1/16", pattern: "tresillo", attackMs: 8, releaseMs: 60, depth: 0.7, mix: 1 },
+    },
+  ],
+  pitchshift: [
+    {
+      name: "Octave up",
+      description: "An octave above blended under the original, for a brighter, bigger lead",
+      settings: { semitones: 12, cents: 0, grainMs: 50, mix: 0.4 },
+    },
+    {
+      name: "Sub octave",
+      description: "An octave below with long grains, to thicken a bass or a lead from underneath",
+      settings: { semitones: -12, cents: 0, grainMs: 100, mix: 0.4 },
+    },
+    {
+      name: "Fifth harmony",
+      description: "A fifth above, slightly detuned, for an instant power-chord harmony",
+      settings: { semitones: 7, cents: 5, grainMs: 60, mix: 0.35 },
+    },
+  ],
+  lofi: [
+    {
+      name: "Worn cassette",
+      description: "A tape that has been played to death: wobbly, dark and hissy",
+      settings: { wow: 0.6, flutter: 0.4, toneHz: 4000, drive: 0.4, hiss: 0.4, mix: 1 },
+    },
+    {
+      name: "Warm tape",
+      description: "Just a touch of tape: gentle saturation and a softened top, barely any wobble",
+      settings: { wow: 0.1, flutter: 0.1, toneHz: 12000, drive: 0.5, hiss: 0.05, mix: 1 },
+    },
+    {
+      name: "Lo-fi beat",
+      description: "A dusty, muffled sound for chilled keys and drums",
+      settings: { wow: 0.4, flutter: 0.2, toneHz: 2500, drive: 0.3, hiss: 0.3, mix: 0.8 },
+    },
+  ],
+  beatrepeat: [
+    {
+      name: "Sixteenth stutter",
+      description: "A machine-gun sixteenth roll for the end of a build; automate Repeat to fire it",
+      settings: { slice: "1/16", repeat: 0, decay: 0, mix: 1 },
+    },
+    {
+      name: "Fading eighths",
+      description: "Eighth-note repeats that die away, like a quick echo of the last beat",
+      settings: { slice: "1/8", repeat: 0, decay: 0.3, mix: 1 },
+    },
+    {
+      name: "Thirty-second buzz",
+      description: "Very short repeats that turn a hit into a buzzing, pitched roll",
+      settings: { slice: "1/32", repeat: 0, decay: 0, mix: 1 },
+    },
+  ],
 };
 
 /** The factory Presets of `type`, looked at without their settings' type. */

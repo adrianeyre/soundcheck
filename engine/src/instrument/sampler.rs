@@ -12,8 +12,9 @@ use std::sync::Arc;
 
 use crate::instrument::wav::Sample;
 
-/// The most pads a kit can have. The MVP bundles 8 (PRD: 8 to 16).
-pub const MAX_PADS: usize = 16;
+/// The most pads a kit can have. The bundled Starter Kit has 22, and room
+/// is left over for a musician's own.
+pub const MAX_PADS: usize = 32;
 
 /// How many pads can sound at once before the oldest is cut.
 const VOICES: usize = 16;
@@ -398,7 +399,7 @@ mod tests {
     #[test]
     fn the_starter_kit_has_a_sample_on_every_pad() {
         let pads = kit().pad_count();
-        assert_eq!(pads, 8);
+        assert_eq!(pads, 22);
         assert_eq!(kit().pad_settings(KICK).unwrap().note, 36);
         for pad in 0..pads {
             let mut sampler = kit();
@@ -630,6 +631,35 @@ mod tests {
         sampler.note_on(36, 1.0);
         assert_eq!(sampler.active_voices(), 0);
         assert_eq!(peak(&render(&mut sampler, 1_024).0), 0.0);
+    }
+
+    #[test]
+    fn a_pad_past_the_kit_s_end_is_silent_rather_than_playing_another_pad_s_sound() {
+        let kit_pads = super::super::STARTER_KIT_PADS;
+        let mut sampler = DrumSampler::starter_kit(RATE, MAX_PADS);
+        assert_eq!(sampler.pad_count(), MAX_PADS);
+        // Putting the kit's own sample back, as taking the musician's off
+        // does, finds none past the kit: the index doesn't wrap around.
+        assert!(super::super::kit_sample(kit_pads).is_none());
+        assert!(super::super::kit_sample(MAX_PADS - 1).is_none());
+        for pad in kit_pads..MAX_PADS {
+            let note = 76 + (pad - kit_pads) as u8;
+            sampler.set_pad(
+                pad,
+                PadSettings {
+                    note,
+                    ..PadSettings::default()
+                },
+            );
+            sampler.set_sample(pad, super::super::kit_sample(pad).map(Arc::new));
+            sampler.note_on(note, 1.0);
+            assert_eq!(sampler.active_voices(), 0, "pad {pad} plays nothing");
+            assert_eq!(peak(&render(&mut sampler, 1_024).0), 0.0);
+        }
+        // The last of the kit's own still sounds beside them.
+        let last = sampler.pad_settings(kit_pads - 1).unwrap().note;
+        sampler.note_on(last, 1.0);
+        assert!(peak(&render(&mut sampler, 24_000).0) > 0.1);
     }
 
     #[test]

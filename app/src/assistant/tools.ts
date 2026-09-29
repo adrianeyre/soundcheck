@@ -80,10 +80,12 @@ import {
   type Automation,
   type Breakpoint,
   type Bus,
+  type ChannelEq,
   type Clip,
   clipEnd,
   type DrumPad,
   type Effect,
+  EQ_BANDS,
   type InstrumentTrack,
   type PluginInstrument,
   type Note,
@@ -393,6 +395,30 @@ const CHANNEL_SCHEMA = {
 
 const BUS_ID_SCHEMA = { type: "string", description: "The Bus's id, as listed in the Project." };
 
+/** Where each band of a channel EQ sits, for the tools that set one. */
+const EQ_BAND_TEXT: Record<keyof ChannelEq, string> = {
+  low: "below about 200 Hz",
+  lowMid: "200 Hz to 1 kHz",
+  highMid: "1 kHz to 5 kHz",
+  high: "above about 5 kHz",
+};
+
+/** The bands a channel EQ tool takes, each optional: only those given change. */
+const EQ_PROPERTIES = Object.fromEntries(
+  EQ_BANDS.map((band) => [
+    band,
+    {
+      type: "number",
+      minimum: LIMITS.eq[0],
+      maximum: LIMITS.eq[1],
+      description: `The ${band} band's gain in dB, ${EQ_BAND_TEXT[band]}: 0 is flat.`,
+    },
+  ]),
+);
+
+/** What the channel EQ tools say about the EQ, after whose it is. */
+const EQ_DESCRIPTION = `channel EQ on the mixer, after its Insert Chain and before its fader: four bands that meet at 200 Hz, 1 kHz and 5 kHz, each a gain in dB from ${LIMITS.eq[0]} to ${LIMITS.eq[1]}, 0 leaving it flat (where every channel starts). Only the bands given change; give 0 to put one back. It is broad strokes, as a console's EQ is: for a narrow cut, a filter or a precise frequency, add an EQ Effect instead. read_channel reads it as eq.`;
+
 /** A channel that feeds others: the Master feeds nothing, so it has no output or Sends. */
 const FEEDER_SCHEMA = { type: "string", description: "Which channel: a Track's or a Bus's id, as listed in the Project." };
 
@@ -426,7 +452,7 @@ const AUTOMATION_CHANNEL_SCHEMA = {
 const AUTOMATION_SETTING_SCHEMA = {
   type: "string",
   description:
-    "The setting, as the summary and read_automation name it: volume, pan, send:<busId>, effect:<effectId>:<setting>, instrument:<setting> or, for a Drum Sampler's Pad, instrument:pad<note>.<setting>.",
+    "The setting, as the summary and read_automation name it: volume, pan, eq:low, eq:lowMid, eq:highMid, eq:high, send:<busId>, effect:<effectId>:<setting>, instrument:<setting> or, for a Drum Sampler's Pad, instrument:pad<note>.<setting>.",
 };
 
 /** A numeric setting's name and range, for the settings Automation can move. */
@@ -441,7 +467,7 @@ function numericParamsText(params: readonly TableParam[]): string {
  * What a setting Automation moves is called, and the values each takes, read
  * from the Effects' and the Synth's own tables as the other tools' are.
  */
-const AUTOMATABLE_TEXT = `The setting is named as the summary and read_automation name it, and each takes values in its own units and range: volume, a linear gain from 0 to 2 (1 is unity, 0.5 about -6 dB, 0 silent); pan, from -1 (left) to 1 (right), which the Master hasn't; send:<busId>, the level of its Send to that Bus, a linear gain from 0 to 2; effect:<effectId>:<setting>, a number of one of its own Effects; instrument:<setting>, a number of its Synth, Keys or Plugin Instrument; and instrument:pad<note>.<setting>, a number of its Drum Sampler's Pad that the note plays. The Effects' numbers: ${EFFECT_TYPES.map(
+const AUTOMATABLE_TEXT = `The setting is named as the summary and read_automation name it, and each takes values in its own units and range: volume, a linear gain from 0 to 2 (1 is unity, 0.5 about -6 dB, 0 silent); pan, from -1 (left) to 1 (right), which the Master hasn't; eq:low, eq:lowMid, eq:highMid and eq:high, a band of its channel EQ, in dB from -12 to 12 (0 is flat); send:<busId>, the level of its Send to that Bus, a linear gain from 0 to 2; effect:<effectId>:<setting>, a number of one of its own Effects; instrument:<setting>, a number of its Synth, Keys or Plugin Instrument; and instrument:pad<note>.<setting>, a number of its Drum Sampler's Pad that the note plays. The Effects' numbers: ${EFFECT_TYPES.map(
   (type) => `${EFFECT_NAMES[type]} (${type}): ${numericParamsText(effectParams(type))}.`,
 ).join(" ")} The Synth's: ${numericParamsText(SYNTH_PARAMS)}. A Pad's: ${PAD_PARAMS.map((param) => `${param.name} (${withUnit(param.min, param.unit)} to ${withUnit(param.max, param.unit)})`).join(", ")}, so a Kick on note 36 has instrument:pad36.volume. A Plugin's take the ranges its Plugin declares. read_channel gives each setting's value now. Mute, solo, bypass and settings that pick from a list or switch on and off are never automated.`;
 
@@ -1844,6 +1870,27 @@ const TOOLS = {
     },
   },
 
+  set_track_eq: {
+    smallCoreGroup: "routing",
+    description: `Set a Track's ${EQ_DESCRIPTION}`,
+    schema: {
+      type: "object",
+      properties: { trackId: { type: "string", description: "The Track's id, as listed in the Project." }, ...EQ_PROPERTIES },
+      required: ["trackId"],
+      additionalProperties: false,
+    },
+    plan(input, project) {
+      const track = findTrack(input.trackId, project);
+      const eq = checkEq(input);
+      const after = { ...track.mixer.eq, ...eq };
+      return {
+        commands: [{ type: "setTrackMixer", trackId: track.id, mixer: { eq } }],
+        change: `Set the EQ of “${track.name}” to ${eqText(after)}`,
+        report: `Track ${track.id} (“${track.name}”) has its EQ at ${eqText(after)}.${eqOverridden(track.automation, eq)}`,
+      };
+    },
+  },
+
   set_track_mute: {
     description: "Mute a Track on the mixer, or unmute it. A muted Track plays nothing, not even through its Sends.",
     schema: {
@@ -1913,6 +1960,21 @@ const TOOLS = {
         commands: [{ type: "setMasterVolume", volume }],
         change: `Set the Master to ${formatDb(volume)}`,
         report: `The Master is at volume ${volume} (${formatDb(volume)}).${overridden(project.master.automation, "volume")}`,
+      };
+    },
+  },
+
+  set_master_eq: {
+    smallCoreGroup: "routing",
+    description: `Set the Master's ${EQ_DESCRIPTION} It shapes the whole mix.`,
+    schema: { type: "object", properties: EQ_PROPERTIES, required: [], additionalProperties: false },
+    plan(input, project) {
+      const eq = checkEq(input);
+      const after = { ...project.master.eq, ...eq };
+      return {
+        commands: [{ type: "setMasterEq", eq }],
+        change: `Set the Master's EQ to ${eqText(after)}`,
+        report: `The Master has its EQ at ${eqText(after)}.${eqOverridden(project.master.automation, eq)}`,
       };
     },
   },
@@ -2158,6 +2220,27 @@ const TOOLS = {
         commands: [{ type: "setBusMixer", busId: bus.id, mixer: { pan } }],
         change: `Panned the Bus “${bus.name}” ${panText(pan)}`,
         report: `Bus ${bus.id} (“${bus.name}”) is panned to ${pan} (${panText(pan)}).${overridden(bus.automation, "pan")}`,
+      };
+    },
+  },
+
+  set_bus_eq: {
+    group: "routing",
+    description: `Set a Bus's ${EQ_DESCRIPTION} It shapes everything that feeds the Bus.`,
+    schema: {
+      type: "object",
+      properties: { busId: BUS_ID_SCHEMA, ...EQ_PROPERTIES },
+      required: ["busId"],
+      additionalProperties: false,
+    },
+    plan(input, project) {
+      const bus = findBus(input.busId, project, "busId");
+      const eq = checkEq(input);
+      const after = { ...bus.mixer.eq, ...eq };
+      return {
+        commands: [{ type: "setBusMixer", busId: bus.id, mixer: { eq } }],
+        change: `Set the EQ of the Bus “${bus.name}” to ${eqText(after)}`,
+        report: `Bus ${bus.id} (“${bus.name}”) has its EQ at ${eqText(after)}.${eqOverridden(bus.automation, eq)}`,
       };
     },
   },
@@ -2975,6 +3058,27 @@ function checkRange(value: unknown, [min, max]: readonly [number, number], what:
     reject(`${what} must be a number from ${min} to ${max}`);
   }
   return value;
+}
+
+/** The bands of a channel EQ a call gives, each in range: at least one. */
+function checkEq(input: Record<string, unknown>): Partial<ChannelEq> {
+  const eq: Partial<ChannelEq> = {};
+  for (const band of EQ_BANDS) {
+    if (input[band] !== undefined) eq[band] = checkRange(input[band], LIMITS.eq, band);
+  }
+  if (Object.keys(eq).length === 0) reject(`give at least one of ${EQ_BANDS.join(", ")}`);
+  return eq;
+}
+
+/** A channel EQ's bands, as a report and the summary say them. */
+function eqText(eq: ChannelEq): string {
+  return EQ_BANDS.map((band) => `${band} ${eq[band] > 0 ? "+" : ""}${eq[band]} dB`).join(", ");
+}
+
+/** What a report adds when a band it set is automated. */
+function eqOverridden(automation: readonly Automation[], eq: Partial<ChannelEq>): string {
+  const bands = EQ_BANDS.filter((band) => eq[band] !== undefined);
+  return overridden(automation, bands.map((band): AutomatedSetting => `eq:${band}`), (setting) => `EQ ${setting.slice(3)} band`);
 }
 
 function checkIndex(value: unknown, length: number): number {

@@ -64,7 +64,7 @@ function fakeOutput() {
     takeRecordedNotes: () => [],
     resetCounters: () => {},
     close: async () => {},
-    dj: { load, unload: () => {}, takeRecording, headphones: false },
+    dj: { load, unload: () => {}, loadSample: async () => 1, unloadSample: () => {}, takeRecording, headphones: false },
   };
   const dj = (name: string) => sent.filter((c) => c.type === "djSet" && c.name === name);
   return { output, sent, report, load, takeRecording, dj };
@@ -99,7 +99,7 @@ test("a new output is told every knob, and a file loads onto a Deck with its BPM
   expect(within(deck).getByText("Am · 8A")).toBeInTheDocument();
   expect(within(deck).getByRole("slider", { name: "Deck 1 needle search" })).toBeInTheDocument();
   // And the Track browser has it, analysed.
-  const browser = screen.getByRole("region", { name: "Track browser" });
+  const browser = screen.getByRole("region", { name: "Track browser 1" });
   expect(within(browser).getByText("124.00")).toBeInTheDocument();
 });
 
@@ -182,6 +182,25 @@ test("a recording of the mix is encoded and saved", async () => {
   expect(await screen.findByText(/Recording saved/)).toBeInTheDocument();
 });
 
+test("a recording of the mix, once stopped, can be added to the song", async () => {
+  const fake = fakeOutput();
+  const onAddToSong = vi.fn<(wav: Uint8Array, name: string) => Promise<string>>(async () => "Mix take 1 is in the song.");
+  render(<DjPage output={fake.output} active saver={saver()} onAddToSong={onAddToSong} />);
+  const mixer = screen.getByRole("region", { name: "Mixer" });
+  const add = within(mixer).getByRole("button", { name: "Add the recording to the song, on a new Audio Track" });
+  expect(add).toBeDisabled();
+  fireEvent.click(within(mixer).getByRole("button", { name: "Record the mix" }));
+  expect(fake.dj("recordSource").at(-1)).toMatchObject({ value: 0 });
+  fake.report[5] = 1;
+  await act(() => new Promise((resolve) => setTimeout(resolve, 60)));
+  fireEvent.click(within(mixer).getByRole("button", { name: "Stop and save the recording" }));
+  fake.report[5] = 0;
+  await waitFor(() => expect(add).toBeEnabled());
+  fireEvent.click(add);
+  await waitFor(() => expect(onAddToSong).toHaveBeenCalledWith(expect.any(Uint8Array), "Mix take"));
+  expect(await screen.findByText("Mix take 1 is in the song.")).toBeInTheDocument();
+});
+
 test("without audio the page offers to start it", () => {
   const onStart = vi.fn<() => void>();
   render(<DjPage output={null} onStart={onStart} active saver={saver()} />);
@@ -207,8 +226,9 @@ test("a file dragged from the folder tree onto a Deck is read and loaded, and it
   const { source, readBytes } = fakeSamples();
   render(<DjPage output={fake.output} active saver={saver()} samples={source} library={memoryLibraryStorage()} />);
   // The Track browser opens on the folder tree, with the Decks to put a file on.
-  expect(screen.getByRole("tab", { name: "Folders" })).toHaveAttribute("aria-selected", "true");
-  expect(screen.getByRole("heading", { name: "Folders" })).toBeInTheDocument();
+  const browser = screen.getByRole("region", { name: "Track browser 1" });
+  expect(within(browser).getByRole("tab", { name: "Folders" })).toHaveAttribute("aria-selected", "true");
+  expect(within(browser).getByRole("heading", { name: "Folders" })).toBeInTheDocument();
 
   const sample = { folder: { id: "music", label: "Music" }, path: "Set/Night Drive.mp3" };
   const deck = screen.getByRole("region", { name: "Deck 2" });
@@ -227,14 +247,25 @@ test("a file dragged from the folder tree onto a Deck is read and loaded, and it
   fireEvent.click(within(stack).getByRole("button", { name: "Zoom the waveforms in" }));
   expect(within(stack).getByLabelText("Showing 4 seconds")).toBeInTheDocument();
 
-  // The loaded list has it, a tab away.
-  fireEvent.click(screen.getByRole("tab", { name: /Loaded tracks/ }));
-  expect(screen.getByRole("tab", { name: "Loaded tracks (1)" })).toHaveAttribute("aria-selected", "true");
+  // The loaded list has it, a tab away; the other Track browser stays on its folders.
+  fireEvent.click(within(browser).getByRole("tab", { name: /Loaded tracks/ }));
+  expect(within(browser).getByRole("tab", { name: "Loaded tracks (1)" })).toHaveAttribute("aria-selected", "true");
+  const other = screen.getByRole("region", { name: "Track browser 2" });
+  expect(within(other).getByRole("tab", { name: "Folders" })).toHaveAttribute("aria-selected", "true");
 });
 
 test("without sample folders the Track browser says so and offers the loaded list", () => {
   render(<DjPage output={fakeOutput().output} active saver={saver()} />);
-  expect(screen.getByRole("tab", { name: /Loaded tracks/ })).toHaveAttribute("aria-selected", "true");
-  fireEvent.click(screen.getByRole("tab", { name: "Folders" }));
-  expect(screen.getByText(/can't list folders/)).toBeInTheDocument();
+  const browser = screen.getByRole("region", { name: "Track browser 1" });
+  expect(within(browser).getByRole("tab", { name: /Loaded tracks/ })).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(within(browser).getByRole("tab", { name: "Folders" }));
+  expect(within(browser).getByText(/can't list folders/)).toBeInTheDocument();
+});
+
+test("a Deck's BROWSE button goes to the Track browser on its side of the mixer", () => {
+  render(<DjPage output={fakeOutput().output} active saver={saver()} />);
+  for (const [deck, browser] of [[1, 1], [2, 2]]) {
+    fireEvent.click(screen.getByRole("button", { name: `Browse files for Deck ${deck}` }));
+    expect(screen.getByRole("region", { name: `Track browser ${browser}` })).toHaveFocus();
+  }
 });

@@ -1,6 +1,6 @@
 /**
  * What each Track, Bus and the Master can automate: its volume, its pan
- * (not the Master's), its Sends' levels, the numeric settings of the
+ * (not the Master's), each band of its EQ, its Sends' levels, the numeric settings of the
  * Effects on its Insert Chain and, on an Instrument Track, its Instrument's
  * numeric settings: the Synth's, a Plugin Instrument's, or each Drum Sampler
  * Pad's volume, pan and pitch. Mute, solo, bypass and settings that pick
@@ -11,7 +11,18 @@ import { automatableKeysParams } from "../instrument/keys-params";
 import { effectName, effectTable, isMissingPlugin } from "../effect/effect-table";
 import { instrumentName, isMissingInstrument, pluginInstrumentTable } from "../instrument/instrument-table";
 import { SYNTH_PARAMS } from "../instrument/synth-params";
-import type { AutomatedSetting, Automation, Bus, DrumPad, Master, Project, Track } from "./model";
+import {
+  type AutomatedSetting,
+  type Automation,
+  type Bus,
+  type ChannelEq,
+  type DrumPad,
+  EQ_BANDS,
+  type EqBand,
+  type Master,
+  type Project,
+  type Track,
+} from "./model";
 
 /** Whose Automation: a Track, a Bus or the Master. */
 export type AutomationOwner = Track | Bus | Master;
@@ -32,6 +43,7 @@ export interface AutomatableSetting {
 /** A setting's parts: its kind and, for a Send, Effect or Instrument, what. */
 export type ParsedSetting =
   | { kind: "volume" | "pan" }
+  | { kind: "eq"; band: EqBand }
   | { kind: "send"; busId: string }
   | { kind: "effect"; effectId: string; param: string }
   | { kind: "instrument"; param: string };
@@ -41,6 +53,10 @@ export function parseSetting(setting: string): ParsedSetting | undefined {
   const [kind, first, second, ...rest] = setting.split(":");
   if (rest.length > 0 || !first) return undefined;
   if (kind === "send" && second === undefined) return { kind, busId: first };
+  if (kind === "eq" && second === undefined) {
+    const band = EQ_BANDS.find((candidate) => candidate === first);
+    return band && { kind, band };
+  }
   if (kind === "effect" && second) return { kind, effectId: first, param: second };
   if (kind === "instrument" && second === undefined) return { kind, param: first };
   return undefined;
@@ -75,15 +91,36 @@ export function isMaster(owner: AutomationOwner): owner is Master {
   return !("mixer" in owner);
 }
 
+/** What the musician calls each band of a channel EQ. */
+export const EQ_BAND_LABELS: Record<EqBand, string> = { low: "Low", lowMid: "Low mid", highMid: "High mid", high: "High" };
+
+/** An owner's channel EQ. */
+export function channelEq(owner: AutomationOwner): ChannelEq {
+  return isMaster(owner) ? owner.eq : owner.mixer.eq;
+}
+
+function eqSettings(eq: ChannelEq): AutomatableSetting[] {
+  return EQ_BANDS.map((band) => ({
+    setting: `eq:${band}`,
+    label: `Channel EQ: ${EQ_BAND_LABELS[band]}`,
+    unit: "dB",
+    min: -12,
+    max: 12,
+    fixed: eq[band],
+  }));
+}
+
 /** Everything `owner` can automate, in the order an Automation list keeps. */
 export function automatableSettings(project: Pick<Project, "buses">, owner: AutomationOwner): AutomatableSetting[] {
   const settings: AutomatableSetting[] = [];
   if (isMaster(owner)) {
     settings.push({ setting: "volume", label: "Volume", unit: "", min: 0, max: 2, fixed: owner.volume });
+    settings.push(...eqSettings(owner.eq));
   } else {
     settings.push(
       { setting: "volume", label: "Volume", unit: "", min: 0, max: 2, fixed: owner.mixer.volume },
       { setting: "pan", label: "Pan", unit: "", min: -1, max: 1, fixed: owner.mixer.pan },
+      ...eqSettings(owner.mixer.eq),
     );
     for (const send of owner.sends) {
       const bus = project.buses.find((candidate) => candidate.id === send.busId);
@@ -219,14 +256,14 @@ export function lowerFirst(label: string): string {
   return /^[A-Z][a-z]/.test(label) && !label.includes(": ") ? label[0]!.toLowerCase() + label.slice(1) : label;
 }
 
-const KIND_ORDER = ["volume", "pan", "send", "effect", "instrument"];
+const KIND_ORDER = ["volume", "pan", "eq", "send", "effect", "instrument"];
 
 function rank(setting: string): number {
   return KIND_ORDER.indexOf(setting.split(":")[0]!);
 }
 
 /**
- * Volume, then pan, then Sends, Effects and the Instrument, each group in
+ * Volume, then pan, then the EQ, Sends, Effects and the Instrument, each group in
  * the order of its setting's name, so the same Automation is the same data.
  */
 export function sortAutomation(automation: Automation[]): Automation[] {

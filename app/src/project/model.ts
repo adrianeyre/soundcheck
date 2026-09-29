@@ -12,6 +12,8 @@ import {
   type CompressorSettings,
   type DelaySettings,
   defaultEffectSettings,
+  EFFECT_TYPES,
+  type EffectSettingsByType,
   type EqSettings,
   type FilterSettings,
   type GateSettings,
@@ -42,7 +44,7 @@ export type {
 };
 
 /** Bumped whenever the shape below changes; `serialise.ts` migrates old ones. */
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export interface Project {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -100,6 +102,26 @@ export interface Section {
   bars: number;
 }
 
+/**
+ * A channel EQ: the gain of each of four bands, in dB from -12 to 12, 0
+ * leaving it flat. The bands meet at 200 Hz, 1 kHz and 5 kHz, as the DJ
+ * Mixer's do. It comes after the Insert Chain and before the fader.
+ */
+export interface ChannelEq {
+  low: number;
+  lowMid: number;
+  highMid: number;
+  high: number;
+}
+
+/** The bands of a channel EQ, low to high. */
+export const EQ_BANDS = ["low", "lowMid", "highMid", "high"] as const satisfies readonly (keyof ChannelEq)[];
+
+export type EqBand = (typeof EQ_BANDS)[number];
+
+/** Every band at 0 dB: the EQ changes nothing. */
+export const FLAT_EQ: Readonly<ChannelEq> = Object.freeze({ low: 0, lowMid: 0, highMid: 0, high: 0 });
+
 /** A Track's or Bus's mixer channel. */
 export interface Mixer {
   /** Linear gain: 1 is unity, 2 is +6 dB. */
@@ -108,6 +130,7 @@ export interface Mixer {
   pan: number;
   mute: boolean;
   solo: boolean;
+  eq: ChannelEq;
 }
 
 /**
@@ -145,8 +168,9 @@ export interface Bus {
 /** The final mixer channel every Track and Bus ends up feeding. */
 export interface Master {
   volume: number;
+  eq: ChannelEq;
   insertChain: Effect[];
-  /** Its volume and its Effects' settings can be automated. */
+  /** Its volume, its EQ and its Effects' settings can be automated. */
   automation: Automation[];
 }
 
@@ -163,7 +187,8 @@ interface TrackBase {
 }
 
 /**
- * A setting Automation can move: a channel's volume or pan, its Send to a
+ * A setting Automation can move: a channel's volume or pan, a band of its
+ * EQ (`eq:low`, `eq:lowMid`, `eq:highMid` or `eq:high`), its Send to a
  * Bus (`send:<busId>`), a numeric setting of one of its Effects
  * (`effect:<effectId>:<setting>`) or of its Instrument
  * (`instrument:<setting>`), a Drum Sampler Pad's by the note that plays it
@@ -174,6 +199,7 @@ interface TrackBase {
 export type AutomatedSetting =
   | "volume"
   | "pan"
+  | `eq:${EqBand}`
   | `send:${string}`
   | `effect:${string}:${string}`
   | `instrument:${string}`;
@@ -366,20 +392,10 @@ interface EffectBase {
   bypassed: boolean;
 }
 
-/** One of the Audio Engine's own Effects. */
-export type BuiltInEffect =
-  | (EffectBase & { type: "eq"; settings: EqSettings })
-  | (EffectBase & { type: "compressor"; settings: CompressorSettings })
-  | (EffectBase & { type: "reverb"; settings: ReverbSettings })
-  | (EffectBase & { type: "delay"; settings: DelaySettings })
-  | (EffectBase & { type: "saturator"; settings: SaturatorSettings })
-  | (EffectBase & { type: "chorus"; settings: ChorusSettings })
-  | (EffectBase & { type: "phaser"; settings: PhaserSettings })
-  | (EffectBase & { type: "filter"; settings: FilterSettings })
-  | (EffectBase & { type: "gate"; settings: GateSettings })
-  | (EffectBase & { type: "limiter"; settings: LimiterSettings })
-  | (EffectBase & { type: "bitcrusher"; settings: BitcrusherSettings })
-  | (EffectBase & { type: "utility"; settings: UtilitySettings });
+/** One of the Audio Engine's own Effects, with the settings its kind keeps. */
+export type BuiltInEffect = {
+  [T in keyof EffectSettingsByType]: EffectBase & { type: T; settings: EffectSettingsByType[T] };
+}[keyof EffectSettingsByType];
 
 export type EffectType = BuiltInEffect["type"];
 
@@ -401,15 +417,21 @@ export type Effect = BuiltInEffect | PluginEffect;
 
 // Defaults match the Audio Engine's.
 
-export const DEFAULT_MIXER: Mixer = { volume: 1, pan: 0, mute: false, solo: false };
+/** Its EQ is `FLAT_EQ` itself, frozen: a new channel takes a copy. */
+export const DEFAULT_MIXER: Mixer = { volume: 1, pan: 0, mute: false, solo: false, eq: FLAT_EQ };
 
 /** The Synth's defaults, as its settings table declares them. */
 export const DEFAULT_SYNTH: SynthSettings = defaultSynthSettings();
 
 /**
  * The bundled starter kit, pad for pad as the Audio Engine has it (its
- * `starter_kit()` says so, and a test checks the two agree). The two hi-hats
- * share choke group 1, so closing the hat cuts the open one off.
+ * `starter_kit()` says so, and a test checks the two agree). The three
+ * hi-hats share choke group 1, so closing the hat cuts the open one off.
+ *
+ * The first eight are the kit as it first shipped, in their first order, and
+ * the rest follow by note: a pad plays the kit's sample at its own index until
+ * a sample is loaded over it, so a Project saved with those eight hears the
+ * same sounds it always did.
  */
 export const STARTER_KIT: readonly DrumPad[] = [
   drumPad("Kick", 36),
@@ -420,27 +442,56 @@ export const STARTER_KIT: readonly DrumPad[] = [
   drumPad("Low Tom", 45),
   drumPad("High Tom", 48),
   drumPad("Cowbell", 56),
+  drumPad("Hard Kick", 35),
+  drumPad("Rimshot", 37),
+  drumPad("Electric Snare", 40),
+  drumPad("Low Floor Tom", 41),
+  drumPad("Pedal Hat", 44, 1),
+  drumPad("Mid Tom", 47),
+  drumPad("Crash", 49),
+  drumPad("Ride", 51),
+  drumPad("Tambourine", 54),
+  drumPad("Splash", 55),
+  drumPad("Hi Conga", 62),
+  drumPad("Low Conga", 64),
+  drumPad("Maracas", 70),
+  drumPad("Claves", 75),
 ];
+
+/**
+ * The starter kit as it was before it grew past eight pads: what a schema 1
+ * Project, whose pads held only a sample and a volume, was playing.
+ */
+export const FIRST_STARTER_KIT: readonly DrumPad[] = STARTER_KIT.slice(0, 8);
+
+/**
+ * The Pad a Drum Sampler gains next, after `pads`: the Starter Kit's Pad at
+ * that position, which is the kit sound an unloaded Pad there plays, or past
+ * the kit's end an empty "Pad N", silent until a sample is loaded onto it.
+ * Either answers a note no other Pad has: its own, or else the lowest one
+ * free above the kit's.
+ */
+export function nextDrumPad(pads: readonly DrumPad[]): DrumPad {
+  const taken = new Set(pads.map((pad) => pad.note));
+  const kit = STARTER_KIT[pads.length];
+  const pad = kit ? { ...kit } : drumPad(`Pad ${pads.length + 1}`, 0);
+  if (kit && !taken.has(kit.note)) return pad;
+  const afterTheKit = Math.max(...STARTER_KIT.map((candidate) => candidate.note)) + 1;
+  // Up from the kit's highest note, then down from it: a Drum Sampler holds
+  // far fewer Pads than there are notes, so one is always free.
+  for (let note = afterTheKit; note <= 127; note++) if (!taken.has(note)) return { ...pad, note };
+  for (let note = afterTheKit - 1; note >= 0; note--) if (!taken.has(note)) return { ...pad, note };
+  return pad;
+}
 
 function drumPad(name: string, note: number, chokeGroup = 0): DrumPad {
   return { name, note, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup };
 }
 
 /** Each Effect's defaults, as its settings table declares them. */
-export const DEFAULT_EFFECT_SETTINGS = {
-  eq: defaultEffectSettings("eq"),
-  compressor: defaultEffectSettings("compressor"),
-  reverb: defaultEffectSettings("reverb"),
-  delay: defaultEffectSettings("delay"),
-  saturator: defaultEffectSettings("saturator"),
-  chorus: defaultEffectSettings("chorus"),
-  phaser: defaultEffectSettings("phaser"),
-  filter: defaultEffectSettings("filter"),
-  gate: defaultEffectSettings("gate"),
-  limiter: defaultEffectSettings("limiter"),
-  bitcrusher: defaultEffectSettings("bitcrusher"),
-  utility: defaultEffectSettings("utility"),
-} satisfies { [T in EffectType]: Extract<Effect, { type: T }>["settings"] };
+export const DEFAULT_EFFECT_SETTINGS = Object.fromEntries(EFFECT_TYPES.map((type) => [type, defaultEffectSettings(type)])) as {
+  readonly [T in EffectType]: EffectSettingsByType[T];
+};
 
 /** The preset name a Track loaded with the bundled kit carries. */
 export const STARTER_KIT_PRESET = "Starter Kit";
@@ -478,7 +529,7 @@ export function createProject(name = "Untitled"): Project {
     sections: [],
     tracks: [],
     buses: [],
-    master: { volume: 1, insertChain: [], automation: [] },
+    master: { volume: 1, eq: { ...FLAT_EQ }, insertChain: [], automation: [] },
     referenceTrack: null,
   };
 }
@@ -488,7 +539,7 @@ export function createInstrumentTrack(name: string, id = newId()): InstrumentTra
     id,
     kind: "instrument",
     name,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],
@@ -543,7 +594,7 @@ export function createAudioTrack(name: string, id = newId()): AudioTrack {
     name,
     input: { ...DEFAULT_TRACK_INPUT },
     monitoring: false,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],
@@ -557,7 +608,7 @@ export function createBus(name: string, id = newId()): Bus {
   return {
     id,
     name,
-    mixer: { ...DEFAULT_MIXER },
+    mixer: { ...DEFAULT_MIXER, eq: { ...FLAT_EQ } },
     insertChain: [],
     output: null,
     sends: [],
@@ -565,31 +616,6 @@ export function createBus(name: string, id = newId()): Bus {
   };
 }
 
-export function createEffect(type: EffectType, id = newId()): BuiltInEffect {
-  switch (type) {
-    case "eq":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.eq } };
-    case "compressor":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.compressor } };
-    case "reverb":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.reverb } };
-    case "delay":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.delay } };
-    case "saturator":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.saturator } };
-    case "chorus":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.chorus } };
-    case "phaser":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.phaser } };
-    case "filter":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.filter } };
-    case "gate":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.gate } };
-    case "limiter":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.limiter } };
-    case "bitcrusher":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.bitcrusher } };
-    case "utility":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.utility } };
-  }
+export function createEffect<T extends EffectType>(type: T, id = newId()): Extract<BuiltInEffect, { type: T }> {
+  return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS[type] } } as Extract<BuiltInEffect, { type: T }>;
 }

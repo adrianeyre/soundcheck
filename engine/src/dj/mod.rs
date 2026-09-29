@@ -10,23 +10,27 @@
 //!
 //! The host drives it with named controls (`DjControl::parse`), parsed off
 //! the audio thread on the desktop, and reads it back as one flat report
-//! (`DjMixer::report`). A file reaches a Deck decoded and analysed, whole.
+//! (`DjMixer::report`). A file reaches a Deck decoded and analysed, whole,
+//! and a sample reaches a slot of the Sampler decoded, whole.
 
 mod analysis;
 mod beat_fx;
 mod channel;
 mod colour;
 mod deck;
+mod sampler;
 mod stretch;
 
 pub use analysis::{TrackAnalysis, WAVEFORM_RATE, analyse};
 pub use beat_fx::BEAT_FX;
 pub use colour::COLOUR_FX;
 pub use deck::DjTrack;
+pub use sampler::{SAMPLER_BANK_SLOTS, SAMPLER_BANKS, SAMPLER_SLOTS, SlotMode, SlotState};
 
 use beat_fx::BeatFx;
 use channel::Channel;
 use deck::Deck;
+use sampler::Sampler;
 
 use crate::audio_file::{AudioFile, AudioFileError, decode};
 use crate::engine::PreparedAudioFile;
@@ -36,8 +40,12 @@ pub const DECKS: usize = 4;
 /// The report's layout: `GLOBAL_FIELDS` numbers for the mixer, then
 /// `DECK_FIELDS` for each Deck. Mirrored in `app/src/dj/dj-report.ts`.
 pub const GLOBAL_FIELDS: usize = 8;
-pub const DECK_FIELDS: usize = 24;
-pub const DJ_REPORT_LEN: usize = GLOBAL_FIELDS + DECKS * DECK_FIELDS;
+pub const DECK_FIELDS: usize = 26;
+/// After the Decks, the Sampler: its meter, gain, cue and what the
+/// recording takes (0 the Master, 1 the Sampler alone), then each slot's
+/// `SlotState`.
+pub const SAMPLER_FIELDS: usize = 4 + SAMPLER_SLOTS;
+pub const DJ_REPORT_LEN: usize = GLOBAL_FIELDS + DECKS * DECK_FIELDS + SAMPLER_FIELDS;
 /// How much of the recording the engine holds before the host takes it.
 const RECORD_SECONDS: f32 = 4.0;
 /// How fast a meter falls back from a peak, in dB per second.
@@ -78,6 +86,22 @@ pub enum DjControl {
     Deck(usize, DeckControl),
     Channel(usize, ChannelControl),
     Mixer(MixerControl),
+    /// A Sampler Slot, by its number from 0 across all four banks.
+    Sampler(usize, SamplerControl),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SamplerControl {
+    /// Its pad pressed: play from the start.
+    Play,
+    /// Its pad let go: a gated slot stops.
+    Release,
+    Stop,
+    /// Pause it where it is, or carry on from there.
+    Pause,
+    /// `SlotMode`: 0 one-shot, 1 gate, 2 loop.
+    Mode,
+    Gain,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -112,6 +136,8 @@ pub enum DeckControl {
     GridBpm,
     GridOffset,
     Eject,
+    SilentCue,
+    SlipReverse,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -145,6 +171,11 @@ pub enum MixerControl {
     BeatFxOn,
     Bpm,
     Record,
+    /// What the recording takes: 0 the Master, 1 the Sampler alone.
+    RecordSource,
+    SamplerGain,
+    SamplerCue,
+    SamplerStopAll,
 }
 
 impl DjControl {
@@ -188,6 +219,8 @@ impl DjControl {
                     "gridBpm" => D::GridBpm,
                     "gridOffset" => D::GridOffset,
                     "eject" => D::Eject,
+                    "silentCue" => D::SilentCue,
+                    "slipReverse" => D::SlipReverse,
                     _ => return None,
                 },
             )),
@@ -226,8 +259,24 @@ impl DjControl {
                 "beatFxOn" => M::BeatFxOn,
                 "bpm" => M::Bpm,
                 "record" => M::Record,
+                "recordSource" => M::RecordSource,
+                "samplerGain" => M::SamplerGain,
+                "samplerCue" => M::SamplerCue,
+                "samplerStopAll" => M::SamplerStopAll,
                 _ => return None,
             })),
+            "sampler" if index < SAMPLER_SLOTS => Some(Self::Sampler(
+                index,
+                match name {
+                    "play" => SamplerControl::Play,
+                    "release" => SamplerControl::Release,
+                    "stop" => SamplerControl::Stop,
+                    "pause" => SamplerControl::Pause,
+                    "mode" => SamplerControl::Mode,
+                    "gain" => SamplerControl::Gain,
+                    _ => return None,
+                },
+            )),
             _ => None,
         }
     }
@@ -289,6 +338,10 @@ pub struct DjMixer {
     recording: bool,
     recorded: Vec<f32>,
     recorded_frames: u64,
+    /// 0 the recording takes the Master, 1 the Sampler alone.
+    record_source: u8,
+    sampler: Sampler,
+    sampler_meter: f32,
 }
 
 impl DjMixer {
@@ -323,6 +376,9 @@ impl DjMixer {
             recording: false,
             recorded: Vec::with_capacity((RECORD_SECONDS * sample_rate) as usize * 2),
             recorded_frames: 0,
+            record_source: 0,
+            sampler: Sampler::new(),
+            sampler_meter: 0.0,
         }
     }
 
@@ -341,6 +397,7 @@ impl DjMixer {
                 }
             }
         }
+        self.sampler.prepare(frames);
     }
 
     /// Put a file on Deck `deck`, or take it off with None, handing back
@@ -358,6 +415,7 @@ impl DjMixer {
         self.decks.iter().any(Deck::is_playing)
             || self.master_meters.iter().any(|&m| m > 1e-4)
             || self.beat_fx.on
+            || self.sampler.is_active()
     }
 
     /// The Beat FX's BPM: tapped in, or the Sync Master's, or a playing
@@ -385,6 +443,14 @@ impl DjMixer {
         let v = value as f32;
         match control {
             DjControl::Deck(index, control) => self.apply_deck(index, control, value),
+            DjControl::Sampler(slot, control) => match control {
+                SamplerControl::Play => self.sampler.play(slot),
+                SamplerControl::Release => self.sampler.release(slot),
+                SamplerControl::Stop => self.sampler.stop(slot),
+                SamplerControl::Pause => self.sampler.pause(slot),
+                SamplerControl::Mode => self.sampler.set_mode(slot, SlotMode::from_value(value)),
+                SamplerControl::Gain => self.sampler.set_slot_gain(slot, v),
+            },
             DjControl::Channel(index, control) => {
                 let channel = &mut self.channels[index];
                 match control {
@@ -430,6 +496,10 @@ impl DjMixer {
                     }
                     self.recording = on;
                 }
+                MixerControl::RecordSource => self.record_source = u8::from(on),
+                MixerControl::SamplerGain => self.sampler.gain = v.clamp(0.0, 2.0),
+                MixerControl::SamplerCue => self.sampler.cue = on,
+                MixerControl::SamplerStopAll => self.sampler.stop_all(),
             },
         }
     }
@@ -487,6 +557,8 @@ impl DjMixer {
                     deck.load(None);
                 }
             }
+            DeckControl::SilentCue => deck.silent = on,
+            DeckControl::SlipReverse => deck.slip_reverse(on),
             DeckControl::SyncMaster => {
                 self.sync_master = Some(index);
                 self.decks[index].sync_rate = None;
@@ -630,10 +702,26 @@ impl DjMixer {
             self.crossfader
         };
         let (a, b) = crossfade(position, self.crossfader_curve);
+        // The Sampler has a channel of its own, past the crossfader, into the Master.
+        self.sampler.render(frames);
+        self.sampler_meter = (self.sampler_meter * fall).max(self.sampler.peak);
+        let (sampler_l, sampler_r) = self.sampler.output();
+        if self.sampler.cue {
+            for i in 0..frames {
+                self.cue[0][i] += sampler_l[i];
+                self.cue[1][i] += sampler_r[i];
+            }
+        }
         let [out_l, out_r] = &mut self.out;
         for i in 0..frames {
-            out_l[i] = self.sides[0][0][i] * a + self.sides[1][0][i] * b + self.sides[2][0][i];
-            out_r[i] = self.sides[0][1][i] * a + self.sides[1][1][i] * b + self.sides[2][1][i];
+            out_l[i] = self.sides[0][0][i] * a
+                + self.sides[1][0][i] * b
+                + self.sides[2][0][i]
+                + sampler_l[i];
+            out_r[i] = self.sides[0][1][i] * a
+                + self.sides[1][1][i] * b
+                + self.sides[2][1][i]
+                + sampler_r[i];
         }
         if self.beat_fx_target == 6 {
             self.beat_fx
@@ -651,9 +739,14 @@ impl DjMixer {
         }
         if self.recording {
             let room = (self.recorded.capacity() - self.recorded.len()) / 2;
+            let (from_l, from_r) = if self.record_source == 1 {
+                self.sampler.output()
+            } else {
+                (&out_l[..], &out_r[..])
+            };
             for i in 0..frames.min(room) {
-                self.recorded.push(out_l[i]);
-                self.recorded.push(out_r[i]);
+                self.recorded.push(from_l[i].clamp(-1.0, 1.0));
+                self.recorded.push(from_r[i].clamp(-1.0, 1.0));
             }
             self.recorded_frames += frames as u64;
         }
@@ -666,6 +759,16 @@ impl DjMixer {
             self.cue[0][i] = (self.cue[0][i] * cue_gain + out_l[i] * master_gain).clamp(-1.0, 1.0);
             self.cue[1][i] = (self.cue[1][i] * cue_gain + out_r[i] * master_gain).clamp(-1.0, 1.0);
         }
+    }
+
+    /// Put a sample in Sampler Slot `slot`, or empty it with None, handing
+    /// back the one it replaces to be dropped off the audio thread.
+    pub fn load_sample(
+        &mut self,
+        slot: usize,
+        file: Option<PreparedAudioFile>,
+    ) -> Option<PreparedAudioFile> {
+        self.sampler.load(slot, file)
     }
 
     /// The last block's mix, left and right.
@@ -733,7 +836,17 @@ impl DjMixer {
                 flag(deck.quantize),
                 f64::from(self.channels[index].gain_reduction_db()),
                 deck.tempo,
+                flag(deck.silent),
+                flag(deck.slip_reversing()),
             ]);
+        }
+        let at = GLOBAL_FIELDS + DECKS * DECK_FIELDS;
+        out[at] = f64::from(self.sampler_meter);
+        out[at + 1] = f64::from(self.sampler.gain);
+        out[at + 2] = flag(self.sampler.cue);
+        out[at + 3] = f64::from(self.record_source);
+        for slot in 0..SAMPLER_SLOTS {
+            out[at + 4 + slot] = f64::from(self.sampler.state(slot) as u8);
         }
     }
 }
@@ -893,12 +1006,119 @@ mod tests {
         assert_eq!(mixer.master_bpm(), 100.0);
     }
 
+    fn tone_sample(seconds: f32) -> PreparedAudioFile {
+        let tone = sine(440.0, 0.5, RATE, (seconds * RATE) as usize);
+        PreparedAudioFile::from_file(AudioFile::from_samples(tone.clone(), tone))
+    }
+
+    fn sampler_field(report: &[f64], field: usize) -> f64 {
+        report[GLOBAL_FIELDS + DECKS * DECK_FIELDS + field]
+    }
+
+    #[test]
+    fn the_samplers_controls_parse_for_each_of_its_sixty_four_slots() {
+        assert_eq!(
+            DjControl::parse("sampler", 63, "play"),
+            Some(DjControl::Sampler(63, SamplerControl::Play))
+        );
+        assert_eq!(DjControl::parse("sampler", 64, "play"), None);
+        assert_eq!(DjControl::parse("sampler", 0, "scratch"), None);
+        assert_eq!(
+            DjControl::parse("mixer", 0, "samplerGain"),
+            Some(DjControl::Mixer(MixerControl::SamplerGain))
+        );
+    }
+
+    #[test]
+    fn a_sampler_slot_plays_into_the_master_past_the_crossfader_at_the_sampler_gain() {
+        let mut mixer = DjMixer::new(RATE);
+        assert!(mixer.load_sample(20, Some(tone_sample(1.0))).is_none());
+        // Crossfader hard to one side: the Sampler isn't on either.
+        set(&mut mixer, "mixer", 0, "crossfader", 1.0);
+        set(&mut mixer, "sampler", 20, "play", 1.0);
+        mixer.render(4_800);
+        assert!(peak(&mixer.output().0[..4_800]) > 0.45);
+        let out = report(&mixer);
+        assert_eq!(sampler_field(&out, 4 + 20), SlotState::Playing as u8 as f64);
+        assert!(sampler_field(&out, 0) > 0.45, "metered");
+        set(&mut mixer, "mixer", 0, "samplerGain", 0.5);
+        mixer.render(4_800);
+        let level = peak(&mixer.output().0[..4_800]);
+        assert!((level - 0.25).abs() < 0.01, "{level}");
+        set(&mut mixer, "sampler", 20, "stop", 1.0);
+        mixer.render(4_800);
+        mixer.render(4_800);
+        assert_eq!(peak(&mixer.output().0[..4_800]), 0.0);
+        assert_eq!(
+            sampler_field(&report(&mixer), 4 + 20),
+            SlotState::Stopped as u8 as f64
+        );
+    }
+
+    #[test]
+    fn the_sampler_is_cued_and_can_be_recorded_alone() {
+        let mut mixer = DjMixer::new(RATE);
+        mixer.load(0, Some(tone_track(120.0, 2.0)));
+        set(&mut mixer, "deck", 0, "play", 1.0);
+        mixer.load_sample(0, Some(tone_sample(1.0)));
+        set(&mut mixer, "mixer", 0, "samplerCue", 1.0);
+        set(&mut mixer, "mixer", 0, "headphoneMix", 0.0);
+        set(&mut mixer, "mixer", 0, "headphoneLevel", 1.0);
+        set(&mut mixer, "mixer", 0, "recordSource", 1.0);
+        set(&mut mixer, "mixer", 0, "record", 1.0);
+        mixer.render(480);
+        assert!(
+            mixer.recorded().iter().all(|&s| s == 0.0),
+            "the Deck isn't in a recording of the Sampler"
+        );
+        mixer.clear_recorded();
+        set(&mut mixer, "sampler", 0, "play", 1.0);
+        mixer.render(4_800);
+        assert!(peak(mixer.recorded()) > 0.45, "the Sampler is");
+        assert!(
+            peak(&mixer.headphones().0[..4_800]) > 0.45,
+            "and in the headphones"
+        );
+    }
+
+    #[test]
+    fn silent_cue_and_slip_reverse_are_reported() {
+        let mut mixer = DjMixer::new(RATE);
+        mixer.load(1, Some(tone_track(120.0, 20.0)));
+        set(&mut mixer, "deck", 1, "seek", 5.0);
+        set(&mut mixer, "deck", 1, "play", 1.0);
+        set(&mut mixer, "deck", 1, "silentCue", 1.0);
+        mixer.render(4_800);
+        assert_eq!(peak(&mixer.output().0[..4_800]), 0.0, "muted");
+        set(&mut mixer, "deck", 1, "slipReverse", 1.0);
+        let out = report(&mixer);
+        assert_eq!(deck_field(&out, 1, 24), 1.0, "silent");
+        assert_eq!(deck_field(&out, 1, 25), 1.0, "slip reversing");
+        assert_eq!(deck_field(&out, 1, 12), 1.0, "and so reversing");
+    }
+
     #[test]
     fn a_track_decodes_and_analyses_for_a_deck() {
         let bytes = crate::audio_file::tests::TONE_WAV;
         let prepared = PreparedDjTrack::decode(bytes, RATE).unwrap();
         assert!((prepared.analysis.seconds - 0.25).abs() < 1e-3);
         assert_eq!(prepared.track.file.left().len(), 12_000);
+    }
+
+    #[test]
+    fn the_engine_puts_a_sample_in_a_slot_and_hands_the_old_one_back() {
+        let mut engine = crate::Engine::new(RATE);
+        engine.prepare(1_024);
+        assert!(
+            engine.swap_dj_sample(0, Some(tone_sample(0.5))).is_some(),
+            "no mixer on a native host yet: the sample comes back"
+        );
+        engine.install_dj(Box::new(DjMixer::new(RATE)));
+        assert!(engine.swap_dj_sample(0, Some(tone_sample(0.5))).is_none());
+        engine.dj_apply(DjControl::parse("sampler", 0, "play").unwrap(), 1.0);
+        engine.render(1_024);
+        assert!(peak(&engine.left()[..1_024]) > 0.45);
+        assert!(engine.swap_dj_sample(0, None).is_some());
     }
 
     #[test]

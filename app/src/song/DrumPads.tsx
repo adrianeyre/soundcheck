@@ -1,4 +1,4 @@
-import { Drum } from "lucide-react";
+import { Drum, Minus, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import type { DrumPad } from "../project/model";
@@ -22,6 +22,10 @@ export interface DrumPadsProps {
   hitting?: ReadonlySet<number>;
   /** Hit a Pad from the kit; absent when there is no audio to hear it. */
   onHit?: (note: number, on: boolean) => void;
+  /** One more Pad after the last. Without it, and `onRemovePad`, the Pads can't be added or taken off. */
+  onAddPad?: () => void;
+  /** Take the last Pad off, so no other Pad moves. */
+  onRemovePad?: () => void;
 }
 
 /**
@@ -30,7 +34,8 @@ export interface DrumPadsProps {
  * sample and keeps it until a WAV is loaded over it.
  */
 export function DrumPads(props: DrumPadsProps) {
-  const { trackName, pads, sampleNames, onPad, onLoad, onDropSample, kitControls, hitting = new Set(), onHit } = props;
+  const { trackName, pads, sampleNames, onPad, onLoad, onDropSample, kitControls, hitting = new Set(), onHit, onAddPad, onRemovePad } = props;
+  const [fewest, most] = LIMITS.drumPads;
   // The pad a sample is being dragged over, to show it will land there.
   const [sampleOver, setSampleOver] = useState<number | null>(null);
   return (
@@ -59,7 +64,8 @@ export function DrumPads(props: DrumPadsProps) {
         <tbody>
           {pads.map((pad, index) => (
             <tr
-              key={pad.name}
+              // Pads are only added and taken off at the end, so a row is its place.
+              key={index}
               className={sampleOver === index ? "drop-target" : undefined}
               onDragOver={(event) => {
                 if (!onDropSample || !isSampleDrag(event.dataTransfer)) return;
@@ -140,6 +146,33 @@ export function DrumPads(props: DrumPadsProps) {
         </tbody>
       </table>
       </div>
+      {(onAddPad || onRemovePad) && (
+        <div className="toolbar-group" role="group" aria-label={`${trackName} Pad count`} style={{ marginTop: "var(--space-2)" }}>
+          <button
+            type="button"
+            className="btn-sm"
+            disabled={!onAddPad || pads.length >= most}
+            title={pads.length >= most ? `A Drum Sampler holds at most ${most} Pads` : undefined}
+            onClick={onAddPad}
+          >
+            <Plus size={14} aria-hidden />
+            Add Pad
+          </button>
+          <button
+            type="button"
+            className="btn-sm"
+            disabled={!onRemovePad || pads.length <= fewest}
+            title={pads.length <= fewest ? `A Drum Sampler keeps at least ${fewest} Pad` : undefined}
+            onClick={onRemovePad}
+          >
+            <Minus size={14} aria-hidden />
+            Remove last Pad
+          </button>
+          <span className="hint">
+            {pads.length} of {most} Pads
+          </span>
+        </div>
+      )}
     </section>
   );
 }

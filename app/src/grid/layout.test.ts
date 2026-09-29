@@ -8,6 +8,7 @@ import {
   gridKey,
   MIXING_WIDGETS,
   moveWidget,
+  PADS_WIDGETS,
   parseLayout,
   pinWidget,
   resizeWidget,
@@ -73,6 +74,21 @@ test("the Mixer page's Widgets start clear of each other, in a layout of their o
   // A saved Mixing layout comes back, and one saved wrongly falls back to the starting places.
   expect(parseLayout(serialiseLayout(moved), "mixing")).toEqual(moved);
   expect(parseLayout("not json", "mixing")).toEqual(layout);
+});
+
+test("the Pads page has a layout of its own: the Pad Controller the Grid's width, a Track browser under it", () => {
+  const layout = defaultLayout("pads");
+  expect(specsOf(layout).map((spec) => spec.id)).toEqual(PADS_WIDGETS.map((spec) => spec.id));
+  expect(layout.padController).toMatchObject({ x: 0, y: 0, w: GRID.columns, hidden: false });
+  expect(layout.padsBrowser).toMatchObject({ x: 0, y: layout.padController.h, w: GRID.columns, hidden: false });
+  expectNoOverlaps(layout);
+  expect(gridKey("pads")).toBe(`${GRID_KEY}.pads`);
+  expect(parseLayout(serialiseLayout(layout), "pads")).toEqual(layout);
+  // On the Mixer page the Pad Controller is on the Grid menu, but starts hidden; a layout saved before it was
+  // there gets it hidden too.
+  expect(defaultLayout("mixing").djPadController.hidden).toBe(true);
+  const { djPadController: _, ...older } = defaultLayout("mixing");
+  expect(parseLayout(serialiseLayout(older as WidgetLayout), "mixing").djPadController.hidden).toBe(true);
 });
 
 test("a Widget dropped onto others pushes them down, and the rest stay put", () => {
@@ -334,4 +350,44 @@ test("on the Mixer page, the Track browser fits under a Deck shorter than the mi
   expect(grown.deck1.h).toBe(40);
   expect(grown.djBrowser.y).toBe(grown.deck1.y + 40);
   expectNoOverlaps(grown);
+});
+
+test("on the Mixer page, a Track browser starts under each of the first two Decks, as wide as it, down to the mixer's bottom", () => {
+  const layout = withoutWidgets(defaultLayout("mixing"), ["deck3", "deck4"]);
+  // The Decks' content is 30 rows, the mixer's 40, which is drawn a row taller.
+  const needed = { djWaveforms: 6, deck1: 30, djMixer: 40, deck2: 30, djBrowser: 3, djBrowser2: 3 };
+  const drawn = fitToContent(layout, needed);
+  expect(drawn.djMixer.h).toBe(41);
+  const bottom = drawn.djMixer.y + drawn.djMixer.h;
+  for (const [browser, deck] of [["djBrowser", "deck1"], ["djBrowser2", "deck2"]] as const) {
+    expect(drawn[browser]).toMatchObject({ x: drawn[deck].x, w: drawn[deck].w, y: drawn[deck].y + drawn[deck].h });
+    expect(drawn[browser].y + drawn[browser].h).toBe(bottom);
+  }
+  expectNoOverlaps(drawn);
+  expectNoEmptyRows(drawn);
+
+  // Kept and drawn again, they are still there; as a Deck's content grows, its browser follows and shrinks.
+  const kept = unfitted(drawn, layout, null);
+  expect(fitToContent(kept, needed).djBrowser).toEqual(drawn.djBrowser);
+  const grown = fitToContent(kept, { ...needed, deck1: 34 });
+  expect(grown.djBrowser).toMatchObject({ y: grown.deck1.y + 34, h: bottom - grown.deck1.y - 34 });
+
+  // Moved by the musician, one stays where it was dropped, and the other stays tucked.
+  const moved = unfitted(moveWidget(drawn, "djBrowser", 0, bottom + 2), layout, null);
+  expect(moved.djBrowser.tucked).toBeUndefined();
+  const again = fitToContent(moved, needed);
+  expect(again.djBrowser.y).toBe(bottom + 2);
+  expect(again.djBrowser2.y + again.djBrowser2.h).toBe(bottom);
+
+  // Saved and read back, they are still tucked.
+  expect(parseLayout(serialiseLayout(kept), "mixing").djBrowser2.tucked).toBe(true);
+});
+
+test("on the Mixer page with four Decks, the third and fourth go under the Track browsers", () => {
+  const needed = { djWaveforms: 6, deck1: 30, djMixer: 40, deck2: 30, deck3: 30, deck4: 30, djBrowser: 3, djBrowser2: 3 };
+  const drawn = fitToContent(defaultLayout("mixing"), needed);
+  expect(drawn.deck3.y).toBe(drawn.djBrowser.y + drawn.djBrowser.h);
+  expect(drawn.deck4.y).toBe(drawn.djBrowser2.y + drawn.djBrowser2.h);
+  expectNoOverlaps(drawn);
+  expectNoEmptyRows(drawn);
 });

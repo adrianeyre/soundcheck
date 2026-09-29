@@ -9,13 +9,20 @@
 
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, table_json};
+use super::stereo::InPlace;
 use super::{
-    BITCRUSHER_PARAMS, Bitcrusher, BitcrusherSettings, CHORUS_PARAMS, COMPRESSOR_PARAMS, Chorus,
-    ChorusSettings, Compressor, CompressorSettings, DELAY_PARAMS, Delay, DelaySettings, EQ_PARAMS,
-    Eq, EqSettings, FILTER_PARAMS, Filter, FilterSettings, GATE_PARAMS, Gate, GateSettings,
-    LIMITER_PARAMS, Limiter, LimiterSettings, PHASER_PARAMS, Phaser, PhaserSettings, REVERB_PARAMS,
-    Reverb, ReverbSettings, SATURATOR_PARAMS, Saturator, SaturatorSettings, UTILITY_PARAMS,
-    Utility, UtilitySettings,
+    AUTO_PAN_PARAMS, AUTO_WAH_PARAMS, AutoPan, AutoWah, BEAT_REPEAT_PARAMS, BITCRUSHER_PARAMS,
+    BeatRepeat, Bitcrusher, BitcrusherSettings, CHORUS_PARAMS, CLIPPER_PARAMS, COMPRESSOR_PARAMS,
+    Chorus, ChorusSettings, Clipper, Compressor, CompressorSettings, DE_ESSER_PARAMS, DELAY_PARAMS,
+    DeEsser, Delay, DelaySettings, EQ_PARAMS, EXCITER_PARAMS, Eq, EqSettings, Exciter,
+    FILTER_PARAMS, FLANGER_PARAMS, FREQ_SHIFT_PARAMS, Filter, FilterSettings, Flanger,
+    FrequencyShifter, GATE_PARAMS, Gate, GateSettings, HAAS_PARAMS, Haas, LIMITER_PARAMS,
+    LOFI_PARAMS, Limiter, LimiterSettings, LoFi, MULTIBAND_PARAMS, Multiband, PHASER_PARAMS,
+    PITCH_SHIFT_PARAMS, PUMP_PARAMS, Phaser, PhaserSettings, PitchShifter, Pump, RESONATOR_PARAMS,
+    REVERB_PARAMS, RING_MOD_PARAMS, Resonator, Reverb, ReverbSettings, RingMod, SATURATOR_PARAMS,
+    Saturator, SaturatorSettings, TRANCE_GATE_PARAMS, TRANSIENT_PARAMS, TREMOLO_PARAMS, TranceGate,
+    TransientShaper, Tremolo, UTILITY_PARAMS, Utility, UtilitySettings, VIBRATO_PARAMS,
+    VOWEL_PARAMS, Vibrato, Vowel,
 };
 use crate::automation::{Automation, TableAutomation};
 use crate::plugin::HostedPlugin;
@@ -23,118 +30,161 @@ use crate::plugin::HostedPlugin;
 /// The most Effects one Insert Chain holds.
 pub const MAX_EFFECTS: usize = 16;
 
-/// Which Effect: the names are the ones the Project and the UI use.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EffectKind {
-    Eq,
-    Compressor,
-    Reverb,
-    Delay,
-    Saturator,
-    Chorus,
-    Phaser,
-    Filter,
-    Gate,
-    Limiter,
-    Bitcrusher,
-    Utility,
+/// Declares `EffectKind`, one variant per built-in Effect, from each one's
+/// variant, the name the Project and the UI use, and its settings table.
+macro_rules! effect_kinds {
+    ($($kind:ident $name:literal $params:ident;)*) => {
+        /// Which Effect: the names are the ones the Project and the UI use.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum EffectKind {
+            $($kind,)*
+        }
+
+        impl EffectKind {
+            pub const ALL: [EffectKind; [$(stringify!($kind)),*].len()] = [$(Self::$kind),*];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(Self::$kind => $name,)*
+                }
+            }
+
+            /// This Effect's settings table, as JSON.
+            fn table_json(self) -> String {
+                match self {
+                    $(Self::$kind => table_json($params),)*
+                }
+            }
+
+            /// Where the setting called `name` is in this Effect's table, if it is
+            /// one Automation can move: a number, not a switch or a choice.
+            pub fn automatable(self, name: &str) -> Option<usize> {
+                fn find<S>(params: &[Param<S>], name: &str) -> Option<usize> {
+                    params
+                        .iter()
+                        .position(|p| p.name == name && p.choices.is_empty())
+                }
+                match self {
+                    $(Self::$kind => find($params, name),)*
+                }
+            }
+
+            /// How many settings this Effect has.
+            pub fn param_count(self) -> usize {
+                match self {
+                    $(Self::$kind => $params.len(),)*
+                }
+            }
+
+            /// The names of this Effect's settings, in table order.
+            #[cfg(test)]
+            fn param_names(self) -> Vec<&'static str> {
+                match self {
+                    $(Self::$kind => $params.iter().map(|p| p.name).collect(),)*
+                }
+            }
+
+            /// Each of this Effect's settings' least and greatest values, in
+            /// table order.
+            #[cfg(test)]
+            fn param_ranges(self) -> Vec<(f32, f32)> {
+                match self {
+                    $(Self::$kind => $params.iter().map(|p| (p.min, p.max)).collect(),)*
+                }
+            }
+        }
+    };
+}
+
+effect_kinds! {
+    Eq "eq" EQ_PARAMS;
+    Compressor "compressor" COMPRESSOR_PARAMS;
+    Reverb "reverb" REVERB_PARAMS;
+    Delay "delay" DELAY_PARAMS;
+    Saturator "saturator" SATURATOR_PARAMS;
+    Chorus "chorus" CHORUS_PARAMS;
+    Phaser "phaser" PHASER_PARAMS;
+    Filter "filter" FILTER_PARAMS;
+    Gate "gate" GATE_PARAMS;
+    Limiter "limiter" LIMITER_PARAMS;
+    Bitcrusher "bitcrusher" BITCRUSHER_PARAMS;
+    Utility "utility" UTILITY_PARAMS;
+    Flanger "flanger" FLANGER_PARAMS;
+    Tremolo "tremolo" TREMOLO_PARAMS;
+    AutoPan "autopan" AUTO_PAN_PARAMS;
+    RingMod "ringmod" RING_MOD_PARAMS;
+    TransientShaper "transient" TRANSIENT_PARAMS;
+    DeEsser "deesser" DE_ESSER_PARAMS;
+    Exciter "exciter" EXCITER_PARAMS;
+    Vibrato "vibrato" VIBRATO_PARAMS;
+    FrequencyShifter "freqshift" FREQ_SHIFT_PARAMS;
+    AutoWah "autowah" AUTO_WAH_PARAMS;
+    Haas "haas" HAAS_PARAMS;
+    Multiband "multiband" MULTIBAND_PARAMS;
+    Pump "pump" PUMP_PARAMS;
+    TranceGate "trancegate" TRANCE_GATE_PARAMS;
+    PitchShifter "pitchshift" PITCH_SHIFT_PARAMS;
+    Resonator "resonator" RESONATOR_PARAMS;
+    Clipper "clipper" CLIPPER_PARAMS;
+    LoFi "lofi" LOFI_PARAMS;
+    BeatRepeat "beatrepeat" BEAT_REPEAT_PARAMS;
+    Vowel "vowel" VOWEL_PARAMS;
+}
+
+/// Declares `in_place`, which makes each built-in Effect that is a
+/// `StereoEffect`: the chain runs them all the same way.
+macro_rules! in_place_kinds {
+    ($($kind:ident;)*) => {
+        /// `kind` at its default settings, if it is a `StereoEffect`.
+        fn in_place(kind: EffectKind, sample_rate: f32) -> Option<Box<dyn InPlace>> {
+            match kind {
+                $(EffectKind::$kind => Some(Box::new($kind::new(sample_rate, Settings::defaults()))),)*
+                _ => None,
+            }
+        }
+
+        /// `kind` made with the settings `values` in their flat form, if it
+        /// is a `StereoEffect`.
+        #[cfg(test)]
+        fn in_place_made_with(
+            kind: EffectKind,
+            sample_rate: f32,
+            values: &[f32],
+        ) -> Option<Box<dyn InPlace>> {
+            match kind {
+                $(EffectKind::$kind => Some(Box::new($kind::new(sample_rate, Settings::from_flat(values)))),)*
+                _ => None,
+            }
+        }
+    };
+}
+
+in_place_kinds! {
+    Flanger;
+    Tremolo;
+    AutoPan;
+    RingMod;
+    TransientShaper;
+    DeEsser;
+    Exciter;
+    Vibrato;
+    FrequencyShifter;
+    AutoWah;
+    Haas;
+    Multiband;
+    Pump;
+    TranceGate;
+    PitchShifter;
+    Resonator;
+    Clipper;
+    LoFi;
+    BeatRepeat;
+    Vowel;
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 12] = [
-        Self::Eq,
-        Self::Compressor,
-        Self::Reverb,
-        Self::Delay,
-        Self::Saturator,
-        Self::Chorus,
-        Self::Phaser,
-        Self::Filter,
-        Self::Gate,
-        Self::Limiter,
-        Self::Bitcrusher,
-        Self::Utility,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Eq => "eq",
-            Self::Compressor => "compressor",
-            Self::Reverb => "reverb",
-            Self::Delay => "delay",
-            Self::Saturator => "saturator",
-            Self::Chorus => "chorus",
-            Self::Phaser => "phaser",
-            Self::Filter => "filter",
-            Self::Gate => "gate",
-            Self::Limiter => "limiter",
-            Self::Bitcrusher => "bitcrusher",
-            Self::Utility => "utility",
-        }
-    }
-
     pub fn named(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.name() == name)
-    }
-
-    /// This Effect's settings table, as JSON.
-    fn table_json(self) -> String {
-        match self {
-            Self::Eq => table_json(EQ_PARAMS),
-            Self::Compressor => table_json(COMPRESSOR_PARAMS),
-            Self::Reverb => table_json(REVERB_PARAMS),
-            Self::Delay => table_json(DELAY_PARAMS),
-            Self::Saturator => table_json(SATURATOR_PARAMS),
-            Self::Chorus => table_json(CHORUS_PARAMS),
-            Self::Phaser => table_json(PHASER_PARAMS),
-            Self::Filter => table_json(FILTER_PARAMS),
-            Self::Gate => table_json(GATE_PARAMS),
-            Self::Limiter => table_json(LIMITER_PARAMS),
-            Self::Bitcrusher => table_json(BITCRUSHER_PARAMS),
-            Self::Utility => table_json(UTILITY_PARAMS),
-        }
-    }
-
-    /// Where the setting called `name` is in this Effect's table, if it is
-    /// one Automation can move: a number, not a switch or a choice.
-    pub fn automatable(self, name: &str) -> Option<usize> {
-        fn find<S>(params: &[Param<S>], name: &str) -> Option<usize> {
-            params
-                .iter()
-                .position(|p| p.name == name && p.choices.is_empty())
-        }
-        match self {
-            Self::Eq => find(EQ_PARAMS, name),
-            Self::Compressor => find(COMPRESSOR_PARAMS, name),
-            Self::Reverb => find(REVERB_PARAMS, name),
-            Self::Delay => find(DELAY_PARAMS, name),
-            Self::Saturator => find(SATURATOR_PARAMS, name),
-            Self::Chorus => find(CHORUS_PARAMS, name),
-            Self::Phaser => find(PHASER_PARAMS, name),
-            Self::Filter => find(FILTER_PARAMS, name),
-            Self::Gate => find(GATE_PARAMS, name),
-            Self::Limiter => find(LIMITER_PARAMS, name),
-            Self::Bitcrusher => find(BITCRUSHER_PARAMS, name),
-            Self::Utility => find(UTILITY_PARAMS, name),
-        }
-    }
-
-    /// How many settings this Effect has.
-    pub fn param_count(self) -> usize {
-        match self {
-            Self::Eq => EQ_PARAMS.len(),
-            Self::Compressor => COMPRESSOR_PARAMS.len(),
-            Self::Reverb => REVERB_PARAMS.len(),
-            Self::Delay => DELAY_PARAMS.len(),
-            Self::Saturator => SATURATOR_PARAMS.len(),
-            Self::Chorus => CHORUS_PARAMS.len(),
-            Self::Phaser => PHASER_PARAMS.len(),
-            Self::Filter => FILTER_PARAMS.len(),
-            Self::Gate => GATE_PARAMS.len(),
-            Self::Limiter => LIMITER_PARAMS.len(),
-            Self::Bitcrusher => BITCRUSHER_PARAMS.len(),
-            Self::Utility => UTILITY_PARAMS.len(),
-        }
     }
 }
 
@@ -165,6 +215,8 @@ enum Processor {
     Limiter(Limiter),
     Bitcrusher(Bitcrusher),
     Utility(Utility),
+    /// Every other built-in, which works in place as a `StereoEffect`.
+    InPlace(EffectKind, Box<dyn InPlace>),
     Plugin(HostedPlugin),
     /// A Plugin this host doesn't have, by its id: the signal passes it
     /// untouched and it has no settings, so the Project keeps them.
@@ -186,6 +238,7 @@ impl Processor {
             Processor::Limiter(effect) => LIMITER_PARAMS[index].get(&effect.settings()),
             Processor::Bitcrusher(effect) => BITCRUSHER_PARAMS[index].get(&effect.settings()),
             Processor::Utility(effect) => UTILITY_PARAMS[index].get(&effect.settings()),
+            Processor::InPlace(_, effect) => effect.get(index),
             Processor::Plugin(plugin) => plugin.get(index),
             Processor::Missing(_) => 0.0,
         }
@@ -267,6 +320,7 @@ impl Processor {
                     effect.set_settings(next);
                 }
             }
+            Processor::InPlace(_, effect) => effect.set(index, value),
             Processor::Plugin(plugin) => plugin.set(index, value),
             Processor::Missing(_) => {}
         }
@@ -285,11 +339,20 @@ pub struct Effect {
     /// What moves its settings while the song plays. It is the Effect's, so
     /// it moves with the Effect and goes when the Effect does.
     automation: TableAutomation,
+    /// Whether it has processed a block yet. Until it has, its settings
+    /// arrive without gliding: it is being loaded, not changed.
+    started: bool,
+    /// The tick of the last frame it processed while the song moved, to
+    /// tell whether a block of one frame moved on from it.
+    last_tick: Option<f64>,
 }
 
 impl Effect {
     /// An Effect with its default settings, not bypassed.
     pub fn new(kind: EffectKind, sample_rate: f32) -> Self {
+        if let Some(effect) = in_place(kind, sample_rate) {
+            return Self::hosting(Processor::InPlace(kind, effect), kind.param_count());
+        }
         let processor = match kind {
             EffectKind::Eq => Processor::Eq(Eq::new(sample_rate, EqSettings::default())),
             EffectKind::Compressor => {
@@ -321,6 +384,7 @@ impl Effect {
                 Processor::Bitcrusher(Bitcrusher::new(BitcrusherSettings::defaults()))
             }
             EffectKind::Utility => Processor::Utility(Utility::new(UtilitySettings::defaults())),
+            _ => unreachable!("{} works in place", kind.name()),
         };
         Self::hosting(processor, kind.param_count())
     }
@@ -343,6 +407,8 @@ impl Effect {
             bypassed: false,
             fixed: vec![0.0; param_count],
             automation: TableAutomation::new(param_count),
+            started: false,
+            last_tick: None,
         };
         effect.keep_fixed();
         effect
@@ -397,6 +463,7 @@ impl Effect {
             Processor::Limiter(_) => Some(EffectKind::Limiter),
             Processor::Bitcrusher(_) => Some(EffectKind::Bitcrusher),
             Processor::Utility(_) => Some(EffectKind::Utility),
+            Processor::InPlace(kind, _) => Some(kind),
             Processor::Plugin(_) | Processor::Missing(_) => None,
         }
     }
@@ -426,7 +493,9 @@ impl Effect {
 
     /// Change the settings from their flat form: one value per setting, in
     /// the Effect's table order, out-of-range values clamped and missing
-    /// ones at their default. Allocates nothing.
+    /// ones at their default. An Effect that hasn't processed a block yet
+    /// takes them at once, so a loaded one doesn't glide from its defaults
+    /// to the Project's settings; after that, they glide. Allocates nothing.
     pub fn set_flat(&mut self, values: &[f32]) {
         match &mut self.processor {
             Processor::Eq(eq) => eq.set_settings(EqSettings::from_flat(values)),
@@ -447,6 +516,7 @@ impl Effect {
                 effect.set_settings(BitcrusherSettings::from_flat(values))
             }
             Processor::Utility(effect) => effect.set_settings(UtilitySettings::from_flat(values)),
+            Processor::InPlace(_, effect) => effect.set_flat(values),
             Processor::Plugin(plugin) => {
                 let count = plugin.manifest().settings.len();
                 for index in 0..count {
@@ -458,6 +528,9 @@ impl Effect {
                 }
             }
             Processor::Missing(_) => {}
+        }
+        if !self.started {
+            self.processor.settle();
         }
         self.keep_fixed();
     }
@@ -471,8 +544,10 @@ impl Effect {
     /// The song's tempo where it is playing, which a Delay synced to a note
     /// value follows. Allocates nothing.
     pub fn set_tempo(&mut self, tempo: f64) {
-        if let Processor::Delay(delay) = &mut self.processor {
-            delay.set_tempo(tempo);
+        match &mut self.processor {
+            Processor::Delay(delay) => delay.set_tempo(tempo),
+            Processor::InPlace(_, effect) => effect.set_tempo(tempo),
+            _ => {}
         }
     }
 
@@ -490,8 +565,10 @@ impl Effect {
 
     /// Process both sides in place, with the settings following their
     /// Automation when `ticks` says where in the song each frame is (see
-    /// `TableAutomation::drive`). `scratch_left` and `scratch_right` are at
-    /// least as long, for an Effect that can't work in place.
+    /// `TableAutomation::drive`), and an Effect synced to the song lining up
+    /// with it. `scratch_left` and `scratch_right` are at least as long, for
+    /// an Effect that can't work in place. The first block starts at the
+    /// settings its Automation gives, without gliding to them.
     fn process(
         &mut self,
         left: &mut [f32],
@@ -503,17 +580,37 @@ impl Effect {
             return;
         }
         let (scratch_left, scratch_right) = scratch;
+        let mut settle = !self.started;
+        self.started = true;
+        // The frames' ticks, or none when they don't say where each frame is.
+        let ticks = if ticks.len() == left.len() {
+            ticks
+        } else {
+            &[]
+        };
+        // An Effect synced to the song hears where it is only while it moves.
+        let moving = match ticks {
+            [] => false,
+            [only] => self.last_tick.is_some_and(|last| last != *only),
+            [first, .., last] => first != last,
+        };
+        self.last_tick = ticks.last().copied();
+        let song = if moving { ticks } else { &[] };
         self.automation.drive(
             left.len(),
             ticks,
             &mut self.processor,
             |processor, index, value| processor.set(index, value),
             |processor, frames| {
+                if std::mem::take(&mut settle) {
+                    processor.settle();
+                }
+                let ticks = song.get(frames.clone()).unwrap_or_default();
                 processor.process(
                     &mut left[frames.clone()],
                     &mut right[frames],
-                    scratch_left,
-                    scratch_right,
+                    (scratch_left, scratch_right),
+                    ticks,
                 );
             },
         );
@@ -521,12 +618,21 @@ impl Effect {
 }
 
 impl Processor {
+    /// Jump an Effect that works in place to its settings (see
+    /// `StereoEffect::settle`).
+    fn settle(&mut self) {
+        if let Processor::InPlace(_, effect) = self {
+            effect.settle();
+        }
+    }
+
+    /// `ticks` is where in the song each frame is while it moves, or empty.
     fn process(
         &mut self,
         left: &mut [f32],
         right: &mut [f32],
-        scratch_left: &mut [f32],
-        scratch_right: &mut [f32],
+        (scratch_left, scratch_right): (&mut [f32], &mut [f32]),
+        ticks: &[f64],
     ) {
         match self {
             Processor::Eq(eq) => eq.process_stereo(left, right),
@@ -549,6 +655,7 @@ impl Processor {
             Processor::Limiter(effect) => effect.process_stereo(left, right),
             Processor::Bitcrusher(effect) => effect.process_stereo(left, right),
             Processor::Utility(effect) => effect.process_stereo(left, right),
+            Processor::InPlace(_, effect) => effect.process(left, right, ticks),
             Processor::Plugin(plugin) => plugin.process(left, right, (scratch_left, scratch_right)),
             Processor::Missing(_) => {}
         }
@@ -655,9 +762,10 @@ impl InsertChain {
         self.process_at(left, right, &[]);
     }
 
-    /// `process`, with every automated setting following its Automation:
-    /// `ticks` says where in the song each frame is, and has no breakpoint
-    /// between its first and last.
+    /// `process`, with every automated setting following its Automation and
+    /// every Effect synced to the song lined up with its beats: `ticks` says
+    /// where in the song each frame is, and has no breakpoint between its
+    /// first and last. Without one tick per frame, neither happens.
     pub fn process_at(&mut self, left: &mut [f32], right: &mut [f32], ticks: &[f64]) {
         if self.is_empty() {
             return;
@@ -682,27 +790,15 @@ impl InsertChain {
 mod tests {
     use super::*;
     use crate::dsp::gain_to_db;
-    use crate::dsp::measure::{rms, sine};
+    use crate::dsp::measure::{max_jump, rms, sine};
+    use crate::effect::stereo::song_ticks;
 
     const RATE: f32 = 48_000.0;
 
     fn effect(kind: EffectKind, settings: &[(&str, f32)]) -> Box<Effect> {
         let mut effect = Effect::new(kind, RATE);
         let mut flat = effect.to_flat();
-        let params: Vec<&str> = match kind {
-            EffectKind::Eq => EQ_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Compressor => COMPRESSOR_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Reverb => REVERB_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Delay => DELAY_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Saturator => SATURATOR_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Chorus => CHORUS_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Phaser => PHASER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Filter => FILTER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Gate => GATE_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Limiter => LIMITER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Bitcrusher => BITCRUSHER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Utility => UTILITY_PARAMS.iter().map(|p| p.name).collect(),
-        };
+        let params = kind.param_names();
         for (name, value) in settings {
             flat[params.iter().position(|p| p == name).unwrap()] = *value;
         }
@@ -964,5 +1060,182 @@ mod tests {
         run(&mut chain);
         let limiter = chain.effect(0).unwrap().gain_reduction_db();
         assert!(limiter > 6.0, "{limiter} dB");
+    }
+
+    /// The settings of `kind` well away from their defaults, in their flat
+    /// form: 30% of the way up each range where the default is high, 70%
+    /// where it is low.
+    fn moved_settings(kind: EffectKind) -> Vec<f32> {
+        let defaults = Effect::new(kind, RATE).to_flat();
+        kind.param_ranges()
+            .into_iter()
+            .zip(defaults)
+            .map(|((min, max), default)| {
+                let share = if default - min > 0.5 * (max - min) {
+                    0.3
+                } else {
+                    0.7
+                };
+                min + share * (max - min)
+            })
+            .collect()
+    }
+
+    fn in_place_kinds() -> impl Iterator<Item = EffectKind> {
+        EffectKind::ALL
+            .into_iter()
+            .filter(|&kind| in_place(kind, RATE).is_some())
+    }
+
+    #[test]
+    fn a_loaded_effect_starts_at_its_settings_without_gliding() {
+        for kind in in_place_kinds() {
+            let values = moved_settings(kind);
+            let mut loaded = InsertChain::default();
+            let mut effect = Effect::new(kind, RATE);
+            effect.set_flat(&values);
+            loaded.insert(0, Box::new(effect)).unwrap();
+            let (loaded_left, loaded_right) = run(&mut loaded);
+
+            // As if it had been made with them, and settled.
+            let mut made = in_place_made_with(kind, RATE, &values).unwrap();
+            made.settle();
+            let mut left = sine(1_000.0, 0.5, RATE, 24_000);
+            let mut right = left.clone();
+            for (l, r) in left.chunks_mut(256).zip(right.chunks_mut(256)) {
+                made.process(l, r, &[]);
+            }
+            assert_eq!(loaded_left, left, "{}", kind.name());
+            assert_eq!(loaded_right, right, "{}", kind.name());
+        }
+    }
+
+    #[test]
+    fn a_smoothed_setting_is_there_at_once_on_load_and_glides_after() {
+        // The Clipper's output gain, the Ring Mod's mix, the Haas's level:
+        // each is heard at the Project's setting from the first sample,
+        // not faded in from the default.
+        type Changes = &'static [(&'static str, f32)];
+        let cases: [(EffectKind, Changes, Changes); 3] = [
+            (
+                EffectKind::Clipper,
+                &[("outputDb", -12.0)],
+                &[("outputDb", 0.0)],
+            ),
+            (EffectKind::RingMod, &[("mix", 0.0)], &[("mix", 1.0)]),
+            (
+                EffectKind::Haas,
+                &[("side", 0.0), ("levelDb", -12.0)],
+                &[("levelDb", 0.0)],
+            ),
+        ];
+        for (kind, load, later) in cases {
+            let loaded = effect(kind, load);
+            let mut chain = InsertChain::default();
+            chain.insert(0, loaded).unwrap();
+            let (mut left, mut right) = (sine(1_000.0, 0.5, RATE, 4_800), vec![0.0; 4_800]);
+            right.copy_from_slice(&left);
+            chain.process(&mut left, &mut right);
+            // (After the Haas's 15 ms delay has filled.)
+            let (first, steady) = (rms(&left[960..1_440]), rms(&left[2_400..]));
+            assert!(
+                (first / steady - 1.0).abs() < 0.02,
+                "{}: {first} against {steady}",
+                kind.name(),
+            );
+
+            // Changed later, it glides: no click, and it gets there.
+            let mut flat = chain.effect(0).unwrap().to_flat();
+            let names = kind.param_names();
+            for (name, value) in later {
+                flat[names.iter().position(|p| p == name).unwrap()] = *value;
+            }
+            chain.effect_mut(0).unwrap().set_flat(&flat);
+            let (mut after_left, mut after_right) =
+                (sine(1_000.0, 0.5, RATE, 4_800), vec![0.0; 4_800]);
+            after_right.copy_from_slice(&after_left);
+            chain.process(&mut after_left, &mut after_right);
+            let joined: Vec<f32> = left.iter().chain(&after_left).copied().collect();
+            assert!(
+                max_jump(&joined) < 0.2,
+                "{}: {}",
+                kind.name(),
+                max_jump(&joined)
+            );
+            assert!(
+                (rms(&after_left[2_400..]) - steady).abs() > 0.01,
+                "{} reached its new setting",
+                kind.name()
+            );
+        }
+    }
+
+    /// Frames of a steady signal through `chain`, in blocks of `block`, with
+    /// the song at `ticks`.
+    fn gains_at(chain: &mut InsertChain, ticks: &[f64], block: usize) -> Vec<f32> {
+        let mut left = vec![1.0; ticks.len()];
+        let mut right = left.clone();
+        for ((l, r), t) in left
+            .chunks_mut(block)
+            .zip(right.chunks_mut(block))
+            .zip(ticks.chunks(block))
+        {
+            chain.process_at(l, r, t);
+        }
+        left
+    }
+
+    #[test]
+    fn a_synced_effect_follows_the_song_only_while_it_moves() {
+        let synced = [
+            (EffectKind::Pump, vec![("depth", 1.0)]),
+            (EffectKind::TranceGate, vec![]),
+            (EffectKind::Tremolo, vec![("sync", 1.0), ("depth", 1.0)]),
+            (EffectKind::AutoPan, vec![("sync", 1.0)]),
+            (EffectKind::BeatRepeat, vec![("repeat", 1.0)]),
+        ];
+        for (kind, settings) in synced {
+            let run = |ticks: &[f64], frames: usize| {
+                let mut chain = InsertChain::default();
+                chain.insert(0, effect(kind, &settings)).unwrap();
+                let mut left = sine(300.0, 0.5, RATE, frames);
+                let mut right = left.clone();
+                for (index, (l, r)) in left.chunks_mut(256).zip(right.chunks_mut(256)).enumerate() {
+                    let t = ticks.get(index * 256..index * 256 + l.len()).unwrap_or(&[]);
+                    chain.process_at(l, r, t);
+                }
+                left
+            };
+            // Stopped part-way through a beat, it runs free, as with no
+            // position.
+            let free = run(&[], 30_000);
+            assert_eq!(run(&vec![360.0; 30_000], 30_000), free, "{}", kind.name());
+            // Playing from there, it lines up with the song instead.
+            let playing = run(&song_ticks(360.0, 120.0, RATE, 30_000), 30_000);
+            assert_ne!(playing, free, "{}", kind.name());
+        }
+    }
+
+    #[test]
+    fn a_pump_dips_on_the_beat_while_its_settings_follow_automation() {
+        // A moving Automation renders frame by frame: each frame still
+        // knows the song is moving.
+        let mut pump = effect(EffectKind::Pump, &[("depth", 1.0)]);
+        let automation = Automation::from_flat(
+            &[0.0, 0.9, 0.0, 3_840.0, 1.0, 0.0],
+            crate::automation::Automatable::Effect {
+                index: 0,
+                param: crate::automation::ParamName::new("mix").unwrap(),
+            },
+        );
+        pump.set_automation("mix", automation);
+        let mut chain = InsertChain::default();
+        chain.insert(0, pump).unwrap();
+        let ticks = song_ticks(480.0, 120.0, RATE, 36_000);
+        let gains = gains_at(&mut chain, &ticks, 1_000);
+        let dip = (0..24_000)
+            .min_by(|&a, &b| gains[a].total_cmp(&gains[b]))
+            .unwrap();
+        assert!((12_000..12_400).contains(&dip), "{dip}");
     }
 }

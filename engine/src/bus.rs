@@ -10,6 +10,7 @@
 //! it feeds.
 
 use crate::automation::{Automatable, Automation, ChannelAutomation, Line};
+use crate::channel_eq::ChannelEq;
 use crate::effect::InsertChain;
 use crate::track::{ChannelGains, Mixer};
 
@@ -86,9 +87,11 @@ pub fn feeds(output: Output, sends: &[BusSend]) -> impl Iterator<Item = usize> +
 pub struct Bus {
     chain: InsertChain,
     mixer: Mixer,
+    /// The channel EQ, between the Insert Chain and the fader.
+    eq: ChannelEq,
     output: Output,
     sends: Vec<BusSend>,
-    /// What moves its fader, pan and Sends while the song plays.
+    /// What moves its fader, pan, EQ and Sends while the song plays.
     automation: ChannelAutomation,
     /// How many Buses its signal passes through to reach the Master, this
     /// one included, on its longest way there: a Bus is mixed after every
@@ -126,6 +129,21 @@ impl Bus {
 
     pub fn set_mixer(&mut self, mixer: Mixer) {
         self.mixer = mixer;
+    }
+
+    /// The channel EQ's bands, low to high, in dB.
+    pub fn eq(&self) -> [f32; 4] {
+        self.eq.db()
+    }
+
+    /// Set the channel EQ's bands, low to high, in dB. Allocates nothing.
+    pub fn set_eq(&mut self, db: [f32; 4]) {
+        self.eq.set(db);
+    }
+
+    /// Run the EQ at the Engine's rate. Allocates nothing.
+    pub(crate) fn set_sample_rate(&mut self, sample_rate: f32) {
+        self.eq.set_sample_rate(sample_rate);
     }
 
     pub fn output(&self) -> Output {
@@ -203,7 +221,7 @@ impl Bus {
     }
 
     /// Run frames `start` to `end` of what feeds this Bus through its Insert
-    /// Chain, its fader and its pan, leaving its output in place for
+    /// Chain, its EQ, its fader and its pan, leaving its output in place for
     /// `add_to`.
     /// `ticks` says where in the song each frame is, and has no breakpoint
     /// between its first and last, so every automated setting follows its
@@ -211,6 +229,12 @@ impl Bus {
     pub fn process(&mut self, start: usize, end: usize, ticks: &[f64]) {
         let (own_left, own_right) = (&mut self.left[start..end], &mut self.right[start..end]);
         self.chain.process_at(own_left, own_right, ticks);
+        self.eq.process(
+            own_left,
+            own_right,
+            self.automation.eq().lines(ticks),
+            ticks,
+        );
         let gains = ChannelGains::new(self.mixer, 1.0, &self.automation, ticks);
         let mut meter = self.meter;
         for (frame, (l, r)) in own_left.iter_mut().zip(own_right.iter_mut()).enumerate() {

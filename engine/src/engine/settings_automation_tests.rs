@@ -365,10 +365,10 @@ fn only_numbers_can_be_automated() {
     assert!(!named("effect:0:no such"));
     assert!(!named("instrument:no such"));
     assert!(!named("send:left"));
-    assert!(named("pad:15:pitch"));
+    assert!(named("pad:31:pitch"));
     assert!(!named("pad:0:note"));
     assert!(!named("pad:0:chokeGroup"));
-    assert!(!named("pad:16:volume"));
+    assert!(!named("pad:32:volume"));
 
     // An Effect's settings are checked by the Effect in the slot, since a
     // Plugin declares its own.

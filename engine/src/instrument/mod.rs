@@ -32,6 +32,11 @@ pub fn kit_sample(pad: usize) -> Option<Sample> {
     decode(kit::STARTER_KIT.get(pad)?.wav).ok()
 }
 
+/// The bundled kit's WAV for pad `pad`, as the file's bytes.
+pub fn kit_wav(pad: usize) -> Option<&'static [u8]> {
+    kit::STARTER_KIT.get(pad).map(|pad| pad.wav)
+}
+
 /// The Instrument one Instrument Track owns.
 #[derive(Debug)]
 pub enum Instrument {
@@ -57,7 +62,8 @@ impl Instrument {
     }
 
     /// The Drum Sampler with `pads` pads, the bundled starter kit on as many
-    /// of them as it reaches: a Project's Drum Sampler has 8 to 16 (PRD #10).
+    /// of them as it reaches: a Project's Drum Sampler may have fewer pads
+    /// than the kit, or more, up to `MAX_PADS`.
     pub fn drum_sampler(sample_rate: f32, pads: usize) -> Self {
         Self::Drums(DrumSampler::starter_kit(sample_rate, pads))
     }

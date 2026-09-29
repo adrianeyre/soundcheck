@@ -187,6 +187,16 @@ impl Controller {
             EngineCommand::SetMasterVolume { volume } => {
                 self.push(RtCommand::SetMasterVolume(volume))
             }
+            EngineCommand::SetChannelEq {
+                chain,
+                low,
+                low_mid,
+                high_mid,
+                high,
+            } => self.push(RtCommand::SetChannelEq {
+                chain,
+                eq: [low, low_mid, high_mid, high],
+            }),
             EngineCommand::SetAutomation {
                 target,
                 setting,
@@ -533,6 +543,25 @@ impl Controller {
         self.collect_garbage();
         if self.dj_installed {
             self.push(RtCommand::DjLoad { deck, track: None });
+        }
+    }
+
+    /// Put a sample decoded for Sampler Slot `slot` (at this Controller's
+    /// sample rate, off the audio thread) there.
+    pub fn dj_put_sample(&mut self, slot: usize, file: PreparedAudioFile) {
+        self.collect_garbage();
+        self.install_dj();
+        self.push(RtCommand::DjSample {
+            slot,
+            file: Some(file),
+        });
+    }
+
+    /// Empty Sampler Slot `slot`.
+    pub fn dj_unload_sample(&mut self, slot: usize) {
+        self.collect_garbage();
+        if self.dj_installed {
+            self.push(RtCommand::DjSample { slot, file: None });
         }
     }
 
@@ -893,6 +922,10 @@ impl Renderer {
                 solo,
             } => engine.set_track_mixer(track, volume, pan, mute, solo),
             RtCommand::SetMasterVolume(volume) => engine.set_master_volume(volume),
+            RtCommand::SetChannelEq {
+                chain,
+                eq: [low, low_mid, high_mid, high],
+            } => engine.set_channel_eq(chain, low, low_mid, high_mid, high),
             RtCommand::SetAutomation { target, automation } => {
                 let old = engine.swap_automation(target, automation);
                 self.discard(Garbage::Automation(old));
@@ -1056,6 +1089,11 @@ impl Renderer {
                 }
             }
             RtCommand::DjSet(control, value) => engine.dj_apply(control, value),
+            RtCommand::DjSample { slot, file } => {
+                if let Some(old) = engine.swap_dj_sample(slot, file) {
+                    self.discard(Garbage::AudioFile(old));
+                }
+            }
             RtCommand::SetHeadphones(ring) => {
                 if let Some(old) = std::mem::replace(&mut self.headphones, ring) {
                     self.discard(Garbage::Headphones(old));

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 
 import { applyEngineCommand } from "../audio/apply-engine-command";
 import type { EngineCommand } from "../audio/audio-output";
+import { applyCommand } from "./commands";
 import { EngineSync, trackNotes, trackSynth, type LoadedSample } from "./engine-sync";
 import { defaultEffectSettings, effectSettingsFromFlat, effectSettingsToFlat } from "../effect/effect-params";
 import { effectFlat } from "../effect/effect-table";
@@ -12,6 +13,7 @@ import { synthSettingsToFlat } from "../instrument/synth-params";
 import { synthPreset } from "../instrument/synth-presets";
 import {
   createAudioTrack,
+  createBus,
   createDrumTrack,
   createEffect,
   createInstrumentTrack,
@@ -92,13 +94,32 @@ describe("EngineSync", () => {
     sync.update(project);
 
     const mixed = structuredClone(project);
-    mixed.tracks[1]!.mixer = { volume: 0.5, pan: -1, mute: true, solo: false };
+    mixed.tracks[1]!.mixer = { volume: 0.5, pan: -1, mute: true, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } };
     mixed.master.volume = 0.75;
     expect(sync.update(mixed)).toEqual([
       { type: "setMasterVolume", volume: 0.75 },
       { type: "setTrackMixer", track: 1, volume: 0.5, pan: -1, mute: true, solo: false },
     ]);
     expect(sync.update(mixed)).toEqual([]);
+  });
+
+  test("sends a channel's EQ apart from its fader, and only when it changes", () => {
+    const sync = new EngineSync();
+    const project = projectWith([clip("a", 0, [])], []);
+    project.buses.push(createBus("Band", "band"));
+    // Flat everywhere, as the engine starts: nothing about the EQ is sent.
+    expect(sync.update(project).filter((command) => command.type === "setChannelEq")).toEqual([]);
+
+    const eqd = structuredClone(project);
+    eqd.tracks[1]!.mixer.eq.low = -6;
+    eqd.buses[0]!.mixer.eq.highMid = 2;
+    eqd.master.eq.high = 3;
+    expect(sync.update(eqd)).toEqual([
+      { type: "setChannelEq", chain: -1, low: 0, lowMid: 0, highMid: 0, high: 3 },
+      { type: "setChannelEq", chain: -2, low: 0, lowMid: 0, highMid: 2, high: 0 },
+      { type: "setChannelEq", chain: 1, low: -6, lowMid: 0, highMid: 0, high: 0 },
+    ]);
+    expect(sync.update(eqd)).toEqual([]);
   });
 
   test("sends a Track's Synth when its sound changes, and nothing when it doesn't", () => {
@@ -250,7 +271,7 @@ describe("EngineSync", () => {
     synth.tracks[0] = { ...createInstrumentTrack("Drums", "drums") };
     sync.update(synth, both);
     const back = sync.update(replaced, both);
-    expect(back[0]).toEqual({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: 8 });
+    expect(back[0]).toEqual({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: STARTER_KIT.length });
     expect(back).toContainEqual({ type: "setPadSample", track: 0, pad: 2, wav: [4, 5, 6] });
   });
 
@@ -281,25 +302,45 @@ describe("EngineSync", () => {
     const project = createProject();
     project.tracks.push(createInstrumentTrack("Synth 1", "synth"), createDrumTrack("Drums", "drums"));
     const sent = sync.update(project);
-    expect(sent).toContainEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: 8 });
+    expect(sent).toContainEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: STARTER_KIT.length });
 
-    // A Project may have 8 to 16 pads (#10); the engine builds the kit, so
-    // it is told the size and everything on the pads is sent again.
+    // A Project may have more pads than the kit, up to 32; the engine builds
+    // the kit, so it is told the size and everything on the pads is sent again.
     const wider = structuredClone(project);
     const pads = padsOf({ ...wider, tracks: [wider.tracks[1]!] } as Project);
-    pads.push({ name: "Rim", note: 37, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup: 0 });
+    pads.push({ name: "Shaker", note: 82, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup: 0 });
     const commands = sync.update(wider);
-    expect(commands[0]).toEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: 9 });
+    expect(commands[0]).toEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: STARTER_KIT.length + 1 });
     expect(commands).toContainEqual({
       type: "setPad",
       track: 1,
-      pad: 8,
-      note: 37,
+      pad: STARTER_KIT.length,
+      note: 82,
       volume: 1,
       pan: 0,
       pitch: 0,
       chokeGroup: 0,
     });
+  });
+
+  test("adding and removing a Pad tells the engine the kit's new size", () => {
+    const sync = new EngineSync();
+    const project = createProject();
+    project.tracks.push(createDrumTrack("Drums", "drums"));
+    sync.update(project);
+    const added = applyCommand(project, { type: "addDrumPad", trackId: "drums" });
+    if (!added.ok) throw new Error(added.error);
+    expect(sync.update(added.project)[0]).toEqual({
+      type: "setTrackInstrument",
+      track: 0,
+      instrument: "drumSampler",
+      pads: STARTER_KIT.length + 1,
+    });
+    const removed = applyCommand(added.project, { type: "removeDrumPad", trackId: "drums" });
+    if (!removed.ok) throw new Error(removed.error);
+    const commands = sync.update(removed.project);
+    expect(commands[0]).toEqual({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: STARTER_KIT.length });
+    expect(commands.filter((command) => command.type === "setPad")).toHaveLength(STARTER_KIT.length);
   });
 
   test("a pad whose sample the folder hasn't got keeps the kit's own sound", () => {
@@ -460,6 +501,10 @@ function renderStereo(
 }
 
 /** The left channel of `project` rendered offline, from the top to `endTick`. */
+function rmsOf(samples: Float32Array): number {
+  return Math.sqrt(samples.reduce((sum, x) => sum + x * x, 0) / samples.length);
+}
+
 function render(project: Project, endTick: number): Float32Array {
   return renderStereo(project, endTick).left;
 }
@@ -507,7 +552,7 @@ describe("playing a Project in the engine", () => {
     const unity = renderStereo(projectWith([clip("c", 0, notes)]), end);
 
     const mixed = projectWith([clip("c", 0, notes)]);
-    mixed.tracks[0]!.mixer = { volume: 0.5, pan: 0.5, mute: false, solo: false };
+    mixed.tracks[0]!.mixer = { volume: 0.5, pan: 0.5, mute: false, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } };
     const played = renderStereo(mixed, end);
 
     // Pan is a balance: half right leaves the right side at the fader's gain
@@ -518,6 +563,23 @@ describe("playing a Project in the engine", () => {
       expect(played.right[frame]).toBeCloseTo(unity.right[frame]! * 0.5, 6);
     }
     expect(unity.left.some((sample) => sample !== 0)).toBe(true);
+  });
+
+  test("a channel's EQ is what the render plays, and flat it changes nothing", () => {
+    const notes: Note[] = [{ pitch: 72, start: 0, length: BAR, velocity: 0.8 }];
+    const end = 2 * BAR;
+    const unity = render(projectWith([clip("c", 0, notes)]), end);
+
+    const flatEq = projectWith([clip("c", 0, notes)]);
+    flatEq.tracks[0]!.mixer.eq = { low: 0, lowMid: 0, highMid: 0, high: 0 };
+    expect(render(flatEq, end)).toEqual(unity);
+
+    const cut = projectWith([clip("c", 0, notes)]);
+    cut.master.eq = { low: -12, lowMid: -12, highMid: -12, high: -12 };
+    const ratio = rmsOf(render(cut, end)) / rmsOf(unity);
+    // -12 dB on every band is a quarter of the level, once it has faded in.
+    expect(ratio).toBeGreaterThan(0.2);
+    expect(ratio).toBeLessThan(0.3);
   });
 
   test("the Master fader and mute are what the render plays", () => {
@@ -533,7 +595,7 @@ describe("playing a Project in the engine", () => {
     }
 
     const muted = projectWith([clip("c", 0, notes)]);
-    muted.tracks[0]!.mixer = { volume: 1, pan: 0, mute: true, solo: false };
+    muted.tracks[0]!.mixer = { volume: 1, pan: 0, mute: true, solo: false, eq: { low: 0, lowMid: 0, highMid: 0, high: 0 } };
     expect(render(muted, end).every((sample) => sample === 0)).toBe(true);
   });
 
@@ -566,6 +628,35 @@ describe("playing a Project in the engine", () => {
       expect(attack).toBeGreaterThan(0.2);
       expect(attack).toBeGreaterThan(4 * tail);
     }
+  });
+
+  test("a Pad added to an eight-Pad kit plays the Starter Kit's next sound, and one past the kit plays nothing", () => {
+    // A song saved with the first eight Pads, given a ninth and, past the
+    // kit's twenty-two, a twenty-third, through the commands the buttons send.
+    let project = createProject();
+    project.tracks.push(createDrumTrack("Drums", "drums"));
+    padsOf(project).splice(8);
+    const add = (times: number) => {
+      for (let i = 0; i < times; i++) {
+        const result = applyCommand(project, { type: "addDrumPad", trackId: "drums" });
+        if (!result.ok) throw new Error(result.error);
+        project = result.project;
+      }
+    };
+    add(1);
+    const ninth = padsOf(project)[8]!;
+    expect(ninth).toEqual(STARTER_KIT[8]);
+    add(STARTER_KIT.length - 8);
+    const empty = padsOf(project)[STARTER_KIT.length]!;
+    expect(empty).toMatchObject({ name: "Pad 23", sample: null });
+
+    const hit = (note: number) => {
+      const song = structuredClone(project);
+      song.tracks[0]!.clips = [clip("hit", 0, [{ pitch: note, start: 0, length: SIXTEENTH, velocity: 1 }], BAR)];
+      return peak(render(song, BAR));
+    };
+    expect(hit(ninth.note)).toBeGreaterThan(0.1);
+    expect(hit(empty.note)).toBe(0);
   });
 
   test("an Audio Clip plays its file through the real engine, trimmed and in time", () => {

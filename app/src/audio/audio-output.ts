@@ -23,6 +23,11 @@ export type EngineCommand =
   | { type: "setTrackMixer"; track: number; volume: number; pan: number; mute: boolean; solo: boolean }
   /** The Master fader, the same linear gain. */
   | { type: "setMasterVolume"; volume: number }
+  /**
+   * The channel EQ of a Track, a Bus or the Master, numbered as an Insert
+   * Chain is (`chain` below): each band's gain in dB, -12 to 12, 0 flat.
+   */
+  | { type: "setChannelEq"; chain: number; low: number; lowMid: number; highMid: number; high: number }
   /** Buses are numbered from 0 in Bus-list order, like Tracks. */
   | { type: "setBusCount"; count: number }
   | { type: "setBusMixer"; bus: number; volume: number; pan: number; mute: boolean; solo: boolean }
@@ -83,7 +88,7 @@ export type EngineCommand =
   | { type: "setSynthSettings"; track: number; settings: number[] }
   /**
    * "synth" or "drumSampler"; the Drum Sampler arrives with the bundled kit
-   * on `pads` pads (8 to 16), filled from the kit as far as it reaches.
+   * on `pads` pads (up to 32), filled from the kit as far as it reaches.
    * `pads` is null for an Instrument that has none.
    */
   | { type: "setTrackInstrument"; track: number; instrument: string; pads: number | null }
@@ -170,13 +175,13 @@ export type EngineCommand =
   | { type: "setPlayRange"; startTick: number; endTick: number }
   | { type: "setMetronome"; on: boolean }
   /**
-   * A control of the Mixer page's DJ Mixer (ADR 0013): `name` of a Deck or
-   * a mixer channel (both by `index`, from 0) or of the mixer. Mirrors
+   * A control of the Mixer page's DJ Mixer (ADR 0013): `name` of a Deck, a
+   * mixer channel or a Sampler Slot (all by `index`, from 0) or of the mixer. Mirrors
    * `DjControl::parse` in `engine/src/dj/mod.rs`; switches are 1 or 0.
    */
   | { type: "djSet"; kind: DjControlKind; index: number; name: string; value: number };
 
-export type DjControlKind = "deck" | "channel" | "mixer";
+export type DjControlKind = "deck" | "channel" | "mixer" | "sampler";
 
 /**
  * What the engine found in a file loaded onto a Deck: `TrackAnalysis` in
@@ -204,6 +209,13 @@ export interface DjHost {
   /** Decode and analyse `bytes` off the audio thread and put the file on Deck `deck`. */
   load(deck: number, bytes: Uint8Array): Promise<DjAnalysis>;
   unload(deck: number): void;
+  /**
+   * Decode `bytes` off the audio thread and put the sample in Sampler Slot
+   * `slot` (0 to 63, across the four banks). Answers how long it plays, in seconds.
+   */
+  loadSample(slot: number, bytes: Uint8Array): Promise<number>;
+  /** Empty Sampler Slot `slot`. */
+  unloadSample(slot: number): void;
   /** The mix recorded since the last call, interleaved stereo at the output's rate. */
   takeRecording(): Promise<Float32Array>;
   /**

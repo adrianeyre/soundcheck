@@ -139,6 +139,7 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
     "File",
     "Editor",
     "Mixer",
+    "Pads",
     "Settings",
     "Grid",
     "Cookie Policy",
@@ -151,8 +152,8 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
   fireEvent.keyDown(items[0]!, { key: "ArrowDown" });
   expect(items[1]).toHaveFocus();
   fireEvent.keyDown(items[1]!, { key: "End" });
-  expect(items[7]).toHaveFocus();
-  fireEvent.keyDown(items[7]!, { key: "ArrowDown" });
+  expect(items[8]).toHaveFocus();
+  fireEvent.keyDown(items[8]!, { key: "ArrowDown" });
   expect(items[0]).toHaveFocus();
 
   fireEvent.keyDown(items[0]!, { key: "Escape" });
@@ -385,8 +386,12 @@ test("the Grid menu lists the open page's Widgets, and each page keeps its own l
     "Deck 2",
     "Deck 3 (empty)",
     "Deck 4 (empty)",
-    "Track browser",
+    "Track browser 1",
+    "Track browser 2",
+    "Pad Controller",
   ]);
+  // The Pad Controller is on the Mixer page's Grid menu, but hidden until the DJ shows it.
+  expect(screen.queryByRole("region", { name: "Pad Controller" })).not.toBeInTheDocument();
 
   // Hiding the Mixer page's mixer leaves the Editor's Mixer where it is.
   fireEvent.keyDown(menu(), { key: "ArrowDown" });
@@ -399,6 +404,29 @@ test("the Grid menu lists the open page's Widgets, and each page keeps its own l
   fireEvent.keyDown(document.activeElement!, { key: "Escape" });
   choose("Editor");
   expect(screen.getByRole("region", { name: "Mixer" })).toBeVisible();
+
+  // The Pads page has a Grid of its own: the Pad Controller the Grid's whole width, a Track browser under it.
+  choose("Pads");
+  expect(screen.getByRole("heading", { level: 1, name: "Pads" })).toBeInTheDocument();
+  expect(menu()).toHaveAccessibleName("Menu, Pads");
+  expect(location.hash).toBe("#pads");
+  expect(gridMenuItems()).toEqual(["Pad Controller", "Track browser"]);
+  expect(screen.getByRole("region", { name: "Pad Controller" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "Track browser" })).toBeVisible();
+  const pads = screen.getByRole("region", { name: "Pad Controller" }).closest<HTMLElement>("[data-widget]");
+  const browser = screen.getByRole("region", { name: "Track browser" }).closest<HTMLElement>("[data-widget]");
+  expect(pads?.dataset.widget).toBe("padController");
+  expect(browser?.dataset.widget).toBe("padsBrowser");
+  // Hiding its Track browser is the Pads page's own: the Mixer page's are where they were.
+  fireEvent.keyDown(menu(), { key: "ArrowDown" });
+  const padsGridItem = screen.getByRole("menuitem", { name: "Grid" });
+  padsGridItem.focus();
+  fireEvent.keyDown(padsGridItem, { key: "ArrowRight" });
+  fireEvent.click(within(screen.getByRole("menu", { name: "Grid" })).getByRole("menuitemcheckbox", { name: "Track browser" }));
+  expect(JSON.parse(localStorage.getItem("soundcheck.grid.pads")!).widgets.padsBrowser.hidden).toBe(true);
+  expect(JSON.parse(localStorage.getItem("soundcheck.grid.mixing")!).widgets.djBrowser.hidden).toBe(false);
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
   // Settings has no Grid, so no Grid menu.
   choose("Settings");

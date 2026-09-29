@@ -590,10 +590,17 @@ test("a breakpoint is edited and deleted in its fields, without dragging, and a 
   expect(history.project.tracks[0]!.automation).toEqual([{ setting: "pan", breakpoints: [{ tick: 0, value: 1, hold: false }] }]);
 });
 
-test("the Master's volume has an Automation Lane, and nothing else of the Master's is automated", () => {
+test("the Master's volume has an Automation Lane, and of the Master's own settings only its EQ is automated besides", () => {
   const { history } = setUp();
   fireEvent.click(screen.getByLabelText("Master Automation"));
-  expect(screen.queryByLabelText("Master automated setting")).not.toBeInTheDocument();
+  const picker = screen.getByLabelText("Master automated setting");
+  expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+    "Volume",
+    "Channel EQ: Low",
+    "Channel EQ: Low mid",
+    "Channel EQ: High mid",
+    "Channel EQ: High",
+  ]);
   fireEvent.doubleClick(screen.getByLabelText("Master volume Automation Lane"), { clientX: BAR_PX + 5, clientY: volumeY(0) });
   expect(history.project.master.automation).toEqual([{ setting: "volume", breakpoints: [{ tick: BAR, value: 0, hold: false }] }]);
   history.undo();

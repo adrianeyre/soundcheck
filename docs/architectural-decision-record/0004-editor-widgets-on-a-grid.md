@@ -43,10 +43,16 @@ Below 768 px wide there is no room for columns: Widgets stack in Grid order at t
 
 ## Amended: a Grid for each page
 
-The Mixer page (ADR 0013) is Widgets on a Grid too: its waveforms, each Deck, its mixer and its Track browser. So a Grid belongs to a page, not to the Editor alone.
+The Mixer page (ADR 0013) is Widgets on a Grid too: its waveforms, each Deck, its mixer and its two Track browsers. A Track browser starts *tucked*: drawn directly under its Deck, as wide as it, and down to the mixer's bottom, following their heights as their content is measured, until the musician moves or resizes it. So a Grid belongs to a page, not to the Editor alone.
 
 - **Each page's Widgets are listed apart:** the Editor's in `WIDGETS` and the Mixer page's in `MIXING_WIDGETS`, both in `PAGE_WIDGETS`. A layout holds only one page's Widgets, and every function in `layout.ts` works over the Widgets the layout it is given holds (`specsOf`). So moving, hiding or pinning a Widget on one page never touches the other's.
 - **Each page's layout is kept apart:** the Editor's under `soundcheck.grid`, as before, so no saved layout is lost, and the Mixer page's under `soundcheck.grid.mixing`. Both are listed in the Cookie Policy.
 - **The Grid menu is the open page's:** its Widgets, which are empty, and a Reset layout for that page. Settings has no Grid, so it has no Grid menu.
 - **Only the open page's pinned Widgets are drawn** in the slots under the title bar and above the footer. A hidden page's pinned Widgets are drawn in their own page, which is hidden, and stay mounted.
 - A new Widget on either page follows the steps above, in its page's list.
+
+## Amended: the Pads page's Grid
+
+The Pads page is a third page with a Grid of its own, as the Mixer page is: its Widgets are listed in `PADS_WIDGETS` (the Pad Controller the Grid's whole width, a Track browser under it), its layout is kept under `soundcheck.grid.pads`, listed in the Cookie Policy, and the Grid menu and Reset layout are its own while it is open.
+
+A Widget can start hidden (`startsHidden` in its spec): it is on its page's Grid menu, unticked, until the musician shows it, and Reset layout hides it again. The Mixer page's Pad Controller starts that way, so the Mixer page opens as it did.

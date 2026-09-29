@@ -7,7 +7,7 @@
  */
 import type { DjAnalysis, DjControlKind } from "../audio/audio-output";
 import { DECKS } from "./dj-report";
-import type { HotCue, TempoRangeId } from "./dj-logic";
+import { type HotCue, HOT_CUES, type TempoRangeId } from "./dj-logic";
 
 /** The drag type a file from the Track browser's loaded list travels under. */
 export const DJ_TRACK_DRAG_TYPE = "application/x-soundcheck-dj-track";
@@ -39,6 +39,11 @@ export interface DeckState {
   zoom: number;
   loopBeats: number;
   jumpBeats: number;
+  /**
+   * **Key Sync** kept on, as the Pad Controller's KEY SYNC turns it: the Deck
+   * follows the Sync Master's key as it changes, not just once.
+   */
+  keySync: boolean;
 }
 
 export interface ChannelState {
@@ -89,7 +94,7 @@ export function newDeck(): DeckState {
     trackId: null,
     loading: false,
     error: null,
-    hotCues: Array.from({ length: 8 }, () => null),
+    hotCues: Array.from({ length: HOT_CUES }, () => null),
     memoryCues: [],
     vinyl: true,
     range: "10",
@@ -97,6 +102,7 @@ export function newDeck(): DeckState {
     zoom: 4,
     loopBeats: 4,
     jumpBeats: 4,
+    keySync: false,
   };
 }
 

@@ -18,6 +18,7 @@ import type {
   EqSettings,
   Instrument,
   KeysInstrument,
+  ChannelEq,
   Mixer,
   Note,
   Output,
@@ -31,6 +32,7 @@ import type {
   Track,
   TrackInput,
 } from "./model";
+import { nextDrumPad } from "./model";
 import type { Arrangement } from "./arrangement";
 import { automatableSetting, pruneAutomation, sortAutomation } from "./automation";
 import type { KeysSettings } from "../instrument/keys-params";
@@ -39,7 +41,7 @@ import { synthPreset } from "../instrument/synth-presets";
 import { findBus as busById, type Channel, routingProblem, sendProblem } from "./routing";
 import { overlappingSection, sectionBarsText, type SectionRange } from "./sections";
 import { secondsBetween, type TimeSignature, tempoMapOf } from "./time";
-import { validateProject } from "./validate";
+import { LIMITS, validateProject } from "./validate";
 
 /** Which Insert Chain: the Master's, a Track's or a Bus's. */
 export type ChainTarget = "master" | { trackId: string } | { busId: string };
@@ -102,9 +104,22 @@ export type Command =
   | { type: "setKeysSample"; trackId: string; sample: string | null; rootNote?: number }
   /** One Drum Sampler pad; only the fields given change. */
   | { type: "setDrumPad"; trackId: string; pad: number; settings: Partial<DrumPad> }
-  /** Only the fields given change. */
-  | { type: "setTrackMixer"; trackId: string; mixer: Partial<Mixer> }
+  /**
+   * One more Pad after a Drum Sampler's last: `nextDrumPad`'s, the Starter
+   * Kit's Pad at that position or, past the kit, an empty one.
+   */
+  | { type: "addDrumPad"; trackId: string }
+  /**
+   * Take a Drum Sampler's last Pad off, and its Automation with it. Only the
+   * last, so no other Pad moves, and each keeps the kit sound of its place.
+   * Notes on its note stay in the Clips, playing nothing.
+   */
+  | { type: "removeDrumPad"; trackId: string }
+  /** Only the fields given change, down to single bands of the EQ. */
+  | { type: "setTrackMixer"; trackId: string; mixer: MixerChange }
   | { type: "setMasterVolume"; volume: number }
+  /** Only the bands given change. */
+  | { type: "setMasterEq"; eq: Partial<ChannelEq> }
   /** Where a Track sends its signal: a Bus's id, or `null` for the Master. */
   | { type: "setTrackOutput"; trackId: string; output: Output }
   /** Which input device, and which of its channels, an Audio Track records from. */
@@ -118,8 +133,8 @@ export type Command =
   | { type: "deleteBus"; busId: string }
   /** To `index` in the Bus list, which is only where it is listed: what it feeds and what feeds it stay. */
   | { type: "moveBus"; busId: string; index: number }
-  /** Only the fields given change. */
-  | { type: "setBusMixer"; busId: string; mixer: Partial<Mixer> }
+  /** Only the fields given change, as `setTrackMixer`'s. */
+  | { type: "setBusMixer"; busId: string; mixer: MixerChange }
   /** Where a Bus sends its signal: another Bus's id, or `null` for the Master. */
   | { type: "setBusOutput"; busId: string; output: Output }
   /** A post-fader Send from a Track or Bus to a Bus, after its others. */
@@ -189,8 +204,11 @@ export const COMMAND_LABELS: Record<CommandType, string> = {
   setKeysPreset: "Load Keys preset",
   setKeysSample: "Load Keys sample",
   setDrumPad: "Change pad",
+  addDrumPad: "Add Pad",
+  removeDrumPad: "Remove Pad",
   setTrackMixer: "Change mixer",
   setMasterVolume: "Set Master volume",
+  setMasterEq: "Change Master EQ",
   setTrackOutput: "Route Track",
   setTrackInput: "Set Track Input",
   setTrackMonitoring: "Set Input Monitoring",
@@ -220,6 +238,13 @@ class Rejected extends Error {}
 
 function reject(message: string): never {
   throw new Rejected(message);
+}
+
+/** A change to a mixer channel: only the fields given, and only the EQ bands given. */
+export type MixerChange = Partial<Omit<Mixer, "eq">> & { eq?: Partial<ChannelEq> };
+
+function changedMixer(mixer: Mixer, changes: MixerChange): Mixer {
+  return { ...mixer, ...changes, eq: { ...mixer.eq, ...changes.eq } };
 }
 
 /**
@@ -405,22 +430,35 @@ function change(project: Project, command: Command): void {
       return;
     }
     case "setDrumPad": {
-      const track = findTrack(project, command.trackId);
-      if (track.kind !== "instrument" || track.instrument.type !== "drumSampler") {
-        reject(`${track.name} isn't playing the Drum Sampler`);
-      }
-      const pad = track.instrument.pads[command.pad];
+      const { track, pads } = findDrumSampler(project, command.trackId);
+      const pad = pads[command.pad];
       if (!pad) reject(`${track.name} has no pad ${command.pad + 1}`);
       Object.assign(pad, command.settings);
       return;
     }
+    case "addDrumPad": {
+      const { track, pads } = findDrumSampler(project, command.trackId);
+      if (pads.length >= LIMITS.drumPads[1]) reject(`${track.name} has ${pads.length} Pads already, the most a Drum Sampler holds`);
+      pads.push(nextDrumPad(pads));
+      return;
+    }
+    case "removeDrumPad": {
+      const { track, pads } = findDrumSampler(project, command.trackId);
+      if (pads.length <= LIMITS.drumPads[0]) reject(`${track.name} has only ${pads.length} Pad left, and a Drum Sampler keeps at least ${LIMITS.drumPads[0]}`);
+      // Its Automation goes with it, as `pruneAutomation` finds.
+      pads.pop();
+      return;
+    }
     case "setTrackMixer": {
       const track = findTrack(project, command.trackId);
-      track.mixer = { ...track.mixer, ...command.mixer };
+      track.mixer = changedMixer(track.mixer, command.mixer);
       return;
     }
     case "setMasterVolume":
       project.master.volume = command.volume;
+      return;
+    case "setMasterEq":
+      project.master.eq = { ...project.master.eq, ...command.eq };
       return;
     case "setTrackOutput": {
       const track = findTrack(project, command.trackId);
@@ -464,7 +502,7 @@ function change(project: Project, command: Command): void {
     }
     case "setBusMixer": {
       const bus = findBus(project, command.busId);
-      bus.mixer = { ...bus.mixer, ...command.mixer };
+      bus.mixer = changedMixer(bus.mixer, command.mixer);
       return;
     }
     case "setBusOutput": {
@@ -641,6 +679,15 @@ function findSynth(project: Project, trackId: string): Extract<Instrument, { typ
     reject(`${track.name} has no Synth`);
   }
   return track.instrument;
+}
+
+/** A Track's Drum Sampler's Pads, or a rejection if it isn't playing one. */
+function findDrumSampler(project: Project, trackId: string): { track: Track; pads: DrumPad[] } {
+  const track = findTrack(project, trackId);
+  if (track.kind !== "instrument" || track.instrument.type !== "drumSampler") {
+    reject(`${track.name} isn't playing the Drum Sampler`);
+  }
+  return { track, pads: track.instrument.pads };
 }
 
 /** A Track's Keys, or a rejection if it hasn't got them. */

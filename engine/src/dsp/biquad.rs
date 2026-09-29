@@ -75,6 +75,20 @@ impl Biquad {
         Self::normalised(1.0, -2.0 * cos, 1.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha)
     }
 
+    /// An all-pass: every frequency at unity, only the phase turned, most
+    /// around `frequency`.
+    pub fn all_pass(sample_rate: f32, frequency: f32, q: f32) -> Self {
+        let (cos, alpha) = Self::angles(sample_rate, frequency, q);
+        Self::normalised(
+            1.0 - alpha,
+            -2.0 * cos,
+            1.0 + alpha,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        )
+    }
+
     /// Whichever of the three a Synth voice asks for.
     pub fn of_kind(kind: FilterKind, sample_rate: f32, frequency: f32, q: f32) -> Self {
         match kind {

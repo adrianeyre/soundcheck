@@ -82,7 +82,7 @@ Requirements below that differ by platform are marked **[web]** / **[desktop]**.
 ### Built-in sounds
 
 - **Synth**: a subtractive synth (oscillators, filter, envelopes, LFO) with about 10 factory presets covering bass, lead, pad, pluck and keys.
-- **Drum Sampler**: 8–16 pads, each playing a WAV sample; the user can load their own samples onto pads. One starter drum kit is bundled.
+- **Drum Sampler**: 8–32 pads, each playing a WAV sample; the user can load their own samples onto pads. One starter drum kit is bundled, of 22 pads on the General MIDI drum map.
 - **Effects**: EQ, Compressor, Reverb.
 
 ### Mixer

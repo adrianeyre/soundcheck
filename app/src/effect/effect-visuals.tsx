@@ -3,22 +3,28 @@
  * engine works them out (`engine/src/effect/`): the Compressor's, Gate's
  * and Limiter's level curves, the Saturator's transfer curve, the Auto
  * Filter's response and the range its LFO sweeps, the Reverb's tail, the
- * Delay's repeats, the Chorus's and Phaser's LFOs, the Bitcrusher's steps
- * and the Utility's stereo field. None of them processes audio: each draws
+ * Delay's repeats, the Chorus's and Phaser's LFOs, the Bitcrusher's steps,
+ * the Utility's stereo field, and for the Effects added since, their LFOs,
+ * level shapes, gate steps and the frequencies they work at. None of them processes audio: each draws
  * a function of the settings, which is what the curves below are.
  */
-import type {
-  BitcrusherSettings,
-  ChorusSettings,
-  CompressorSettings,
-  DelaySettings,
-  FilterSettings,
-  GateSettings,
-  LimiterSettings,
-  PhaserSettings,
-  ReverbSettings,
-  SaturatorSettings,
-  UtilitySettings,
+import {
+  type BitcrusherSettings,
+  type ChorusSettings,
+  type CompressorSettings,
+  type DelaySettings,
+  type FilterSettings,
+  type GateSettings,
+  type LimiterSettings,
+  type PhaserSettings,
+  type ReverbSettings,
+  type SaturatorSettings,
+  type ClipperSettings,
+  type PumpSettings,
+  type ResonatorSettings,
+  TRANCE_GATE_PATTERNS,
+  type TranceGateSettings,
+  type UtilitySettings,
 } from "./effect-params";
 import type { Effect } from "../project/model";
 
@@ -357,6 +363,278 @@ function StereoField({ label, settings }: { label: string; settings: UtilitySett
   );
 }
 
+// ---- The twenty Effects added with schema 20. ----
+
+/**
+ * The Trance Gate's patterns, step by step (`x` open): the engine's
+ * `trance_gate.rs` holds the same, in the same order as its choices.
+ */
+const TRANCE_GATE_STEP_PATTERNS: { readonly [P in TranceGateSettings["pattern"]]: string } = Object.fromEntries(
+  TRANCE_GATE_PATTERNS.map((name, index) => [
+    name,
+    ["xxxxxxxxxxxxxxxx", "x.x.x.x.x.x.x.x.", "..x...x...x...x.", "x.xxx.xxx.xxx.xx", "xx.xxx.xxx.xxx.x", "x..x..x.x..x..x.", "x.xx.xx.x.xx.xx.", "x...x...x.x.xxxx"][index]!,
+  ]),
+) as { readonly [P in TranceGateSettings["pattern"]]: string };
+
+/** Which of the Trance Gate's 16 steps are open. */
+export function tranceGateSteps(settings: TranceGateSettings): boolean[] {
+  return [...TRANCE_GATE_STEP_PATTERNS[settings.pattern]].map((step) => step === "x");
+}
+
+/** The Pump's level across one note, 0 to 1 of the way through it, as `pump.rs` shapes it. */
+export function pumpGain(settings: PumpSettings, at: number): number {
+  const into = (((at - settings.phase) % 1) + 1) % 1;
+  const back = Math.min(1, into / Math.max(0.05, settings.release));
+  const shaped = back ** 4 ** (2 * settings.curve - 1);
+  return 1 - settings.depth * settings.mix * (1 - shaped);
+}
+
+/** A sample's level through the Clipper, as `clipper.rs` works it out, before its output gain. */
+export function clipperOutput(settings: ClipperSettings, x: number): number {
+  const input = x * 10 ** (settings.inputDb / 20);
+  const ceiling = 10 ** (settings.ceilingDb / 20);
+  const knee = ceiling * (1 - settings.softness);
+  const size = Math.abs(input);
+  const room = ceiling - knee;
+  const clipped = size <= knee ? size : room <= 0 ? ceiling : knee + room * Math.tanh((size - knee) / room);
+  return settings.mix * Math.sign(input) * Math.min(ceiling, clipped) + (1 - settings.mix) * input;
+}
+
+/** Lines of `points` values, 0 (bottom) to 1 (top), spread across the picture, and a caption. */
+function Plot({ label, lines, caption }: { label: string; lines: { points: readonly number[]; muted?: boolean }[]; caption: string }) {
+  const at = (points: readonly number[]) =>
+    path(points.map((value, index): [number, number] => [(index / Math.max(1, points.length - 1)) * W, H - 6 - Math.max(0, Math.min(1, value)) * (H - 20)]));
+  return (
+    <Frame label={label}>
+      <line x1={0} x2={W} y1={H - 6} y2={H - 6} stroke="var(--lane-line)" vectorEffect="non-scaling-stroke" />
+      {lines.map(({ points, muted }, index) => (
+        <path
+          key={index}
+          d={at(points)}
+          fill="none"
+          stroke={muted ? "var(--text-muted)" : "var(--primary)"}
+          strokeWidth={muted ? 1 : 2.5}
+          strokeDasharray={muted ? "3 3" : undefined}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+      <text x={W - 4} y={14} textAnchor="end" className="effect-visual-label">
+        {caption}
+      </text>
+    </Frame>
+  );
+}
+
+/** Where `hz` is across the picture, kept on the 20 Hz to 20 kHz axis. */
+const markX = (hz: number) => hzX(Math.max(LOW_HZ, Math.min(HIGH_HZ, hz)));
+
+/** A 20 Hz to 20 kHz axis with the frequencies an Effect works at marked, and the band it works on shaded. */
+function FrequencyMarks({ label, marks, band, caption }: { label: string; marks: number[]; band?: [number, number]; caption: string }) {
+  const x = markX;
+  return (
+    <Frame label={label}>
+      {[100, 1000, 10_000].map((hz) => (
+        <line key={hz} x1={x(hz)} x2={x(hz)} y1={0} y2={H} stroke="var(--lane-line)" vectorEffect="non-scaling-stroke" />
+      ))}
+      {band && <rect x={x(band[0])} y={0} width={Math.max(2, x(band[1]) - x(band[0]))} height={H} fill="var(--primary-soft)" opacity={0.7} />}
+      {marks.map((hz, index) => (
+        <line key={index} x1={x(hz)} x2={x(hz)} y1={20} y2={H} stroke="var(--primary)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+      ))}
+      <text x={W - 4} y={14} textAnchor="end" className="effect-visual-label">
+        {caption}
+      </text>
+    </Frame>
+  );
+}
+
+const range = (count: number, at: (t: number) => number) => Array.from({ length: count }, (_, index) => at(index / (count - 1)));
+const hz = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)} kHz` : `${Math.round(value)} Hz`);
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const CHORD_STEPS: { readonly [C in ResonatorSettings["chord"]]: number[] } = { unison: [0], fifth: [0, 7], octave: [0, 12], major: [0, 4, 7], minor: [0, 3, 7] };
+
+/** The pitch the Resonator is tuned to, in Hz: C4 is middle C. */
+export function resonatorHz(settings: ResonatorSettings): number {
+  if (settings.tuneBy === "frequency") return settings.frequencyHz;
+  const midi = 12 * (settings.octave + 1) + NOTE_NAMES.indexOf(settings.note);
+  return 440 * 2 ** ((midi - 69) / 12);
+}
+
+/** A drum hit's level at `t` (0 to 1 across the picture), its start raised by `attack`% and its tail by `sustain`%. */
+const hit = (t: number, attack: number, sustain: number) =>
+  Math.min(1, (t < 0.05 ? t / 0.05 : Math.exp(-(t - 0.05) * 6)) * (t < 0.15 ? 1 + attack / 200 : 1 + sustain / 200) * 0.8);
+
+/** The picture for one of the twenty Effects added with schema 20, or null for any other. */
+function NewerVisual({ effect, label }: { effect: Effect; label: string }) {
+  switch (effect.type) {
+    case "flanger":
+      return <LfoCurve label={`${label} sweep`} rateHz={effect.settings.rateHz} offset={effect.settings.stereoPhase / 360} depth={Math.min(1, effect.settings.depthMs / 10 + 0.1)} />;
+    case "tremolo":
+      return (
+        <Plot
+          label={`${label} level`}
+          lines={[{ points: range(161, (t) => 1 - effect.settings.depth * (0.5 + 0.5 * Math.sin(2 * Math.PI * 4 * t))) }]}
+          caption={effect.settings.sync === "on" ? `${effect.settings.note} · ${effect.settings.shape}` : `${effect.settings.rateHz.toFixed(2)} Hz · ${effect.settings.shape}`}
+        />
+      );
+    case "autopan":
+      return (
+        <LfoCurve label={`${label} pan`} rateHz={effect.settings.sync === "on" ? 1 : effect.settings.rateHz} offset={0} depth={effect.settings.depth} />
+      );
+    case "ringmod":
+      return (
+        <Plot
+          label={`${label} carrier`}
+          lines={[{ points: range(241, (t) => 0.5 + 0.5 * Math.sin(2 * Math.PI * 8 * t)) }]}
+          caption={`${hz(effect.settings.frequencyHz)}${effect.settings.driftDepth > 0 ? ` ± ${effect.settings.driftDepth.toFixed(1)} st` : ""}`}
+        />
+      );
+    case "vibrato":
+      return <LfoCurve label={`${label} pitch`} rateHz={effect.settings.rateHz} offset={effect.settings.stereoPhase / 360} depth={Math.min(1, effect.settings.depthCents / 100 + 0.05)} />;
+    case "transient": {
+      const { attack, sustain } = effect.settings;
+      return (
+        <Plot
+          label={`${label} envelope`}
+          lines={[{ points: range(161, (t) => hit(t, 0, 0)), muted: true }, { points: range(161, (t) => hit(t, attack, sustain)) }]}
+          caption={`attack ${Math.round(attack)}% · sustain ${Math.round(sustain)}%`}
+        />
+      );
+    }
+    case "deesser":
+      return (
+        <FrequencyMarks
+          label={`${label} band`}
+          marks={[effect.settings.frequencyHz]}
+          band={[effect.settings.frequencyHz / 1.5, effect.settings.frequencyHz * 1.5]}
+          caption={`${hz(effect.settings.frequencyHz)} · −${effect.settings.rangeDb.toFixed(0)} dB most`}
+        />
+      );
+    case "exciter":
+      return (
+        <FrequencyMarks
+          label={`${label} band`}
+          marks={[effect.settings.frequencyHz]}
+          band={[effect.settings.frequencyHz, HIGH_HZ]}
+          caption={`from ${hz(effect.settings.frequencyHz)} · ${Math.round(effect.settings.amount * 100)}%`}
+        />
+      );
+    case "multiband":
+      return (
+        <FrequencyMarks
+          label={`${label} bands`}
+          marks={[effect.settings.lowCrossoverHz, effect.settings.highCrossoverHz]}
+          caption={`${effect.settings.lowRatio.toFixed(1)} · ${effect.settings.midRatio.toFixed(1)} · ${effect.settings.highRatio.toFixed(1)} : 1`}
+        />
+      );
+    case "clipper":
+      return (
+        <Plot
+          label={`${label} transfer curve`}
+          lines={[
+            { points: range(161, (t) => 0.5 + (2 * t - 1) / 3), muted: true },
+            { points: range(161, (t) => 0.5 + clipperOutput(effect.settings, (2 * t - 1) * 1.5) / 3) },
+          ]}
+          caption={`ceiling ${effect.settings.ceilingDb.toFixed(1)} dB`}
+        />
+      );
+    case "freqshift":
+      return (
+        <FrequencyMarks
+          label={`${label} shift`}
+          marks={[1000, Math.max(LOW_HZ, 1000 + effect.settings.shiftHz)]}
+          caption={`${effect.settings.shiftHz >= 0 ? "+" : "−"}${Math.abs(Math.round(effect.settings.shiftHz))} Hz`}
+        />
+      );
+    case "autowah":
+      return (
+        <FrequencyMarks
+          label={`${label} sweep`}
+          marks={[]}
+          band={[effect.settings.lowHz, effect.settings.highHz]}
+          caption={`${hz(effect.settings.lowHz)} – ${hz(effect.settings.highHz)}`}
+        />
+      );
+    case "haas": {
+      const delayed = effect.settings.side;
+      const at = 0.1 + (effect.settings.delayMs / 50) * 0.8;
+      const pulse = (where: number, level: number) => range(161, (t) => (Math.abs(t - where) < 0.01 ? level : 0));
+      return (
+        <Plot
+          label={`${label} arrival`}
+          lines={[{ points: pulse(0.1, 0.9), muted: true }, { points: pulse(at, 0.9 * 10 ** (effect.settings.levelDb / 20)) }]}
+          caption={`${delayed} ${effect.settings.delayMs.toFixed(1)} ms later`}
+        />
+      );
+    }
+    case "resonator": {
+      const root = resonatorHz(effect.settings);
+      const pitches = CHORD_STEPS[effect.settings.chord].map((step) => root * 2 ** (step / 12));
+      return (
+        <FrequencyMarks
+          label={`${label} tuning`}
+          marks={pitches.flatMap((pitch) => [pitch, pitch * 2, pitch * 3])}
+          caption={effect.settings.tuneBy === "note" ? `${effect.settings.note}${effect.settings.octave} ${effect.settings.chord}` : `${hz(root)} ${effect.settings.chord}`}
+        />
+      );
+    }
+    case "vowel":
+      return <LfoCurve label={`${label} morph`} rateHz={effect.settings.lfoRateHz} offset={0} depth={Math.min(1, effect.settings.lfoDepth / 2)} />;
+    case "pump":
+      return (
+        <Plot
+          label={`${label} level`}
+          lines={[{ points: range(161, (t) => pumpGain(effect.settings, (t * 4) % 1)) }]}
+          caption={`${effect.settings.note} · ${Math.round(effect.settings.depth * 100)}%`}
+        />
+      );
+    case "trancegate": {
+      const steps = tranceGateSteps(effect.settings);
+      const closed = 1 - effect.settings.depth * effect.settings.mix;
+      return (
+        <Plot
+          label={`${label} steps`}
+          lines={[{ points: range(161, (t) => (steps[Math.min(15, Math.floor(t * 16))] && (t * 16) % 1 < 0.8 ? 1 : closed)) }]}
+          caption={`${effect.settings.pattern} · ${effect.settings.step}`}
+        />
+      );
+    }
+    case "pitchshift": {
+      const shift = effect.settings.semitones + effect.settings.cents / 100;
+      return (
+        <Plot
+          label={`${label} interval`}
+          lines={[{ points: range(2, () => 0.5), muted: true }, { points: range(2, () => 0.5 + shift / 26) }]}
+          caption={`${shift >= 0 ? "+" : "−"}${Math.abs(shift).toFixed(2)} st`}
+        />
+      );
+    }
+    case "lofi":
+      return (
+        <Plot
+          label={`${label} wobble`}
+          lines={[
+            {
+              points: range(241, (t) => 0.5 + 0.4 * effect.settings.wow * Math.sin(2 * Math.PI * 1.1 * t) + 0.15 * effect.settings.flutter * Math.sin(2 * Math.PI * 14.6 * t)),
+            },
+          ]}
+          caption={`tone ${hz(effect.settings.toneHz)}`}
+        />
+      );
+    case "beatrepeat": {
+      const decay = effect.settings.decay;
+      return (
+        <Plot
+          label={`${label} repeats`}
+          lines={[{ points: range(161, (t) => ((t * 8) % 1 < 0.7 ? (1 - decay) ** Math.floor(t * 8) * 0.9 : 0)) }]}
+          caption={`${effect.settings.slice}${effect.settings.repeat >= 1 ? " · repeating" : " · off"}`}
+        />
+      );
+    }
+    default:
+      return null;
+  }
+}
+
 /**
  * The picture for `effect`, or null for one that has none of its own here
  * (the EQ draws its curve itself, and a Plugin's settings are its own).
@@ -396,6 +674,6 @@ export function EffectVisual({ effect, label }: { effect: Effect; label: string 
     case "utility":
       return <StereoField label={`${label} stereo field`} settings={effect.settings} />;
     default:
-      return null;
+      return <NewerVisual effect={effect} label={label} />;
   }
 }

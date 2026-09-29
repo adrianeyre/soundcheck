@@ -12,6 +12,7 @@ mod audio_recording;
 mod audition;
 mod automation;
 mod bus;
+mod channel_eq;
 mod clip_render;
 mod clip_waveform;
 mod dj;
@@ -42,11 +43,13 @@ pub use audio_recording::{PlacedRecording, PlaybackAnchor, peak, place_recording
 pub use audition::{AUDITION_GAIN, Audition};
 pub use automation::{Automatable, MAX_BREAKPOINTS};
 pub use bus::{MAX_BUSES, MAX_SEND_LEVEL};
+pub use channel_eq::{EQ_BANDS, EQ_RANGE_DB};
 pub use clip_render::ClipRender;
 pub use clip_waveform::ClipWaveform;
 pub use dj::{
     BEAT_FX, COLOUR_FX, DECK_FIELDS, DECKS, DJ_REPORT_LEN, DjControl, DjMixer, DjTrack,
-    GLOBAL_FIELDS, PreparedDjTrack, TrackAnalysis, WAVEFORM_RATE,
+    GLOBAL_FIELDS, PreparedDjTrack, SAMPLER_BANK_SLOTS, SAMPLER_BANKS, SAMPLER_FIELDS,
+    SAMPLER_SLOTS, SlotMode, SlotState, TrackAnalysis, WAVEFORM_RATE,
 };
 pub use effect::{EffectKind, MAX_EFFECTS};
 pub use engine::{
@@ -86,9 +89,8 @@ pub fn synth_parameters() -> String {
     instrument::parameters_json()
 }
 
-/// Every Effect's settings as JSON, keyed by the Effect's name ("eq",
-/// "compressor", "reverb", "delay", "saturator", "chorus", "phaser",
-/// "filter", "gate", "limiter", "bitcrusher", "utility"): name, label, unit,
+/// Every Effect's settings as JSON, keyed by the Effect's name (one of
+/// `EffectKind::ALL`'s, such as "eq" or "trancegate"): name, label, unit,
 /// range, default and choices for each, in the order the flat form lists them.
 #[wasm_bindgen]
 pub fn effect_parameters() -> String {
@@ -251,6 +253,43 @@ pub fn dj_prepare(bytes: &[u8], sample_rate: f32) -> Result<DjPrepared, String> 
         .map_err(|error| error.message().to_string())
 }
 
+/// A sample decoded for a Sampler Slot at the engine's rate, on the page's
+/// thread, so the audio thread only moves it in.
+#[wasm_bindgen]
+pub struct DjPreparedSample(PreparedAudioFile);
+
+#[wasm_bindgen]
+impl DjPreparedSample {
+    pub fn left(&self) -> Vec<f32> {
+        self.0.left().to_vec()
+    }
+
+    pub fn right(&self) -> Vec<f32> {
+        self.0.right().to_vec()
+    }
+
+    /// How long it plays, in seconds at `sample_rate`.
+    pub fn seconds(&self, sample_rate: f32) -> f64 {
+        self.0.left().len() as f64 / f64::from(sample_rate)
+    }
+}
+
+/// Decode a WAV, FLAC or MP3 file for a Sampler Slot at `sample_rate`.
+#[wasm_bindgen]
+pub fn dj_prepare_sample(bytes: &[u8], sample_rate: f32) -> Result<DjPreparedSample, String> {
+    PreparedAudioFile::decode(bytes, sample_rate)
+        .map(DjPreparedSample)
+        .map_err(|error| error.message().to_string())
+}
+
+/// The bundled Starter Kit's sample at `index` (in `starter_kit`'s order),
+/// as the WAV file's bytes, or nothing past its end: the Sampler's first
+/// bank plays these out of the box.
+#[wasm_bindgen]
+pub fn starter_kit_wav(index: usize) -> Option<Vec<u8>> {
+    instrument::kit_wav(index).map(<[u8]>::to_vec)
+}
+
 /// The Beat FX and Colour FX, by name, in the order the mixer selects them.
 #[wasm_bindgen]
 pub fn dj_effects() -> String {
@@ -262,7 +301,7 @@ pub fn dj_effects() -> String {
             .join(",")
     };
     format!(
-        r#"{{"beatFx":[{}],"colourFx":[{}],"reportLength":{DJ_REPORT_LEN}}}"#,
+        r#"{{"beatFx":[{}],"colourFx":[{}],"reportLength":{DJ_REPORT_LEN},"samplerSlots":{SAMPLER_SLOTS}}}"#,
         list(BEAT_FX),
         list(COLOUR_FX)
     )

@@ -101,7 +101,7 @@ import { UpdateNotice } from "../update/UpdateNotice";
 import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
 import { useUpdates } from "../update/useUpdates";
-import { DjPage } from "../dj/DjPage";
+import { DjPages } from "../dj/DjPages";
 import type { HeadphoneOutput } from "../dj/headphone-output";
 import { browserRecordingSaver, type DjRecordingSaver } from "../dj/recording-saver";
 import { AudioEditor } from "./AudioEditor";
@@ -226,9 +226,16 @@ export interface SongPageProps {
     pinned?: WidgetGridProps["pinned"];
     onEmpty?: (empty: readonly WidgetId[]) => void;
   };
+  /** Where the Pads page's Widgets sit. */
+  padsGrid?: {
+    layout: WidgetLayout;
+    onLayout: (layout: WidgetLayout) => void;
+    pinned?: WidgetGridProps["pinned"];
+    onEmpty?: (empty: readonly WidgetId[]) => void;
+  };
 }
 
-export type SongView = "editor" | "settings" | "mixing";
+export type SongView = "editor" | "settings" | "mixing" | "pads";
 
 /** The id of each page's panel, for the menu to point at. */
 export const viewPanelId = (view: SongView) => `page-${view}`;
@@ -288,6 +295,7 @@ export function SongPage({
   menu,
   grid,
   mixingGrid,
+  padsGrid,
 }: SongPageProps) {
   const [ownLayout, setOwnLayout] = useState(defaultLayout);
   const layout = grid?.layout ?? ownLayout;
@@ -566,15 +574,12 @@ export function SongPage({
 
   useEffect(() => () => void outputRef.current?.close(), []);
 
-  // The Editor's song stops while the Mixer page is open, so only the DJ
-  // mix is heard (ADR 0013).
+  // The Editor's song stops while the Mixer page or the Pads page is open,
+  // so only the DJ mix is heard (ADR 0013). Both are drawn once first opened,
+  // and kept, so the Decks stay as the DJ left them (`DjPages`).
   useEffect(() => {
-    if (view === "mixing") output?.send({ type: "stop" });
+    if (view === "mixing" || view === "pads") output?.send({ type: "stop" });
   }, [view, output]);
-  // The Mixer page is drawn once it is first opened, and kept, so its
-  // Decks stay as the DJ left them.
-  const [mixingOpened, setMixingOpened] = useState(view === "mixing");
-  if (view === "mixing" && !mixingOpened) setMixingOpened(true);
 
   const projectTiming = () => ({ tempo: project.tempo, timeSignature: project.timeSignature });
 
@@ -786,6 +791,25 @@ export function SongPage({
     } catch (reason) {
       setError(`The recording couldn't be read back: ${String(reason instanceof Error ? reason.message : reason)}`);
     }
+  };
+
+  /**
+   * A recording made on the Mixer or Pads page, put into the song: an Audio
+   * Clip from the song's start on a new Audio Track, as one undo step. Its
+   * WAV is saved into the Project folder's `audio/` with the rest.
+   */
+  const addTakeToSong = async (wav: Uint8Array, name: string): Promise<string> => {
+    const waveform = await summariseAudio(wav);
+    const track = createAudioTrack(nextName(name));
+    const sample: LoadedSample = { name: `${track.name}.wav`, bytes: [...wav] };
+    const path = copyPathFor(sample, samples, project);
+    const loaded = samples.get(path) ?? sample;
+    setWaveforms((known) => new Map(known).set(loaded, waveform));
+    setSamples((known) => new Map(known).set(path, loaded));
+    track.clips.push({ id: newId(), kind: "audio", start: 0, duration: waveform.seconds, file: path, fileOffset: 0 });
+    const result = history.execute({ type: "addTrack", track }, "Add recording to song");
+    if (!result.ok) throw new Error(result.error);
+    return `${track.name} is in the song: an Audio Track in the Editor, from its start. Undo takes it out.`;
   };
 
   const setPad = (trackId: string, pad: number, settings: Partial<DrumPad>) =>
@@ -1565,6 +1589,8 @@ export function SongPage({
                       pad.sample ? (samples.get(pad.sample)?.name ?? fileName(pad.sample)) : undefined,
                     )}
                     onPad={(pad, settings) => setPad(selected.track.id, pad, settings)}
+                    onAddPad={() => execute({ type: "addDrumPad", trackId: selected.track.id })}
+                    onRemovePad={() => execute({ type: "removeDrumPad", trackId: selected.track.id })}
                     hitting={
                       new Set([...(position !== null ? soundingOnTrack(selected.track, position) : []), ...held])
                     }
@@ -1705,24 +1731,20 @@ export function SongPage({
         </section>
       </div>
 
-      <div id={viewPanelId("mixing")} className="page dj-page-wrap" hidden={view !== "mixing"} aria-labelledby="mixing-title">
-        <h1 id="mixing-title" className="page-title">
-          Mixer
-        </h1>
-        {mixingOpened && (
-          <DjPage
-            output={output}
-            onStart={() => void start()}
-            starting={starting}
-            active={view === "mixing"}
-            saver={djRecordings}
-            headphones={headphones}
-            samples={sampleSource}
-            library={library}
-            grid={mixingGrid}
-          />
-        )}
-      </div>
+      <DjPages
+        view={view}
+        panelId={viewPanelId}
+        output={output}
+        onStart={() => void start()}
+        starting={starting}
+        saver={djRecordings}
+        headphones={headphones}
+        samples={sampleSource}
+        library={library}
+        mixingGrid={mixingGrid}
+        padsGrid={padsGrid}
+        onAddToSong={addTakeToSong}
+      />
 
       <div id={viewPanelId("settings")} className="page" hidden={view !== "settings"} aria-labelledby="settings-title">
         <h1 id="settings-title" className="page-title">

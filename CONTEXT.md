@@ -121,6 +121,10 @@ A third-party Plugin in Steinberg's VST3 format, which draws its own window and 
 The ordered list of Effects on one mixer channel.
 _Avoid_: Effects rack, FX chain
 
+**Channel EQ**:
+The four knobs, low, low mid, high mid and high, on every Track's, Bus's and the Master's mixer channel, each turning its band up to 12 dB either way. It comes after the Insert Chain and before the fader, and at 0 dB on every band it changes nothing. It is the DJ Mixer's EQ, meeting at the same frequencies.
+_Avoid_: EQ (on its own: that is the EQ Effect), tone controls
+
 **Send**:
 A level-controlled copy of a Track's or Bus's signal, taken after its fader and pan, fed to a Bus. Each has at most one Send to any Bus, and the Master has none.
 _Avoid_: Aux
@@ -276,7 +280,7 @@ _Avoid_: Share link (Share makes a Shared Project), room code
 ### The Mixer page
 
 **Mixer page**:
-The page, beside the Editor and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees.
+The page, beside the Editor, the Pads page and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees, until the DJ adds a recording to the song.
 _Avoid_: DJ mode, performance view, live page
 
 **Deck**:
@@ -284,7 +288,7 @@ One of the Mixer page's two or four players: a file loaded onto it, played at a 
 _Avoid_: Player, turntable, channel (that is its strip on the mixer)
 
 **Track browser**:
-The Mixer page's list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck.
+The Mixer and Pads pages' list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck or into a Sampler Slot. The Pad Controller's browse knob moves a cursor through it, and LOAD loads the file it is on (the chosen track).
 _Avoid_: Library (that is the app's Preset and Kit library), crate, playlist
 
 **Beat Grid**:
@@ -292,7 +296,7 @@ Where a Deck's file has its beats: a BPM and the time of its first beat, found b
 _Avoid_: Tempo map (that is the song's), grid (on its own; the Editor has a Grid)
 
 **Hot Cue**:
-One of eight points of a Deck's file, each with a colour and a name, that one press jumps the Deck to. Unlike the cue point, it is set and cleared at will and stays until then.
+One of sixteen points of a Deck's file, A to P, each with a colour and a name, that one press jumps the Deck to. The Deck's own pads reach the first eight; the Pad Controller's reach all sixteen. Unlike the cue point, it is set and cleared at will and stays until then. Calling one ends a Silent Cue.
 _Avoid_: Marker, Section, memory cue (that only moves the cue point)
 
 **Quantize**:
@@ -320,8 +324,36 @@ Moving a Deck's pitch by whole semitones without changing its tempo.
 _Avoid_: Transpose (that is the Note Tools'), pitch (that is the tempo fader's)
 
 **Key Sync**:
-The Key Shift that brings a Deck to the nearest key that mixes with the Sync Master's: the same key, a fifth either way, or its relative major or minor, round the Camelot wheel.
+The Key Shift that brings a Deck to the nearest key that mixes with the Sync Master's: the same key, a fifth either way, or its relative major or minor, round the Camelot wheel. Turned on from the Pad Controller, it stays on, following the Master's key as it changes.
 _Avoid_: Harmonic mixing (that is the practice), auto-key
+
+**Silent Cue**:
+A Deck's mute: it plays on unheard, so a Hot Cue called brings it in from that point. Calling a Hot Cue ends it.
+_Avoid_: Mute (on its own; a Track's mixer channel has one), censor
+
+**Slip Reverse**:
+Reverse held, with Slip: the Deck plays backwards while the button is held, for at most 8 beats, and then carries on from where the track would have been.
+_Avoid_: Censor, rewind
+
+**Sampler**:
+The DJ mixer's own player of short sounds: 64 Sampler Slots in four banks of sixteen, shared by every Deck, into a channel of its own past the Crossfader, with a Sampler Gain, a cue button and a meter. What is in its slots is kept between sessions, in the app's library; it starts with the Starter Kit's sounds.
+_Avoid_: Drum Sampler (that is an Instrument), sampler deck, sample player
+
+**Sampler Slot**:
+One of the Sampler's 64 places for a sample: a name, the sample, how it plays (one-shot, gate or loop) and its level. A pad of the Pad Controller in SAMPLER mode plays one; SHIFT and the pad pauses it, or loads the Track browser's chosen track into it.
+_Avoid_: Pad (that is a Drum Sampler's sound), cell
+
+**Pad Controller**:
+The Widget drawn and played as a two-deck pad controller for DJ software: each half drives a Deck (the left Deck 1 or 3, the right 2 or 4) with its SLIDE FX strip, loop, sync, key and cue buttons, four PAD MODE buttons and sixteen lit pads, and between the halves a browse knob, the LOAD buttons and SHIFT. Its pad modes are Hot Cue, Keyboard, Pad FX 1 and 2, Beat Jump, Beat Loop, Sampler and Key Shift. It drives the same Decks and Sampler as the Mixer page, and records what it plays. It is the Pads page's, and on the Mixer page's Grid menu too.
+_Avoid_: Pads (on its own; that is the page), controller (on its own), launchpad, the maker's name
+
+**Pads page**:
+The page, beside the Editor, the Mixer page and Settings, with the Pad Controller across the whole width of its Grid and a Track browser under it. It shares the Mixer page's session: its pads play the same Decks and the same Sampler, into the same mix and recording, and "Add to song" puts a recording into the Editor's Project. Its name is "Pads", never "Pad".
+_Avoid_: Pad page, sampler page, performance page
+
+**Pad FX**:
+One of 32 effects, A to AF, on the Pad Controller's PAD FX pages: a Beat FX at a beat division that its pad applies to its Deck's channel while it is held. The DJ mixer has one Beat FX unit, so a Pad FX (or a SLIDE FX) borrows it while it is held and hands it back as the mixer had it.
+_Avoid_: Pad effect, stutter
 
 **Crossfader**:
 The DJ mixer's horizontal fader, which blends the channels assigned to its side A with those assigned to side B, on a curve the DJ picks. A channel assigned THRU is past it.
