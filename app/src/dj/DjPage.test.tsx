@@ -81,6 +81,9 @@ async function loadDeckOne(fake: ReturnType<typeof fakeOutput>) {
   fireEvent.change(input, { target: { files: [file] } });
   await waitFor(() => expect(fake.load).toHaveBeenCalled());
   await screen.findAllByText("Night Drive");
+  // The Deck's controls wait for the engine to report it loaded and for its analysis.
+  const deck = screen.getByRole("region", { name: "Deck 1" });
+  await waitFor(() => expect(within(deck).getByRole("button", { name: "Play Deck 1" })).toBeEnabled());
 }
 
 test("a new output is told every knob, and a file loads onto a Deck with its BPM and key", async () => {
