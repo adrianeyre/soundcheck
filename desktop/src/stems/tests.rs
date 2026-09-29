@@ -192,13 +192,18 @@ fn cancelling_a_job_on_another_thread_stops_it() {
     let separations = Separations::default();
     let job = separations.start().unwrap();
     let wav = wav_of(&song(60.0));
-    let running = std::thread::spawn(move || job.run(&path, &wav));
-    while separations.progress() == 0.0 {
-        std::thread::yield_now();
-    }
+    // The job runs only once the cancel has been sent, so the test doesn't
+    // race it: a fast worker could otherwise finish every chunk first.
+    // Stopping between chunks is `cancelling_stops_the_separation_...`'s.
+    let (cancelled, heard) = std::sync::mpsc::channel();
+    let running = std::thread::spawn(move || {
+        heard.recv().unwrap();
+        job.run(&path, &wav)
+    });
     separations.cancel();
+    cancelled.send(()).unwrap();
     assert_eq!(running.join().unwrap(), Ok(None));
-    assert!(separations.progress() < 1.0);
+    assert_eq!(separations.progress(), 0.0);
 }
 
 #[test]
