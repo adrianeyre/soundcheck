@@ -364,7 +364,8 @@ export function WidgetGrid({ layout: given, onLayout: save, widgets, pinned, emp
         w={at.w}
         h={at.h}
         zone={layout[id].zone}
-        sized={at.sized === true}
+        sized={at.sized === true || at.tucked === true}
+        stretched={widgetSpec(id).extra !== undefined}
         dragging={dragging}
         offsetX={moving ? drag.offset.x : 0}
         offsetY={moving ? drag.offset.y : 0}
@@ -445,8 +446,10 @@ interface FrameActions {
 interface WidgetFrameProps extends Cell {
   id: WidgetId;
   zone: Zone;
-  /** Made this tall by the musician, so its content fills it rather than it being fitted to its content. */
+  /** Made this tall by the musician, or tucked, so its content fills it rather than it being fitted to its content. */
   sized: boolean;
+  /** Drawn taller than its content (`extra`): its frame fills its rows, its content keeps its own height. */
+  stretched: boolean;
   dragging: boolean;
   offsetX: number;
   offsetY: number;
@@ -463,6 +466,7 @@ const WidgetFrame = memo(function WidgetFrame({
   h,
   zone,
   sized,
+  stretched,
   dragging,
   offsetX,
   offsetY,
@@ -480,6 +484,7 @@ const WidgetFrame = memo(function WidgetFrame({
       className="widget"
       data-widget={id}
       data-sized={sized || undefined}
+      data-stretched={stretched || undefined}
       data-dragging={dragging || undefined}
       style={style}
     >

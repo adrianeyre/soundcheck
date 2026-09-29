@@ -1474,6 +1474,11 @@ input.project-name:focus {
   align-self: stretch;
 }
 
+/* Drawn taller than its content: the frame fills its rows, and the extra is space inside it. */
+.widget-grid > .widget[data-stretched] {
+  align-self: stretch;
+}
+
 .widget[data-dragging] {
   z-index: 2;
   border-color: var(--primary);

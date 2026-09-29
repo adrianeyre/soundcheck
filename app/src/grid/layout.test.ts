@@ -335,3 +335,43 @@ test("on the Mixer page, the Track browser fits under a Deck shorter than the mi
   expect(grown.djBrowser.y).toBe(grown.deck1.y + 40);
   expectNoOverlaps(grown);
 });
+
+test("on the Mixer page, a Track browser starts under each of the first two Decks, as wide as it, down to the mixer's bottom", () => {
+  const layout = withoutWidgets(defaultLayout("mixing"), ["deck3", "deck4"]);
+  // The Decks' content is 30 rows, the mixer's 40, which is drawn a row taller.
+  const needed = { djWaveforms: 6, deck1: 30, djMixer: 40, deck2: 30, djBrowser: 3, djBrowser2: 3 };
+  const drawn = fitToContent(layout, needed);
+  expect(drawn.djMixer.h).toBe(41);
+  const bottom = drawn.djMixer.y + drawn.djMixer.h;
+  for (const [browser, deck] of [["djBrowser", "deck1"], ["djBrowser2", "deck2"]] as const) {
+    expect(drawn[browser]).toMatchObject({ x: drawn[deck].x, w: drawn[deck].w, y: drawn[deck].y + drawn[deck].h });
+    expect(drawn[browser].y + drawn[browser].h).toBe(bottom);
+  }
+  expectNoOverlaps(drawn);
+  expectNoEmptyRows(drawn);
+
+  // Kept and drawn again, they are still there; as a Deck's content grows, its browser follows and shrinks.
+  const kept = unfitted(drawn, layout, null);
+  expect(fitToContent(kept, needed).djBrowser).toEqual(drawn.djBrowser);
+  const grown = fitToContent(kept, { ...needed, deck1: 34 });
+  expect(grown.djBrowser).toMatchObject({ y: grown.deck1.y + 34, h: bottom - grown.deck1.y - 34 });
+
+  // Moved by the musician, one stays where it was dropped, and the other stays tucked.
+  const moved = unfitted(moveWidget(drawn, "djBrowser", 0, bottom + 2), layout, null);
+  expect(moved.djBrowser.tucked).toBeUndefined();
+  const again = fitToContent(moved, needed);
+  expect(again.djBrowser.y).toBe(bottom + 2);
+  expect(again.djBrowser2.y + again.djBrowser2.h).toBe(bottom);
+
+  // Saved and read back, they are still tucked.
+  expect(parseLayout(serialiseLayout(kept), "mixing").djBrowser2.tucked).toBe(true);
+});
+
+test("on the Mixer page with four Decks, the third and fourth go under the Track browsers", () => {
+  const needed = { djWaveforms: 6, deck1: 30, djMixer: 40, deck2: 30, deck3: 30, deck4: 30, djBrowser: 3, djBrowser2: 3 };
+  const drawn = fitToContent(defaultLayout("mixing"), needed);
+  expect(drawn.deck3.y).toBe(drawn.djBrowser.y + drawn.djBrowser.h);
+  expect(drawn.deck4.y).toBe(drawn.djBrowser2.y + drawn.djBrowser2.h);
+  expectNoOverlaps(drawn);
+  expectNoEmptyRows(drawn);
+});

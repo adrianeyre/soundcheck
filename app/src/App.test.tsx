@@ -385,7 +385,8 @@ test("the Grid menu lists the open page's Widgets, and each page keeps its own l
     "Deck 2",
     "Deck 3 (empty)",
     "Deck 4 (empty)",
-    "Track browser",
+    "Track browser 1",
+    "Track browser 2",
   ]);
 
   // Hiding the Mixer page's mixer leaves the Editor's Mixer where it is.

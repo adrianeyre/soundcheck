@@ -47,6 +47,14 @@ export interface WidgetPlacement extends Cell {
    * only if its content does, pushing down what is there.
    */
   room?: number;
+  /**
+   * Drawn where its spec's `tuck` says, under one Widget and down to the
+   * bottom of another, rather than where it was kept: so it follows their
+   * heights as their content is measured. It starts this way; moved,
+   * resized or pinned by the musician, it stays where they put it instead.
+   * "Reset layout" tucks it again.
+   */
+  tucked?: boolean;
 }
 
 /**
@@ -59,8 +67,8 @@ export type GridPage = "editor" | "mixing";
 /** Every Widget there is, on either page. A new one is added here and in its page's list below (ADR 0004). */
 export type WidgetId = EditorWidgetId | MixingWidgetId;
 
-/** The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer and the Track browser. */
-export type MixingWidgetId = "djWaveforms" | "deck1" | "deck2" | "deck3" | "deck4" | "djMixer" | "djBrowser";
+/** The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer and two Track browsers. */
+export type MixingWidgetId = "djWaveforms" | "deck1" | "deck2" | "deck3" | "deck4" | "djMixer" | "djBrowser" | "djBrowser2";
 
 export type EditorWidgetId =
   | "transport"
@@ -96,6 +104,15 @@ export interface WidgetSpec {
    * that height instead. Past it, its content scrolls.
    */
   grows?: number;
+  /**
+   * Where it starts tucked (`WidgetPlacement.tucked`): directly under
+   * `under`, as wide as it, and down to the bottom of `downTo`, or its
+   * minimum height if that is higher up. Its `initial` is where it goes
+   * when either is off the page.
+   */
+  tuck?: { under: WidgetId; downTo: WidgetId };
+  /** Rows it is drawn taller than its content, a band of its own space under it: none unless given. */
+  extra?: number;
 }
 
 const MIN = { w: 4, h: 3 };
@@ -128,18 +145,34 @@ export const WIDGETS: readonly WidgetSpec[] = [
 
 /**
  * The Mixer page's, in the same order. The waveforms span the top, the
- * first two Decks stand either side of the mixer, the third and fourth
- * (shown only with four Decks) under them, and the Track browser below.
+ * first two Decks stand either side of the mixer, a Track browser under
+ * each, down to the mixer's bottom, and the third and fourth Decks (shown
+ * only with four Decks) below them.
  */
 export const MIXING_WIDGETS: readonly WidgetSpec[] = [
   { id: "djWaveforms", title: "Waveforms", initial: { x: 0, y: 0, w: 24, h: 6 }, min: { w: 8, h: 3 } },
-  // Tall enough for a whole player or the whole mixer; each is then drawn no taller than its content.
+  // Tall enough for a whole player or the whole four-channel mixer; each is then drawn no taller than its content.
   { id: "deck1", title: "Deck 1", initial: { x: 0, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
-  { id: "djMixer", title: "Mixer", initial: { x: 8, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  // A row taller than its content, so it doesn't end flush with the last fader.
+  { id: "djMixer", title: "Mixer", initial: { x: 8, y: 6, w: 8, h: 60 }, min: { w: 6, h: 8 }, extra: 1 },
   { id: "deck2", title: "Deck 2", initial: { x: 16, y: 6, w: 8, h: 44 }, min: { w: 6, h: 8 } },
-  { id: "deck3", title: "Deck 3", initial: { x: 0, y: 50, w: 8, h: 44 }, min: { w: 6, h: 8 } },
-  { id: "deck4", title: "Deck 4", initial: { x: 16, y: 50, w: 8, h: 44 }, min: { w: 6, h: 8 } },
-  { id: "djBrowser", title: "Track browser", initial: { x: 0, y: 94, w: 24, h: 14 }, min: { w: 8, h: 5 } },
+  { id: "deck3", title: "Deck 3", initial: { x: 0, y: 66, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  { id: "deck4", title: "Deck 4", initial: { x: 16, y: 66, w: 8, h: 44 }, min: { w: 6, h: 8 } },
+  // One under each of the first two Decks, filling the space beside the taller mixer.
+  {
+    id: "djBrowser",
+    title: "Track browser 1",
+    initial: { x: 0, y: 50, w: 8, h: 14 },
+    min: { w: 6, h: 5 },
+    tuck: { under: "deck1", downTo: "djMixer" },
+  },
+  {
+    id: "djBrowser2",
+    title: "Track browser 2",
+    initial: { x: 16, y: 50, w: 8, h: 14 },
+    min: { w: 6, h: 5 },
+    tuck: { under: "deck2", downTo: "djMixer" },
+  },
 ];
 
 /** Each page's Widgets. */
@@ -165,7 +198,7 @@ export function specsOf(layout: WidgetLayout): WidgetSpec[] {
 
 export function defaultLayout(page: GridPage = "editor"): WidgetLayout {
   return Object.fromEntries(
-    PAGE_WIDGETS[page].map((spec) => [spec.id, { ...spec.initial, zone: "main", hidden: false }]),
+    PAGE_WIDGETS[page].map((spec) => [spec.id, { ...spec.initial, zone: "main", hidden: false, ...(spec.tuck && { tucked: true }) }]),
   ) as WidgetLayout;
 }
 
@@ -284,9 +317,10 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
   let changed = false;
   const grown: WidgetId[] = [];
   for (const spec of specsOf(layout)) {
-    const rows = needed[spec.id];
+    const content = needed[spec.id];
     const at = next[spec.id];
-    if (rows === undefined || at.hidden) continue;
+    if (content === undefined || at.hidden || at.tucked) continue;
+    const rows = content + (spec.extra ?? 0);
     const most = Math.max(at.room ?? at.h, at.h, spec.grows ?? 0);
     const fitted = Math.max(spec.min.h, Math.min(most, rows));
     const h = at.sized ? Math.max(at.h, fitted) : fitted;
@@ -295,9 +329,30 @@ export function fitToContent(layout: WidgetLayout, needed: Partial<Record<Widget
     if (h > at.h) grown.push(spec.id);
     changed = true;
   }
-  if (!changed) return layout;
   next = grown.reduce(settle, next);
+  // Tucked ones are drawn once what they are tucked under, and down to, have their heights.
+  for (const spec of specsOf(next)) {
+    const cell = tuckedCell(next, spec);
+    const at = next[spec.id];
+    if (!cell || (cell.x === at.x && cell.y === at.y && cell.w === at.w && cell.h === at.h)) continue;
+    next = settle({ ...next, [spec.id]: { ...at, ...cell } }, spec.id);
+    changed = true;
+  }
+  if (!changed) return layout;
   return closeFreedRows(next, layout);
+}
+
+/** Where a tucked Widget is drawn in `layout`, or null if it isn't tucked or what it is tucked to isn't beside it. */
+function tuckedCell(layout: WidgetLayout, spec: WidgetSpec): Cell | null {
+  const at = layout[spec.id];
+  if (!spec.tuck || !at.tucked || at.hidden) return null;
+  const under = layout[spec.tuck.under];
+  const downTo = layout[spec.tuck.downTo];
+  const beside = (other: WidgetPlacement | undefined) => other !== undefined && !other.hidden && other.zone === at.zone;
+  if (!beside(under) || !beside(downTo) || pinned(at.zone)) return null;
+  const y = under.y + under.h;
+  const w = Math.max(spec.min.w, under.w);
+  return { x: Math.min(GRID.columns - w, under.x), y, w, h: Math.max(spec.min.h, downTo.y + downTo.h - y) };
 }
 
 /**
@@ -316,6 +371,8 @@ export function unfitted(next: WidgetLayout, kept: WidgetLayout, resized: Widget
     if (spec.id === resized) continue;
     const drawn = next[spec.id];
     const own = kept[spec.id];
+    // Drawn afresh each time, where it is tucked: it has no room of its own to keep.
+    if (drawn.tucked) continue;
     if (spec.grows !== undefined) {
       layout[spec.id] = { ...drawn, h: own.h };
       continue;
@@ -348,7 +405,7 @@ function place(layout: WidgetLayout, id: WidgetId, changes: Partial<WidgetPlacem
  * it. If they can't rise, it pushes them down instead.
  */
 export function moveWidget(layout: WidgetLayout, id: WidgetId, x: number, y: number): WidgetLayout {
-  const from = layout[id];
+  const from = { ...layout[id], tucked: undefined };
   const to = { ...from, ...fit(id, { ...from, x, y }, from.zone) };
   if (to.y <= from.y) return place(layout, id, to, false);
   const below = widgetsIn(layout, from.zone).filter(
@@ -371,7 +428,7 @@ export function resizeWidget(layout: WidgetLayout, id: WidgetId, w: number, h: n
   const at = layout[id];
   const sized = at.sized === true || fit(id, { ...at, w, h }, at.zone).h !== at.h;
   // Made a height of its own, it takes that height and no more.
-  return place(layout, id, sized ? { w, h, sized, room: undefined } : { w, h });
+  return place(layout, id, sized ? { w, h, sized, room: undefined, tucked: undefined } : { w, h, tucked: undefined });
 }
 
 /** Hidden, a Widget's rows close up; shown again, it goes back where it was and pushes down whatever is there now. */
@@ -390,7 +447,7 @@ export function pinWidget(layout: WidgetLayout, id: WidgetId, zone: Zone): Widge
   if (from === zone) return layout;
   const without = { ...layout, [id]: { ...layout[id], hidden: true } };
   const y = zone === "main" && from === "top" ? 0 : zoneRows(without, zone);
-  return place(layout, id, { zone, y, hidden: false });
+  return place(layout, id, { zone, y, hidden: false, tucked: undefined });
 }
 
 /** Where the Editor's Grid is kept between runs. */
@@ -429,6 +486,7 @@ export function parseLayout(saved: string | null, page: GridPage = "editor"): Wi
       zone: entry.zone!,
       hidden: entry.hidden === true,
       ...(entry.sized === true && { sized: true }),
+      ...(entry.tucked === true && spec.tuck && { tucked: true }),
       ...(typeof entry.room === "number" && Number.isInteger(entry.room) && entry.room > (entry.h as number) && { room: entry.room }),
     };
   }

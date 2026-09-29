@@ -11,6 +11,8 @@ import { TrackBrowser } from "./TrackBrowser";
 const Folders = memo(SampleBrowser);
 
 export interface DjBrowserProps {
+  /** Which of the page's two it is: in its heading, and its id, which a Deck's BROWSE button looks it up by. */
+  number: 1 | 2;
   /** The sample folders on this machine, or null where the platform has none. */
   source: SampleSource | null;
   library: LibraryStorage | null;
@@ -45,13 +47,13 @@ export function DjBrowser(props: DjBrowserProps) {
     { id: "loaded", label: `Loaded tracks (${props.tracks.length})`, icon: <ListMusic size={14} aria-hidden /> },
   ];
   return (
-    <section id="dj-browser" className="dj-browser panel" aria-labelledby={`${id}-heading`} tabIndex={-1}>
+    <section id={`dj-browser-${props.number}`} className="dj-browser panel" aria-labelledby={`${id}-heading`} tabIndex={-1}>
       <div className="panel-head">
         <h2 id={`${id}-heading`}>
           <ListMusic size={18} aria-hidden />
-          Track browser
+          Track browser {props.number}
         </h2>
-        <div className="dj-tabs" role="tablist" aria-label="Track browser views">
+        <div className="dj-tabs" role="tablist" aria-label={`Track browser ${props.number} views`}>
           {tabs.map((t) => (
             <button
               key={t.id}

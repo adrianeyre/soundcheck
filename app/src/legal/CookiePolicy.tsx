@@ -31,7 +31,7 @@ const STORED = [
   {
     name: gridKey("mixing"),
     type: "Functional",
-    purpose: "Remembers the same for the Mixer page's widgets: the waveforms, the Decks, the mixer and the Track browser.",
+    purpose: "Remembers the same for the Mixer page's widgets: the waveforms, the Decks, the mixer and the Track browsers.",
   },
   {
     name: HEADPHONES_KEY,

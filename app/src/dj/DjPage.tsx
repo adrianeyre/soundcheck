@@ -28,9 +28,13 @@ import { MixerPanel } from "./MixerPanel";
 import type { DjRecordingSaver, RecordingKind } from "./recording-saver";
 import { WaveformStack } from "./WaveformStack";
 
-/** The BROWSE button: the Track browser brought into view and focused. */
-function browse() {
-  const browser = document.getElementById("dj-browser");
+/**
+ * A Deck's BROWSE button: the Track browser on its side of the mixer brought into view and focused, Decks 1
+ * and 3 the first, 2 and 4 the second; or the other, if that one is hidden.
+ */
+function browse(deck: number) {
+  const [near, far] = deck % 2 === 0 ? [1, 2] : [2, 1];
+  const browser = document.getElementById(`dj-browser-${near}`) ?? document.getElementById(`dj-browser-${far}`);
   browser?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   browser?.focus({ preventScroll: true });
 }
@@ -317,7 +321,7 @@ export function DjPage(props: DjPageProps) {
           if (dropped) void loadTrack(dropped, deck);
         }}
         onDropSample={(sample) => void useSample(sample, deck)}
-        onBrowse={browse}
+        onBrowse={() => browse(deck)}
         onEject={() => {
           dj?.unload(deck);
           changeDeck(deck, { ...newDeck(), vinyl: state.vinyl, range: state.range });
@@ -325,6 +329,27 @@ export function DjPage(props: DjPageProps) {
       />
     );
   };
+
+  // One under each of the first two Decks; each keeps its own tab and folder, over the same loaded tracks.
+  const trackBrowser = (number: 1 | 2) => (
+    <DjBrowser
+      number={number}
+      source={samples}
+      library={folderLibrary}
+      canAudition={output !== null}
+      targets={targets}
+      onUse={onUse}
+      onError={onBrowseError}
+      tracks={library}
+      decks={layout}
+      canLoad={dj !== null}
+      onAdd={(files) => void addFiles(files)}
+      onLoad={(trackId, deck) => {
+        const track = library.find((t) => t.id === trackId);
+        if (track) void loadTrack(track, deck);
+      }}
+    />
+  );
 
   // With two Decks, the third and fourth have nothing to show, so they are off the Grid (ADR 0004).
   const empty: WidgetId[] = layout === 4 ? [] : ["deck3", "deck4"];
@@ -402,7 +427,8 @@ export function DjPage(props: DjPageProps) {
               channels={channels}
               mixer={mixer}
               report={report}
-              count={layout}
+              // All four channels, even with two Decks: the mixer reads as the four-channel hardware it models.
+              count={4}
               headphones={dj?.headphones ?? false}
               canPlay={dj !== null}
               onChannel={changeChannel}
@@ -414,24 +440,8 @@ export function DjPage(props: DjPageProps) {
               output={output}
             />
           ),
-          djBrowser: (
-            <DjBrowser
-              source={samples}
-              library={folderLibrary}
-              canAudition={output !== null}
-              targets={targets}
-              onUse={onUse}
-              onError={onBrowseError}
-              tracks={library}
-              decks={layout}
-              canLoad={dj !== null}
-              onAdd={(files) => void addFiles(files)}
-              onLoad={(trackId, deck) => {
-                const track = library.find((t) => t.id === trackId);
-                if (track) void loadTrack(track, deck);
-              }}
-            />
-          ),
+          djBrowser: trackBrowser(1),
+          djBrowser2: trackBrowser(2),
         }}
       />
     </div>

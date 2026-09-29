@@ -71,7 +71,7 @@ export interface MixerPanelProps {
   channels: readonly ChannelState[];
   mixer: MixerState;
   report: DjReport;
-  /** How many channels to show: one for each Deck on the page. */
+  /** How many channels to show, one per Deck: the page shows all four. */
   count: number;
   /** Whether the headphone cue can be heard on this output. */
   headphones: boolean;
