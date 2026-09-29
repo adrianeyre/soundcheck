@@ -1223,7 +1223,7 @@ test("a Compressor or Reverb setting outside the range its Effect declares is re
 test("the model is told it can add a Compressor or a Reverb, and every one of their settings", () => {
   const add = TOOL_DEFINITIONS.find((tool) => tool.name === "add_effect")!;
   expect((add.input_schema as unknown as { properties: { effect: { description: string } } }).properties.effect.description).toContain(
-    "eq, compressor, reverb, delay, saturator, chorus, phaser, filter, gate, limiter, bitcrusher, utility, or plugin:<id> for one of the installed Plugins",
+    "eq, compressor, reverb, delay, saturator, chorus, phaser, filter, gate, limiter, bitcrusher, utility, flanger, tremolo, autopan, ringmod, vibrato, transient, deesser, exciter, multiband, clipper, freqshift, autowah, haas, resonator, vowel, pump, trancegate, pitchshift, lofi, beatrepeat, or plugin:<id> for one of the installed Plugins",
   );
   for (const description of [add.description, TOOL_DEFINITIONS.find((tool) => tool.name === "set_effect_settings")!.description]) {
     expect(description).toContain(

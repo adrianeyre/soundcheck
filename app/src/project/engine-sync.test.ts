@@ -250,7 +250,7 @@ describe("EngineSync", () => {
     synth.tracks[0] = { ...createInstrumentTrack("Drums", "drums") };
     sync.update(synth, both);
     const back = sync.update(replaced, both);
-    expect(back[0]).toEqual({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: 8 });
+    expect(back[0]).toEqual({ type: "setTrackInstrument", track: 0, instrument: "drumSampler", pads: STARTER_KIT.length });
     expect(back).toContainEqual({ type: "setPadSample", track: 0, pad: 2, wav: [4, 5, 6] });
   });
 
@@ -281,20 +281,20 @@ describe("EngineSync", () => {
     const project = createProject();
     project.tracks.push(createInstrumentTrack("Synth 1", "synth"), createDrumTrack("Drums", "drums"));
     const sent = sync.update(project);
-    expect(sent).toContainEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: 8 });
+    expect(sent).toContainEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: STARTER_KIT.length });
 
-    // A Project may have 8 to 16 pads (#10); the engine builds the kit, so
-    // it is told the size and everything on the pads is sent again.
+    // A Project may have more pads than the kit, up to 32; the engine builds
+    // the kit, so it is told the size and everything on the pads is sent again.
     const wider = structuredClone(project);
     const pads = padsOf({ ...wider, tracks: [wider.tracks[1]!] } as Project);
-    pads.push({ name: "Rim", note: 37, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup: 0 });
+    pads.push({ name: "Shaker", note: 82, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup: 0 });
     const commands = sync.update(wider);
-    expect(commands[0]).toEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: 9 });
+    expect(commands[0]).toEqual({ type: "setTrackInstrument", track: 1, instrument: "drumSampler", pads: STARTER_KIT.length + 1 });
     expect(commands).toContainEqual({
       type: "setPad",
       track: 1,
-      pad: 8,
-      note: 37,
+      pad: STARTER_KIT.length,
+      note: 82,
       volume: 1,
       pan: 0,
       pitch: 0,

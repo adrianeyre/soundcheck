@@ -488,8 +488,8 @@ impl Engine {
     /// Give Track `track` the Instrument the UI names: "synth", or
     /// "drumSampler" for the Drum Sampler with the bundled starter kit on
     /// its pads. `pads` is how many pads that kit has, for a Drum Sampler
-    /// the Project says is bigger than the bundled 8 (8 to 16, PRD #10);
-    /// leave it out for the bundled kit's own size. Answers whether it
+    /// the Project says is smaller or bigger than the bundled kit (up to
+    /// `MAX_PADS`); leave it out for the bundled kit's own size. Answers whether it
     /// happened: an unknown name, or a Track that doesn't exist, changes
     /// nothing.
     pub fn set_track_instrument(
@@ -1225,7 +1225,7 @@ pub struct PreparedInstrument(Instrument);
 impl PreparedInstrument {
     /// The Instrument the UI names ("synth" or "drumSampler"), with the
     /// bundled kit already decoded where that is the Drum Sampler, on `pads`
-    /// pads (8 to 16, PRD #10) or the kit's own size where the host doesn't
+    /// pads (up to `MAX_PADS`) or the kit's own size where the host doesn't
     /// say.
     pub fn named(kind: &str, sample_rate: f32, pads: Option<usize>) -> Option<Self> {
         let pads = pads.unwrap_or(DEFAULT_PADS).clamp(1, MAX_PADS);

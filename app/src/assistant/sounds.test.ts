@@ -248,7 +248,7 @@ test("“use my 808 kit” loads the saved Kit, its samples copied into the Proj
   const outcome = await runRequest({ history, request: "use my 808 kit", start, library: await openLibrary(storage, audio) });
 
   expect(outcome.error).toBeNull();
-  expect(sent[0]).toContain('The musician\'s saved Kits, which set_instrument loads onto a Drum Sampler by name:\n[{"name":"808","pads":8}]');
+  expect(sent[0]).toContain('The musician\'s saved Kits, which set_instrument loads onto a Drum Sampler by name:\n[{"name":"808","pads":22}]');
   expect(outcome.changes).toEqual(["“Drums” plays the Drum Sampler with the saved Kit “808”"]);
   const drums = instrumentOf(history.project, "drums");
   expect(drums).toEqual({ type: "drumSampler", preset: "808", pads: eightOhEightPads() });

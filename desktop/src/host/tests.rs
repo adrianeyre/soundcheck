@@ -513,18 +513,18 @@ fn taking_a_sample_off_a_pad_puts_the_kits_own_sound_back_through_the_queues() {
 }
 
 #[test]
-fn a_kit_of_more_than_eight_pads_reaches_the_audio_thread_whole() {
+fn a_kit_bigger_than_the_bundled_one_reaches_the_audio_thread_whole() {
     let (mut controller, mut renderer, _midi) = host(RATE, 1);
     controller.send(EngineCommand::SetTrackInstrument {
         track: 0,
         instrument: "drumSampler".to_string(),
-        pads: Some(16),
+        pads: Some(32),
     });
-    // Pad 13 is past the bundled kit, so only the musician's own WAV sounds
+    // Pad 25 is past the bundled kit, so only the musician's own WAV sounds
     // there — and only if the audio thread's kit is that big.
     controller.send(EngineCommand::SetPad {
         track: 0,
-        pad: 12,
+        pad: 24,
         note: 60,
         volume: 1.0,
         pan: 0.0,
@@ -533,7 +533,7 @@ fn a_kit_of_more_than_eight_pads_reaches_the_audio_thread_whole() {
     });
     controller.send(EngineCommand::SetPadSample {
         track: 0,
-        pad: 12,
+        pad: 24,
         wav: SNARE.to_vec(),
     });
     controller.send(EngineCommand::SetTrackNotes {
@@ -622,7 +622,7 @@ fn insert_chain_edits_play_exactly_what_the_engine_plays_when_driven_directly() 
         EngineCommand::InsertEffect {
             chain: -1,
             index: 1,
-            effect: "flanger".to_string(),
+            effect: "wobbulator".to_string(),
         },
         EngineCommand::InsertEffect {
             chain: -1,

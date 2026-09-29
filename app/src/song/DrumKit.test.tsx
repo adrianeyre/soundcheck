@@ -11,14 +11,20 @@ afterEach(cleanup);
 test("each Pad of the Starter Kit sits on its drum, and the rest get a pad of their own", () => {
   const pieces = kitPieces(STARTER_KIT);
   const on = (id: string) => pieces.find((piece) => piece.id === id)!.pads.map((pad) => pad.name);
-  expect(on("kick")).toEqual(["Kick"]);
-  expect(on("snare")).toEqual(["Snare"]);
-  expect(on("hat")).toEqual(["Closed Hat", "Open Hat"]);
+  expect(on("kick")).toEqual(["Kick", "Hard Kick"]);
+  expect(on("snare")).toEqual(["Snare", "Rimshot", "Electric Snare"]);
+  expect(on("hat")).toEqual(["Closed Hat", "Open Hat", "Pedal Hat"]);
   expect(on("highTom")).toEqual(["High Tom"]);
-  expect(on("midTom")).toEqual(["Low Tom"]);
-  expect(on("crash")).toEqual([]);
-  // The clap and cowbell aren't drums of the kit.
-  expect(pieces.filter((piece) => piece.id.startsWith("extra:")).map((piece) => piece.pads[0]!.name)).toEqual(["Clap", "Cowbell"]);
+  expect(on("midTom")).toEqual(["Low Tom", "Mid Tom"]);
+  expect(on("floorTom")).toEqual(["Low Floor Tom"]);
+  expect(on("crash")).toEqual(["Crash", "Splash"]);
+  expect(on("ride")).toEqual(["Ride"]);
+  // The hand percussion isn't drums of the kit.
+  const extras = pieces.filter((piece) => piece.id.startsWith("extra:"));
+  expect(extras.map((piece) => piece.pads[0]!.name)).toEqual(["Clap", "Cowbell", "Tambourine", "Hi Conga", "Low Conga", "Maracas", "Claves"]);
+  // They fit in the picture, clear of each other.
+  for (const piece of extras) expect(piece.x + piece.r).toBeLessThanOrEqual(420);
+  expect(new Set(extras.map((piece) => `${piece.x},${piece.y}`)).size).toBe(extras.length);
   // Every Pad is somewhere.
   expect(pieces.flatMap((piece) => piece.pads)).toHaveLength(STARTER_KIT.length);
 });
@@ -32,13 +38,14 @@ test("what is hit lights up and is named", () => {
 test("clicking or pressing Enter on a drum hits its Pad", () => {
   const onHit = vi.fn<(note: number, on: boolean) => void>();
   render(<DrumKit trackName="Drums" pads={STARTER_KIT} hitting={new Set()} onHit={onHit} />);
-  const snare = screen.getByRole("button", { name: "Hit Snare" });
+  // The snare holds three Pads, and a click hits the first of them.
+  const snare = screen.getByRole("button", { name: "Hit Snare, Rimshot, Electric Snare" });
   fireEvent.pointerDown(snare);
   fireEvent.pointerUp(snare);
   expect(onHit.mock.calls).toEqual([
     [38, true],
     [38, false],
   ]);
-  fireEvent.keyDown(screen.getByRole("button", { name: "Hit Kick" }), { key: "Enter" });
+  fireEvent.keyDown(screen.getByRole("button", { name: "Hit Kick, Hard Kick" }), { key: "Enter" });
   expect(onHit).toHaveBeenLastCalledWith(36, true);
 });

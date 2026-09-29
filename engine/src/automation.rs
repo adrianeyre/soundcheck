@@ -492,10 +492,10 @@ mod tests {
                 param: PadParam::Pitch
             })
         );
-        // A pad's note and choke group pick, and a kit has at most 16 pads.
+        // A pad's note and choke group pick, and a kit has at most 32 pads.
         assert_eq!(Automatable::named("pad:0:note"), None);
         assert_eq!(Automatable::named("pad:0:chokeGroup"), None);
-        assert_eq!(Automatable::named("pad:16:volume"), None);
+        assert_eq!(Automatable::named("pad:32:volume"), None);
         assert_eq!(Automatable::named("pad:x:volume"), None);
     }
 }

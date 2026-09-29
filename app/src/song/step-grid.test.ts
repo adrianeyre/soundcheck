@@ -50,6 +50,20 @@ test("the Synth's rows are pitches and the Drum Sampler's are its pads", () => {
     "Low Tom",
     "High Tom",
     "Cowbell",
+    "Hard Kick",
+    "Rimshot",
+    "Electric Snare",
+    "Low Floor Tom",
+    "Pedal Hat",
+    "Mid Tom",
+    "Crash",
+    "Ride",
+    "Tambourine",
+    "Splash",
+    "Hi Conga",
+    "Low Conga",
+    "Maracas",
+    "Claves",
   ]);
   // A pad's steps are notes of its own note, so the grid edits the same Clip.
   expect(drums[0]!.pitch).toBe(36);

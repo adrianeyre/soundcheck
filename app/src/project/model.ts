@@ -12,6 +12,8 @@ import {
   type CompressorSettings,
   type DelaySettings,
   defaultEffectSettings,
+  EFFECT_TYPES,
+  type EffectSettingsByType,
   type EqSettings,
   type FilterSettings,
   type GateSettings,
@@ -42,7 +44,7 @@ export type {
 };
 
 /** Bumped whenever the shape below changes; `serialise.ts` migrates old ones. */
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export interface Project {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -366,20 +368,10 @@ interface EffectBase {
   bypassed: boolean;
 }
 
-/** One of the Audio Engine's own Effects. */
-export type BuiltInEffect =
-  | (EffectBase & { type: "eq"; settings: EqSettings })
-  | (EffectBase & { type: "compressor"; settings: CompressorSettings })
-  | (EffectBase & { type: "reverb"; settings: ReverbSettings })
-  | (EffectBase & { type: "delay"; settings: DelaySettings })
-  | (EffectBase & { type: "saturator"; settings: SaturatorSettings })
-  | (EffectBase & { type: "chorus"; settings: ChorusSettings })
-  | (EffectBase & { type: "phaser"; settings: PhaserSettings })
-  | (EffectBase & { type: "filter"; settings: FilterSettings })
-  | (EffectBase & { type: "gate"; settings: GateSettings })
-  | (EffectBase & { type: "limiter"; settings: LimiterSettings })
-  | (EffectBase & { type: "bitcrusher"; settings: BitcrusherSettings })
-  | (EffectBase & { type: "utility"; settings: UtilitySettings });
+/** One of the Audio Engine's own Effects, with the settings its kind keeps. */
+export type BuiltInEffect = {
+  [T in keyof EffectSettingsByType]: EffectBase & { type: T; settings: EffectSettingsByType[T] };
+}[keyof EffectSettingsByType];
 
 export type EffectType = BuiltInEffect["type"];
 
@@ -408,8 +400,13 @@ export const DEFAULT_SYNTH: SynthSettings = defaultSynthSettings();
 
 /**
  * The bundled starter kit, pad for pad as the Audio Engine has it (its
- * `starter_kit()` says so, and a test checks the two agree). The two hi-hats
- * share choke group 1, so closing the hat cuts the open one off.
+ * `starter_kit()` says so, and a test checks the two agree). The three
+ * hi-hats share choke group 1, so closing the hat cuts the open one off.
+ *
+ * The first eight are the kit as it first shipped, in their first order, and
+ * the rest follow by note: a pad plays the kit's sample at its own index until
+ * a sample is loaded over it, so a Project saved with those eight hears the
+ * same sounds it always did.
  */
 export const STARTER_KIT: readonly DrumPad[] = [
   drumPad("Kick", 36),
@@ -420,27 +417,36 @@ export const STARTER_KIT: readonly DrumPad[] = [
   drumPad("Low Tom", 45),
   drumPad("High Tom", 48),
   drumPad("Cowbell", 56),
+  drumPad("Hard Kick", 35),
+  drumPad("Rimshot", 37),
+  drumPad("Electric Snare", 40),
+  drumPad("Low Floor Tom", 41),
+  drumPad("Pedal Hat", 44, 1),
+  drumPad("Mid Tom", 47),
+  drumPad("Crash", 49),
+  drumPad("Ride", 51),
+  drumPad("Tambourine", 54),
+  drumPad("Splash", 55),
+  drumPad("Hi Conga", 62),
+  drumPad("Low Conga", 64),
+  drumPad("Maracas", 70),
+  drumPad("Claves", 75),
 ];
+
+/**
+ * The starter kit as it was before it grew past eight pads: what a schema 1
+ * Project, whose pads held only a sample and a volume, was playing.
+ */
+export const FIRST_STARTER_KIT: readonly DrumPad[] = STARTER_KIT.slice(0, 8);
 
 function drumPad(name: string, note: number, chokeGroup = 0): DrumPad {
   return { name, note, sample: null, volume: 1, pan: 0, pitch: 0, chokeGroup };
 }
 
 /** Each Effect's defaults, as its settings table declares them. */
-export const DEFAULT_EFFECT_SETTINGS = {
-  eq: defaultEffectSettings("eq"),
-  compressor: defaultEffectSettings("compressor"),
-  reverb: defaultEffectSettings("reverb"),
-  delay: defaultEffectSettings("delay"),
-  saturator: defaultEffectSettings("saturator"),
-  chorus: defaultEffectSettings("chorus"),
-  phaser: defaultEffectSettings("phaser"),
-  filter: defaultEffectSettings("filter"),
-  gate: defaultEffectSettings("gate"),
-  limiter: defaultEffectSettings("limiter"),
-  bitcrusher: defaultEffectSettings("bitcrusher"),
-  utility: defaultEffectSettings("utility"),
-} satisfies { [T in EffectType]: Extract<Effect, { type: T }>["settings"] };
+export const DEFAULT_EFFECT_SETTINGS = Object.fromEntries(EFFECT_TYPES.map((type) => [type, defaultEffectSettings(type)])) as {
+  readonly [T in EffectType]: EffectSettingsByType[T];
+};
 
 /** The preset name a Track loaded with the bundled kit carries. */
 export const STARTER_KIT_PRESET = "Starter Kit";
@@ -565,31 +571,6 @@ export function createBus(name: string, id = newId()): Bus {
   };
 }
 
-export function createEffect(type: EffectType, id = newId()): BuiltInEffect {
-  switch (type) {
-    case "eq":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.eq } };
-    case "compressor":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.compressor } };
-    case "reverb":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.reverb } };
-    case "delay":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.delay } };
-    case "saturator":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.saturator } };
-    case "chorus":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.chorus } };
-    case "phaser":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.phaser } };
-    case "filter":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.filter } };
-    case "gate":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.gate } };
-    case "limiter":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.limiter } };
-    case "bitcrusher":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.bitcrusher } };
-    case "utility":
-      return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS.utility } };
-  }
+export function createEffect<T extends EffectType>(type: T, id = newId()): Extract<BuiltInEffect, { type: T }> {
+  return { id, type, bypassed: false, settings: { ...DEFAULT_EFFECT_SETTINGS[type] } } as Extract<BuiltInEffect, { type: T }>;
 }

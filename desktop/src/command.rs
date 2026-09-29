@@ -89,7 +89,7 @@ pub enum EngineCommand {
     SetTrackInstrument {
         track: usize,
         instrument: String,
-        /// How many pads a Drum Sampler's kit has (8 to 16), or the bundled
+        /// How many pads a Drum Sampler's kit has (up to 32), or the bundled
         /// kit's own size where the UI doesn't say. Nothing to any other
         /// Instrument.
         #[serde(default)]

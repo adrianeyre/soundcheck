@@ -6,10 +6,14 @@ import { afterEach, expect, test } from "vitest";
 import { createEffect, type EffectType } from "../project/model";
 import { defaultEffectSettings, EFFECT_TYPES } from "./effect-params";
 import {
+  clipperOutput,
   compressorOutputDb,
   crushed,
   EffectVisual,
   filterResponseDb,
+  pumpGain,
+  resonatorHz,
+  tranceGateSteps,
   gateOutputDb,
   limiterOutputDb,
   saturate,
@@ -74,4 +78,20 @@ test("every built-in Effect but the EQ draws a picture of its settings", () => {
     expect(screen.getByRole("img", { name: new RegExp(`^${type} `) })).toBeInTheDocument();
     cleanup();
   }
+});
+
+test("the Trance Gate's steps, the Pump's dip, the Clipper's ceiling and the Resonator's tuning", () => {
+  const gate = defaultEffectSettings("trancegate");
+  expect(tranceGateSteps({ ...gate, pattern: "offbeats" }).map((open) => (open ? "x" : ".")).join("")).toBe("..x...x...x...x.");
+  expect(tranceGateSteps(gate)).toHaveLength(16);
+
+  const pump = { ...defaultEffectSettings("pump"), depth: 1, mix: 1 };
+  expect(pumpGain(pump, 0)).toBeCloseTo(0);
+  expect(pumpGain(pump, 0.99)).toBeCloseTo(1);
+
+  const clipper = { ...defaultEffectSettings("clipper"), ceilingDb: -6, softness: 0 };
+  expect(clipperOutput(clipper, 2)).toBeCloseTo(10 ** (-6 / 20));
+  expect(clipperOutput(clipper, 0.1)).toBeCloseTo(0.1);
+
+  expect(resonatorHz({ ...defaultEffectSettings("resonator"), tuneBy: "note", note: "A", octave: 4 })).toBeCloseTo(440);
 });

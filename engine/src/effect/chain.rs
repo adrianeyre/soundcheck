@@ -9,13 +9,20 @@
 
 use super::delay::DEFAULT_TEMPO;
 use super::params::{Param, Settings, table_json};
+use super::stereo::InPlace;
 use super::{
-    BITCRUSHER_PARAMS, Bitcrusher, BitcrusherSettings, CHORUS_PARAMS, COMPRESSOR_PARAMS, Chorus,
-    ChorusSettings, Compressor, CompressorSettings, DELAY_PARAMS, Delay, DelaySettings, EQ_PARAMS,
-    Eq, EqSettings, FILTER_PARAMS, Filter, FilterSettings, GATE_PARAMS, Gate, GateSettings,
-    LIMITER_PARAMS, Limiter, LimiterSettings, PHASER_PARAMS, Phaser, PhaserSettings, REVERB_PARAMS,
-    Reverb, ReverbSettings, SATURATOR_PARAMS, Saturator, SaturatorSettings, UTILITY_PARAMS,
-    Utility, UtilitySettings,
+    AUTO_PAN_PARAMS, AUTO_WAH_PARAMS, AutoPan, AutoWah, BEAT_REPEAT_PARAMS, BITCRUSHER_PARAMS,
+    BeatRepeat, Bitcrusher, BitcrusherSettings, CHORUS_PARAMS, CLIPPER_PARAMS, COMPRESSOR_PARAMS,
+    Chorus, ChorusSettings, Clipper, Compressor, CompressorSettings, DE_ESSER_PARAMS, DELAY_PARAMS,
+    DeEsser, Delay, DelaySettings, EQ_PARAMS, EXCITER_PARAMS, Eq, EqSettings, Exciter,
+    FILTER_PARAMS, FLANGER_PARAMS, FREQ_SHIFT_PARAMS, Filter, FilterSettings, Flanger,
+    FrequencyShifter, GATE_PARAMS, Gate, GateSettings, HAAS_PARAMS, Haas, LIMITER_PARAMS,
+    LOFI_PARAMS, Limiter, LimiterSettings, LoFi, MULTIBAND_PARAMS, Multiband, PHASER_PARAMS,
+    PITCH_SHIFT_PARAMS, PUMP_PARAMS, Phaser, PhaserSettings, PitchShifter, Pump, RESONATOR_PARAMS,
+    REVERB_PARAMS, RING_MOD_PARAMS, Resonator, Reverb, ReverbSettings, RingMod, SATURATOR_PARAMS,
+    Saturator, SaturatorSettings, TRANCE_GATE_PARAMS, TRANSIENT_PARAMS, TREMOLO_PARAMS, TranceGate,
+    TransientShaper, Tremolo, UTILITY_PARAMS, Utility, UtilitySettings, VIBRATO_PARAMS,
+    VOWEL_PARAMS, Vibrato, Vowel,
 };
 use crate::automation::{Automation, TableAutomation};
 use crate::plugin::HostedPlugin;
@@ -23,118 +30,138 @@ use crate::plugin::HostedPlugin;
 /// The most Effects one Insert Chain holds.
 pub const MAX_EFFECTS: usize = 16;
 
-/// Which Effect: the names are the ones the Project and the UI use.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EffectKind {
-    Eq,
-    Compressor,
-    Reverb,
-    Delay,
-    Saturator,
-    Chorus,
-    Phaser,
-    Filter,
-    Gate,
-    Limiter,
-    Bitcrusher,
-    Utility,
+/// Declares `EffectKind`, one variant per built-in Effect, from each one's
+/// variant, the name the Project and the UI use, and its settings table.
+macro_rules! effect_kinds {
+    ($($kind:ident $name:literal $params:ident;)*) => {
+        /// Which Effect: the names are the ones the Project and the UI use.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum EffectKind {
+            $($kind,)*
+        }
+
+        impl EffectKind {
+            pub const ALL: [EffectKind; [$(stringify!($kind)),*].len()] = [$(Self::$kind),*];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(Self::$kind => $name,)*
+                }
+            }
+
+            /// This Effect's settings table, as JSON.
+            fn table_json(self) -> String {
+                match self {
+                    $(Self::$kind => table_json($params),)*
+                }
+            }
+
+            /// Where the setting called `name` is in this Effect's table, if it is
+            /// one Automation can move: a number, not a switch or a choice.
+            pub fn automatable(self, name: &str) -> Option<usize> {
+                fn find<S>(params: &[Param<S>], name: &str) -> Option<usize> {
+                    params
+                        .iter()
+                        .position(|p| p.name == name && p.choices.is_empty())
+                }
+                match self {
+                    $(Self::$kind => find($params, name),)*
+                }
+            }
+
+            /// How many settings this Effect has.
+            pub fn param_count(self) -> usize {
+                match self {
+                    $(Self::$kind => $params.len(),)*
+                }
+            }
+
+            /// The names of this Effect's settings, in table order.
+            #[cfg(test)]
+            fn param_names(self) -> Vec<&'static str> {
+                match self {
+                    $(Self::$kind => $params.iter().map(|p| p.name).collect(),)*
+                }
+            }
+        }
+    };
+}
+
+effect_kinds! {
+    Eq "eq" EQ_PARAMS;
+    Compressor "compressor" COMPRESSOR_PARAMS;
+    Reverb "reverb" REVERB_PARAMS;
+    Delay "delay" DELAY_PARAMS;
+    Saturator "saturator" SATURATOR_PARAMS;
+    Chorus "chorus" CHORUS_PARAMS;
+    Phaser "phaser" PHASER_PARAMS;
+    Filter "filter" FILTER_PARAMS;
+    Gate "gate" GATE_PARAMS;
+    Limiter "limiter" LIMITER_PARAMS;
+    Bitcrusher "bitcrusher" BITCRUSHER_PARAMS;
+    Utility "utility" UTILITY_PARAMS;
+    Flanger "flanger" FLANGER_PARAMS;
+    Tremolo "tremolo" TREMOLO_PARAMS;
+    AutoPan "autopan" AUTO_PAN_PARAMS;
+    RingMod "ringmod" RING_MOD_PARAMS;
+    TransientShaper "transient" TRANSIENT_PARAMS;
+    DeEsser "deesser" DE_ESSER_PARAMS;
+    Exciter "exciter" EXCITER_PARAMS;
+    Vibrato "vibrato" VIBRATO_PARAMS;
+    FrequencyShifter "freqshift" FREQ_SHIFT_PARAMS;
+    AutoWah "autowah" AUTO_WAH_PARAMS;
+    Haas "haas" HAAS_PARAMS;
+    Multiband "multiband" MULTIBAND_PARAMS;
+    Pump "pump" PUMP_PARAMS;
+    TranceGate "trancegate" TRANCE_GATE_PARAMS;
+    PitchShifter "pitchshift" PITCH_SHIFT_PARAMS;
+    Resonator "resonator" RESONATOR_PARAMS;
+    Clipper "clipper" CLIPPER_PARAMS;
+    LoFi "lofi" LOFI_PARAMS;
+    BeatRepeat "beatrepeat" BEAT_REPEAT_PARAMS;
+    Vowel "vowel" VOWEL_PARAMS;
+}
+
+/// Declares `in_place`, which makes each built-in Effect that is a
+/// `StereoEffect`: the chain runs them all the same way.
+macro_rules! in_place_kinds {
+    ($($kind:ident;)*) => {
+        /// `kind` at its default settings, if it is a `StereoEffect`.
+        fn in_place(kind: EffectKind, sample_rate: f32) -> Option<Box<dyn InPlace>> {
+            match kind {
+                $(EffectKind::$kind => Some(Box::new($kind::new(sample_rate, Settings::defaults()))),)*
+                _ => None,
+            }
+        }
+    };
+}
+
+in_place_kinds! {
+    Flanger;
+    Tremolo;
+    AutoPan;
+    RingMod;
+    TransientShaper;
+    DeEsser;
+    Exciter;
+    Vibrato;
+    FrequencyShifter;
+    AutoWah;
+    Haas;
+    Multiband;
+    Pump;
+    TranceGate;
+    PitchShifter;
+    Resonator;
+    Clipper;
+    LoFi;
+    BeatRepeat;
+    Vowel;
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 12] = [
-        Self::Eq,
-        Self::Compressor,
-        Self::Reverb,
-        Self::Delay,
-        Self::Saturator,
-        Self::Chorus,
-        Self::Phaser,
-        Self::Filter,
-        Self::Gate,
-        Self::Limiter,
-        Self::Bitcrusher,
-        Self::Utility,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Eq => "eq",
-            Self::Compressor => "compressor",
-            Self::Reverb => "reverb",
-            Self::Delay => "delay",
-            Self::Saturator => "saturator",
-            Self::Chorus => "chorus",
-            Self::Phaser => "phaser",
-            Self::Filter => "filter",
-            Self::Gate => "gate",
-            Self::Limiter => "limiter",
-            Self::Bitcrusher => "bitcrusher",
-            Self::Utility => "utility",
-        }
-    }
-
     pub fn named(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.name() == name)
-    }
-
-    /// This Effect's settings table, as JSON.
-    fn table_json(self) -> String {
-        match self {
-            Self::Eq => table_json(EQ_PARAMS),
-            Self::Compressor => table_json(COMPRESSOR_PARAMS),
-            Self::Reverb => table_json(REVERB_PARAMS),
-            Self::Delay => table_json(DELAY_PARAMS),
-            Self::Saturator => table_json(SATURATOR_PARAMS),
-            Self::Chorus => table_json(CHORUS_PARAMS),
-            Self::Phaser => table_json(PHASER_PARAMS),
-            Self::Filter => table_json(FILTER_PARAMS),
-            Self::Gate => table_json(GATE_PARAMS),
-            Self::Limiter => table_json(LIMITER_PARAMS),
-            Self::Bitcrusher => table_json(BITCRUSHER_PARAMS),
-            Self::Utility => table_json(UTILITY_PARAMS),
-        }
-    }
-
-    /// Where the setting called `name` is in this Effect's table, if it is
-    /// one Automation can move: a number, not a switch or a choice.
-    pub fn automatable(self, name: &str) -> Option<usize> {
-        fn find<S>(params: &[Param<S>], name: &str) -> Option<usize> {
-            params
-                .iter()
-                .position(|p| p.name == name && p.choices.is_empty())
-        }
-        match self {
-            Self::Eq => find(EQ_PARAMS, name),
-            Self::Compressor => find(COMPRESSOR_PARAMS, name),
-            Self::Reverb => find(REVERB_PARAMS, name),
-            Self::Delay => find(DELAY_PARAMS, name),
-            Self::Saturator => find(SATURATOR_PARAMS, name),
-            Self::Chorus => find(CHORUS_PARAMS, name),
-            Self::Phaser => find(PHASER_PARAMS, name),
-            Self::Filter => find(FILTER_PARAMS, name),
-            Self::Gate => find(GATE_PARAMS, name),
-            Self::Limiter => find(LIMITER_PARAMS, name),
-            Self::Bitcrusher => find(BITCRUSHER_PARAMS, name),
-            Self::Utility => find(UTILITY_PARAMS, name),
-        }
-    }
-
-    /// How many settings this Effect has.
-    pub fn param_count(self) -> usize {
-        match self {
-            Self::Eq => EQ_PARAMS.len(),
-            Self::Compressor => COMPRESSOR_PARAMS.len(),
-            Self::Reverb => REVERB_PARAMS.len(),
-            Self::Delay => DELAY_PARAMS.len(),
-            Self::Saturator => SATURATOR_PARAMS.len(),
-            Self::Chorus => CHORUS_PARAMS.len(),
-            Self::Phaser => PHASER_PARAMS.len(),
-            Self::Filter => FILTER_PARAMS.len(),
-            Self::Gate => GATE_PARAMS.len(),
-            Self::Limiter => LIMITER_PARAMS.len(),
-            Self::Bitcrusher => BITCRUSHER_PARAMS.len(),
-            Self::Utility => UTILITY_PARAMS.len(),
-        }
     }
 }
 
@@ -165,6 +192,8 @@ enum Processor {
     Limiter(Limiter),
     Bitcrusher(Bitcrusher),
     Utility(Utility),
+    /// Every other built-in, which works in place as a `StereoEffect`.
+    InPlace(EffectKind, Box<dyn InPlace>),
     Plugin(HostedPlugin),
     /// A Plugin this host doesn't have, by its id: the signal passes it
     /// untouched and it has no settings, so the Project keeps them.
@@ -186,6 +215,7 @@ impl Processor {
             Processor::Limiter(effect) => LIMITER_PARAMS[index].get(&effect.settings()),
             Processor::Bitcrusher(effect) => BITCRUSHER_PARAMS[index].get(&effect.settings()),
             Processor::Utility(effect) => UTILITY_PARAMS[index].get(&effect.settings()),
+            Processor::InPlace(_, effect) => effect.get(index),
             Processor::Plugin(plugin) => plugin.get(index),
             Processor::Missing(_) => 0.0,
         }
@@ -267,6 +297,7 @@ impl Processor {
                     effect.set_settings(next);
                 }
             }
+            Processor::InPlace(_, effect) => effect.set(index, value),
             Processor::Plugin(plugin) => plugin.set(index, value),
             Processor::Missing(_) => {}
         }
@@ -290,6 +321,9 @@ pub struct Effect {
 impl Effect {
     /// An Effect with its default settings, not bypassed.
     pub fn new(kind: EffectKind, sample_rate: f32) -> Self {
+        if let Some(effect) = in_place(kind, sample_rate) {
+            return Self::hosting(Processor::InPlace(kind, effect), kind.param_count());
+        }
         let processor = match kind {
             EffectKind::Eq => Processor::Eq(Eq::new(sample_rate, EqSettings::default())),
             EffectKind::Compressor => {
@@ -321,6 +355,7 @@ impl Effect {
                 Processor::Bitcrusher(Bitcrusher::new(BitcrusherSettings::defaults()))
             }
             EffectKind::Utility => Processor::Utility(Utility::new(UtilitySettings::defaults())),
+            _ => unreachable!("{} works in place", kind.name()),
         };
         Self::hosting(processor, kind.param_count())
     }
@@ -397,6 +432,7 @@ impl Effect {
             Processor::Limiter(_) => Some(EffectKind::Limiter),
             Processor::Bitcrusher(_) => Some(EffectKind::Bitcrusher),
             Processor::Utility(_) => Some(EffectKind::Utility),
+            Processor::InPlace(kind, _) => Some(kind),
             Processor::Plugin(_) | Processor::Missing(_) => None,
         }
     }
@@ -447,6 +483,7 @@ impl Effect {
                 effect.set_settings(BitcrusherSettings::from_flat(values))
             }
             Processor::Utility(effect) => effect.set_settings(UtilitySettings::from_flat(values)),
+            Processor::InPlace(_, effect) => effect.set_flat(values),
             Processor::Plugin(plugin) => {
                 let count = plugin.manifest().settings.len();
                 for index in 0..count {
@@ -471,8 +508,10 @@ impl Effect {
     /// The song's tempo where it is playing, which a Delay synced to a note
     /// value follows. Allocates nothing.
     pub fn set_tempo(&mut self, tempo: f64) {
-        if let Processor::Delay(delay) = &mut self.processor {
-            delay.set_tempo(tempo);
+        match &mut self.processor {
+            Processor::Delay(delay) => delay.set_tempo(tempo),
+            Processor::InPlace(_, effect) => effect.set_tempo(tempo),
+            _ => {}
         }
     }
 
@@ -549,6 +588,7 @@ impl Processor {
             Processor::Limiter(effect) => effect.process_stereo(left, right),
             Processor::Bitcrusher(effect) => effect.process_stereo(left, right),
             Processor::Utility(effect) => effect.process_stereo(left, right),
+            Processor::InPlace(_, effect) => effect.process(left, right),
             Processor::Plugin(plugin) => plugin.process(left, right, (scratch_left, scratch_right)),
             Processor::Missing(_) => {}
         }
@@ -689,20 +729,7 @@ mod tests {
     fn effect(kind: EffectKind, settings: &[(&str, f32)]) -> Box<Effect> {
         let mut effect = Effect::new(kind, RATE);
         let mut flat = effect.to_flat();
-        let params: Vec<&str> = match kind {
-            EffectKind::Eq => EQ_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Compressor => COMPRESSOR_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Reverb => REVERB_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Delay => DELAY_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Saturator => SATURATOR_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Chorus => CHORUS_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Phaser => PHASER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Filter => FILTER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Gate => GATE_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Limiter => LIMITER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Bitcrusher => BITCRUSHER_PARAMS.iter().map(|p| p.name).collect(),
-            EffectKind::Utility => UTILITY_PARAMS.iter().map(|p| p.name).collect(),
-        };
+        let params = kind.param_names();
         for (name, value) in settings {
             flat[params.iter().position(|p| p == name).unwrap()] = *value;
         }

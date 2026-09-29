@@ -12,8 +12,9 @@ use std::sync::Arc;
 
 use crate::instrument::wav::Sample;
 
-/// The most pads a kit can have. The MVP bundles 8 (PRD: 8 to 16).
-pub const MAX_PADS: usize = 16;
+/// The most pads a kit can have. The bundled Starter Kit has 22, and room
+/// is left over for a musician's own.
+pub const MAX_PADS: usize = 32;
 
 /// How many pads can sound at once before the oldest is cut.
 const VOICES: usize = 16;
@@ -398,7 +399,7 @@ mod tests {
     #[test]
     fn the_starter_kit_has_a_sample_on_every_pad() {
         let pads = kit().pad_count();
-        assert_eq!(pads, 8);
+        assert_eq!(pads, 22);
         assert_eq!(kit().pad_settings(KICK).unwrap().note, 36);
         for pad in 0..pads {
             let mut sampler = kit();

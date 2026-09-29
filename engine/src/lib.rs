@@ -86,9 +86,8 @@ pub fn synth_parameters() -> String {
     instrument::parameters_json()
 }
 
-/// Every Effect's settings as JSON, keyed by the Effect's name ("eq",
-/// "compressor", "reverb", "delay", "saturator", "chorus", "phaser",
-/// "filter", "gate", "limiter", "bitcrusher", "utility"): name, label, unit,
+/// Every Effect's settings as JSON, keyed by the Effect's name (one of
+/// `EffectKind::ALL`'s, such as "eq" or "trancegate"): name, label, unit,
 /// range, default and choices for each, in the order the flat form lists them.
 #[wasm_bindgen]
 pub fn effect_parameters() -> String {

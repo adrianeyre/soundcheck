@@ -124,7 +124,7 @@ describe.each(STORAGES)("on the %s", (_, storage) => {
       "audio/kick-2.wav",
       "audio/snare.wav",
       "audio/kick-2.wav",
-      ...Array<null>(5).fill(null),
+      ...Array<null>(padsOf(first.project).length - 3).fill(null),
     ]);
     expect([...loaded.samples.keys()]).toEqual(["audio/kick-2.wav", "audio/snare.wav"]);
     expect(result.project.tracks[0]).toMatchObject({ instrument: { preset: "My Kit" } });

@@ -36,7 +36,8 @@ export const LIMITS = {
   pan: [-1, 1],
   pitch: [0, 127],
   velocity: [0, 1],
-  drumPads: [1, 16],
+  /** Up to the engine's `MAX_PADS`: the Starter Kit's 22, and room for more. */
+  drumPads: [1, 32],
   padPitch: [-24, 24],
   chokeGroup: [0, 16],
   /** The most Effects an Insert Chain holds: the engine's `MAX_EFFECTS`. */

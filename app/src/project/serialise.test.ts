@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import { sampleProject } from "./fixtures";
 import { EFFECT_TYPES } from "../effect/effect-params";
-import { createEffect, DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
+import { createEffect, DEFAULT_EFFECT_SETTINGS, DEFAULT_SYNTH, FIRST_STARTER_KIT, SCHEMA_VERSION, STARTER_KIT, type Track } from "./model";
 import { EngineSync } from "./engine-sync";
 import { parseProject, serialiseProject } from "./serialise";
 
@@ -72,9 +72,10 @@ test("a schema 1 Project with a Drum Track opens, its pads filled in from the st
   drums.pads = [
     { sample: null, volume: 1 },
     { sample: "audio/my-snare.wav", volume: 0.8 },
-    ...STARTER_KIT.slice(2).map(() => ({ sample: null, volume: 1 })),
-    // A ninth pad, past the bundled kit's end: it still needs a name and a
-    // note of its own, and no other pad's note.
+    ...FIRST_STARTER_KIT.slice(2).map(() => ({ sample: null, volume: 1 })),
+    // A ninth pad, past the end of the kit those Projects played: it still
+    // needs a name and a note of its own, and no other pad's note, as it
+    // always did, although the Starter Kit has since grown past eight.
     { sample: "audio/shaker.wav", volume: 0.5 },
   ];
   const saved = JSON.stringify({ ...project, schemaVersion: 1, tracks });
@@ -98,6 +99,26 @@ test("a schema 1 Project with a Drum Track opens, its pads filled in from the st
     chokeGroup: 0,
   });
   expect(new Set(pads.map((pad) => pad.note)).size).toBe(pads.length);
+  expect(pads[8]!.note).toBe(57);
+  expect(pads).toHaveLength(9);
+});
+
+test("a Project saved with the eight-pad Starter Kit opens with its eight pads, as saved", () => {
+  // Before the kit grew, a new Drum Sampler got its first eight pads: such a
+  // Project keeps them, and gains none of the new ones.
+  const project = sampleProject();
+  const tracks = structuredClone(project.tracks);
+  const drums = tracks.find((track) => track.kind === "instrument" && track.instrument.type === "drumSampler");
+  if (!drums || drums.kind !== "instrument" || drums.instrument.type !== "drumSampler") throw new Error("a Drum Sampler");
+  drums.instrument.pads = FIRST_STARTER_KIT.map((pad) => ({ ...pad }));
+  const result = parseProject(serialiseProject({ ...project, tracks }));
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const opened = result.project.tracks.find((track) => track.id === drums.id)!;
+  if (opened.kind !== "instrument" || opened.instrument.type !== "drumSampler") throw new Error("a Drum Sampler");
+  expect(opened.instrument.pads).toEqual(FIRST_STARTER_KIT);
+  // A new Drum Sampler has the whole kit.
+  expect(STARTER_KIT.length).toBe(22);
 });
 
 test("a schema 2 Project opens with its EQs' bands kept under their new names", () => {
@@ -452,8 +473,12 @@ test("a schema 17 Project opens as it was: the Saturator and seven more Effects 
 
 test("every built-in Effect saves and opens with its settings", () => {
   const project = sampleProject();
+  // More than one Insert Chain holds: the first sixteen on a Track, the rest on the Master.
   const index = project.tracks.findIndex((track) => track.kind === "instrument");
-  project.tracks[index]!.insertChain = EFFECT_TYPES.map((type) => createEffect(type, `fx-${type}`));
+  const effects = EFFECT_TYPES.map((type) => createEffect(type, `fx-${type}`));
+  project.tracks[index]!.insertChain = effects.slice(0, 16);
+  project.master.insertChain = effects.slice(16);
+  expect(project.master.insertChain.length).toBeLessThanOrEqual(16);
   const result = parseProject(serialiseProject(project));
 
   expect(result.ok).toBe(true);

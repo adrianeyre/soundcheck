@@ -5,7 +5,7 @@
  */
 import { clampEffectValue, defaultEffectSettings, effectParam } from "../effect/effect-params";
 import { clampSynthValue, SYNTH_PARAMS } from "../instrument/synth-params";
-import { DEFAULT_SYNTH, DEFAULT_TRACK_INPUT, type Project, SCHEMA_VERSION, STARTER_KIT } from "./model";
+import { DEFAULT_SYNTH, DEFAULT_TRACK_INPUT, FIRST_STARTER_KIT, type Project, SCHEMA_VERSION } from "./model";
 import { ticksToSeconds } from "./time";
 import { validateProject } from "./validate";
 
@@ -141,6 +141,10 @@ const MIGRATIONS: Record<number, (project: Record<string, unknown>) => Record<st
   // the keyboard. A schema 18 song has none; the new version keeps an older
   // Soundcheck, which doesn't know it, from opening one.
   18: (project) => project,
+  // 19 -> 20: twenty more built-in Effects, from the Flanger to the Beat
+  // Repeat. A schema 19 song has none; the new version keeps an older
+  // Soundcheck, which doesn't know them, from opening one.
+  19: (project) => project,
 };
 
 function migrateAudioClip(clip: unknown, tempo: unknown): unknown {
@@ -230,7 +234,8 @@ function migrateReverb(effect: unknown): unknown {
  * A schema 1 Drum Sampler pad held a sample and a volume and nothing else:
  * the Drum Sampler (#10) gave a pad its name, its note, pan, pitch and a
  * choke group. The starter kit fills those in pad by pad, because the kit is
- * what those Projects were playing; a pad past the kit's end is named by its
+ * what those Projects were playing: the kit as it was then, its first eight
+ * pads, so they open as they always did. A pad past those is named by its
  * number and answers the next note no other pad has taken.
  */
 function fillPads(pads: unknown): unknown {
@@ -240,7 +245,7 @@ function fillPads(pads: unknown): unknown {
   );
   return pads.map((pad: unknown, index) => {
     const old = (pad ?? {}) as Record<string, unknown>;
-    const kit = STARTER_KIT[index];
+    const kit = FIRST_STARTER_KIT[index];
     const note = old.note ?? kit?.note ?? freeNote(taken);
     taken.add(note as number);
     return {
@@ -258,7 +263,7 @@ function fillPads(pads: unknown): unknown {
 
 /** The lowest MIDI note above the kit's own that no pad answers to yet. */
 function freeNote(taken: Set<unknown>): number {
-  const afterTheKit = Math.max(...STARTER_KIT.map((pad) => pad.note)) + 1;
+  const afterTheKit = Math.max(...FIRST_STARTER_KIT.map((pad) => pad.note)) + 1;
   for (let note = afterTheKit; note <= 127; note++) if (!taken.has(note)) return note;
   return 127;
 }

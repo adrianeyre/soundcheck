@@ -553,7 +553,7 @@ test("clicking a key or a drum wherever one is drawn plays it through the engine
 
   click("Add Drum Track");
   fireEvent.click(screen.getAllByRole("button", { name: "Add Pattern Clip" }).at(-1)!);
-  const snares = screen.getAllByRole("button", { name: "Hit Snare" });
+  const snares = screen.getAllByRole("button", { name: "Hit Snare, Rimshot, Electric Snare" });
   expect(snares.length).toBeGreaterThanOrEqual(2);
   for (const snare of snares) {
     output.send.mockClear();

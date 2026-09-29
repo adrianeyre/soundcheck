@@ -83,7 +83,7 @@ export type EngineCommand =
   | { type: "setSynthSettings"; track: number; settings: number[] }
   /**
    * "synth" or "drumSampler"; the Drum Sampler arrives with the bundled kit
-   * on `pads` pads (8 to 16), filled from the kit as far as it reaches.
+   * on `pads` pads (up to 32), filled from the kit as far as it reaches.
    * `pads` is null for an Instrument that has none.
    */
   | { type: "setTrackInstrument"; track: number; instrument: string; pads: number | null }
