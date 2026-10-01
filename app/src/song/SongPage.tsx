@@ -207,6 +207,8 @@ export interface SongPageProps {
   desktopOnly?: readonly DesktopOnly[];
   /** The latency test's own platform parts, where it is offered. */
   latencyTest?: Omit<LoadTestPageProps, "openOutput" | "openMidi" | "initialHost" | "initialBufferFrames">;
+  onShowPrivacyPolicy?: () => void;
+  onShowTerms?: () => void;
   onShowCookiePolicy?: () => void;
   onShowAccessibility?: () => void;
   /**
@@ -295,6 +297,8 @@ export function SongPage({
   audioDevice,
   desktopOnly = [],
   latencyTest,
+  onShowPrivacyPolicy,
+  onShowTerms,
   onShowCookiePolicy,
   onShowAccessibility,
   header,
@@ -1834,6 +1838,8 @@ export function SongPage({
               </div>
             ))
           }
+          onShowPrivacyPolicy={onShowPrivacyPolicy}
+          onShowTerms={onShowTerms}
           onShowCookiePolicy={onShowCookiePolicy}
           onShowAccessibility={onShowAccessibility}
         />

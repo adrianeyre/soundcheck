@@ -1,4 +1,16 @@
-import { Award, Cookie, Disc3, Grid3x3, LayoutGrid, Music, PersonStanding, RotateCcw, Settings } from "lucide-react";
+import {
+  Award,
+  Cookie,
+  Disc3,
+  FileText,
+  Grid3x3,
+  LayoutGrid,
+  Music,
+  PersonStanding,
+  RotateCcw,
+  Settings,
+  Shield,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { renderOffline } from "./audio/offline-render";
@@ -11,6 +23,8 @@ import { CookieBanner } from "./legal/CookieBanner";
 import { CookiePolicy } from "./legal/CookiePolicy";
 import { Credits } from "./legal/Credits";
 import { REPOSITORY_URL } from "./legal/links";
+import { PrivacyPolicy } from "./legal/PrivacyPolicy";
+import { TermsAndConditions } from "./legal/TermsAndConditions";
 import { currentPlatform } from "./platform";
 import { PresetLibraryProvider } from "./preset/PresetLibraryProvider";
 import { desktopOnly } from "./settings/desktop-only";
@@ -21,7 +35,7 @@ import { Logo } from "./ui/Logo";
 import type { MenuItem } from "./ui/Menu";
 
 /** The dialogs about the app itself. */
-type Policy = "cookies" | "accessibility" | "credits";
+type Policy = "privacy" | "terms" | "cookies" | "accessibility" | "credits";
 
 const VIEW_NAMES: Record<SongView, string> = { editor: "Editor", mixing: "Mixer", pads: "Pads", settings: "Settings" };
 
@@ -158,6 +172,20 @@ export function App() {
     { kind: "separator", id: "legal" },
     {
       kind: "action",
+      id: "privacy",
+      label: "Privacy Policy",
+      icon: <Shield size={16} />,
+      onSelect: () => setPolicy("privacy"),
+    },
+    {
+      kind: "action",
+      id: "terms",
+      label: "Terms and Conditions",
+      icon: <FileText size={16} />,
+      onSelect: () => setPolicy("terms"),
+    },
+    {
+      kind: "action",
       id: "cookies",
       label: "Cookie Policy",
       icon: <Cookie size={16} />,
@@ -275,6 +303,8 @@ export function App() {
               bufferSizes: platform.bufferSizes,
               listAudioHosts: platform.listAudioHosts,
             }}
+            onShowPrivacyPolicy={() => setPolicy("privacy")}
+            onShowTerms={() => setPolicy("terms")}
             onShowCookiePolicy={() => setPolicy("cookies")}
             onShowAccessibility={() => setPolicy("accessibility")}
           />
@@ -301,6 +331,12 @@ export function App() {
             <span className="visually-hidden"> (source on GitHub, opens in a new tab)</span>
           </a>
           <span className="num">Version: {import.meta.env.VITE_APP_VERSION}</span>
+          <button type="button" className="link-button" onClick={() => setPolicy("privacy")}>
+            Privacy Policy
+          </button>
+          <button type="button" className="link-button" onClick={() => setPolicy("terms")}>
+            Terms and Conditions
+          </button>
           <button type="button" className="link-button" onClick={() => setPolicy("cookies")}>
             Cookie Policy
           </button>
@@ -310,6 +346,22 @@ export function App() {
         </nav>
       </footer>
 
+      <Dialog
+        open={policy === "privacy"}
+        onClose={() => setPolicy(null)}
+        title="Privacy Policy"
+        closeLabel="Close privacy policy"
+      >
+        <PrivacyPolicy />
+      </Dialog>
+      <Dialog
+        open={policy === "terms"}
+        onClose={() => setPolicy(null)}
+        title="Terms and Conditions"
+        closeLabel="Close terms and conditions"
+      >
+        <TermsAndConditions />
+      </Dialog>
       <Dialog
         open={policy === "cookies"}
         onClose={() => setPolicy(null)}
