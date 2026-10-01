@@ -86,9 +86,13 @@ jobs:
         run: pnpm exec semantic-release --repository-url "https://github.com/$GITHUB_REPOSITORY"
 
       # Whether it made a version: the newest tag on main, after it pushed.
+      # The checkout kept no credentials, and a private repository can't be
+      # fetched without them, so this fetch passes the token itself.
       - id: made
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch --quiet --tags origin main
+          git fetch --quiet --tags "https://x-access-token:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git" +refs/heads/main:refs/remotes/origin/main
           tag=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || true)
           if [ -n "$tag" ] && [ "$tag" != "${{ steps.before.outputs.tag }}" ]; then
             { echo "released=true"; echo "tag=$tag"; echo "version=${tag#v}"; } >> "$GITHUB_OUTPUT"
