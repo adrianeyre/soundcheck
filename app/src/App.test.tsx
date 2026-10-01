@@ -142,6 +142,8 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
     "Pads",
     "Settings",
     "Grid",
+    "Privacy Policy",
+    "Terms and Conditions",
     "Cookie Policy",
     "Accessibility",
     "Credits",
@@ -152,8 +154,8 @@ test("the menu opens and moves with the keyboard, and Escape hands focus back", 
   fireEvent.keyDown(items[0]!, { key: "ArrowDown" });
   expect(items[1]).toHaveFocus();
   fireEvent.keyDown(items[1]!, { key: "End" });
-  expect(items[8]).toHaveFocus();
-  fireEvent.keyDown(items[8]!, { key: "ArrowDown" });
+  expect(items[10]).toHaveFocus();
+  fireEvent.keyDown(items[10]!, { key: "ArrowDown" });
   expect(items[0]).toHaveFocus();
 
   fireEvent.keyDown(items[0]!, { key: "Escape" });
@@ -189,6 +191,8 @@ test("the footer credits the design, shows the version and opens the policies", 
   expect(credit).toHaveAttribute("target", "_blank");
   expect(within(footer).getByText(`Version: ${import.meta.env.VITE_APP_VERSION}`)).toBeInTheDocument();
   expect(within(footer).getAllByRole("button").map((button) => button.textContent)).toEqual([
+    "Privacy Policy",
+    "Terms and Conditions",
     "Cookie Policy",
     "Accessibility",
   ]);
@@ -204,6 +208,38 @@ test("the footer credits the design, shows the version and opens the policies", 
   fireEvent.keyDown(statement, { key: "Escape" });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(within(footer).getByRole("button", { name: "Accessibility" })).toHaveFocus();
+});
+
+test("the Privacy Policy and the Terms and Conditions open from the menu, the footer and Settings", async () => {
+  render(<App />);
+  await screen.findByRole("button", { name: /^Menu, / });
+
+  fireEvent.click(menu());
+  fireEvent.click(screen.getByRole("menuitem", { name: "Privacy Policy" }));
+  const privacy = await screen.findByRole("dialog", { name: "Privacy Policy" });
+  expect(privacy).toHaveTextContent("no analytics");
+  expect(within(privacy).getByRole("link", { name: /open an issue on GitHub/ })).toHaveAttribute(
+    "href",
+    `${REPOSITORY_URL}/issues`,
+  );
+  fireEvent.click(within(privacy).getByRole("button", { name: "Close privacy policy" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  const footer = screen.getByRole("contentinfo");
+  fireEvent.click(within(footer).getByRole("button", { name: "Terms and Conditions" }));
+  const terms = await screen.findByRole("dialog", { name: "Terms and Conditions" });
+  expect(terms).toHaveTextContent("GNU General Public License");
+  expect(terms).toHaveTextContent("without warranty");
+  fireEvent.keyDown(terms, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  choose("Settings");
+  const main = screen.getByRole("main");
+  fireEvent.click(within(main).getByRole("button", { name: "Privacy Policy" }));
+  expect(await screen.findByRole("dialog", { name: "Privacy Policy" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close privacy policy" }));
+  fireEvent.click(within(main).getByRole("button", { name: "Terms and Conditions" }));
+  expect(await screen.findByRole("dialog", { name: "Terms and Conditions" })).toBeInTheDocument();
 });
 
 test("the cookie notice is shown until it is accepted, and the policy lists what is stored", async () => {

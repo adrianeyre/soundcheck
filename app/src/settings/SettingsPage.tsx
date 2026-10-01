@@ -20,6 +20,8 @@ export interface SettingsPageProps {
   diagnostics?: ReactNode;
   /** The version running, and installing a newer one; absent where there is nothing to install. */
   updates?: ReactNode;
+  onShowPrivacyPolicy?: () => void;
+  onShowTerms?: () => void;
   onShowCookiePolicy?: () => void;
   onShowAccessibility?: () => void;
 }
@@ -108,13 +110,23 @@ export function SettingsPage(props: SettingsPageProps) {
       icon: Download,
       body: props.updates,
     },
-    (props.onShowCookiePolicy || props.onShowAccessibility) && {
+    (props.onShowPrivacyPolicy || props.onShowTerms || props.onShowCookiePolicy || props.onShowAccessibility) && {
       id: "settings-privacy",
       title: "Privacy and accessibility",
-      lead: "What the app keeps on this machine, and how it is built to be usable by everyone.",
+      lead: "What the app keeps on this machine and sends elsewhere, the terms of using it, and how it is built to be usable by everyone.",
       icon: PersonStanding,
       body: (
         <div className="row">
+          {props.onShowPrivacyPolicy && (
+            <button type="button" onClick={props.onShowPrivacyPolicy}>
+              Privacy Policy
+            </button>
+          )}
+          {props.onShowTerms && (
+            <button type="button" onClick={props.onShowTerms}>
+              Terms and Conditions
+            </button>
+          )}
           {props.onShowCookiePolicy && (
             <button type="button" onClick={props.onShowCookiePolicy}>
               Cookie Policy
