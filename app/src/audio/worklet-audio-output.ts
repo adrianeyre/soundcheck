@@ -62,7 +62,11 @@ export async function openWorkletAudioOutput(options: AudioOutputOptions): Promi
   try {
     const [module] = await Promise.all([
       fetch(wasmUrl)
-        .then((response) => response.arrayBuffer())
+        .then((response) => {
+          // A page left open across a deploy asks for a file the site no longer has (`new-deploy.ts`).
+          if (!response.ok) throw new Error(`The Audio Engine (${wasmUrl}) couldn't be loaded: ${response.status}`);
+          return response.arrayBuffer();
+        })
         .then((bytes) => WebAssembly.compile(bytes)),
       context.audioWorklet.addModule(processorUrl),
     ]);

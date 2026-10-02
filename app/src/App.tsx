@@ -25,13 +25,15 @@ import { Credits } from "./legal/Credits";
 import { REPOSITORY_URL } from "./legal/links";
 import { PrivacyPolicy } from "./legal/PrivacyPolicy";
 import { TermsAndConditions } from "./legal/TermsAndConditions";
-import { currentPlatform } from "./platform";
+import { currentPlatform, isDesktop } from "./platform";
 import { PresetLibraryProvider } from "./preset/PresetLibraryProvider";
 import { desktopOnly } from "./settings/desktop-only";
 import { applyPalette, applyTheme, readPalette, readThemePreference } from "./settings/theme";
 import { SongPage, type SongView } from "./song/SongPage";
 import { Dialog } from "./ui/Dialog";
 import { Logo } from "./ui/Logo";
+import { NewDeployNotice } from "./update/NewDeployNotice";
+import { reportIfMissingAsset } from "./update/new-deploy";
 import type { MenuItem } from "./ui/Menu";
 
 /** The dialogs about the app itself. */
@@ -73,7 +75,10 @@ export function App() {
 
   useEffect(() => {
     // Loaded up front, so the first sound needn't wait for it. The footer gives the version.
-    loadEngine().catch((reason: unknown) => setError(String(reason)));
+    loadEngine().catch((reason: unknown) => {
+      reportIfMissingAsset(reason);
+      setError(String(reason));
+    });
   }, []);
 
   // The theme and palette chosen last time; `index.html` already painted them, and "system" follows the OS from here.
@@ -226,6 +231,8 @@ export function App() {
           )}
         </div>
       </header>
+
+      {!isDesktop() && <NewDeployNotice />}
 
       <div ref={setPinnedTop} className="pinned-slot" />
 

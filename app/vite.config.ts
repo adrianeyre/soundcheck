@@ -61,6 +61,24 @@ function crawlerFiles(): Plugin {
   };
 }
 
+/**
+ * Each production build's id, in the page (`VITE_BUILD_ID`) and in
+ * `version.json` beside `index.html`, so a page left open across a deploy
+ * can tell it has been replaced (`src/update/new-deploy.ts`). The commit CI
+ * built, or when it was built elsewhere. Not under `pnpm dev` or the tests,
+ * which have no `version.json` to compare with.
+ */
+function deployStamp(): Plugin {
+  const build = process.env.GITHUB_SHA || `local-${Date.now()}`;
+  return {
+    name: "soundcheck-deploy-stamp",
+    config: (_, { command }) => (command === "build" ? { define: { "import.meta.env.VITE_BUILD_ID": JSON.stringify(build) } } : {}),
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "version.json", source: `${JSON.stringify({ build, version })}\n` });
+    },
+  };
+}
+
 export default defineConfig({
   // Relative, so the one build works in the Desktop App's window at `/` and
   // as the Browser Version under a sub-path such as GitHub Pages'
@@ -71,7 +89,7 @@ export default defineConfig({
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(version),
     "import.meta.env.VITE_APP_AUTHOR": JSON.stringify(author),
   },
-  plugins: [react(), crawlerFiles(), crossOriginIsolation(), servedModel()],
+  plugins: [react(), crawlerFiles(), crossOriginIsolation(), servedModel(), deployStamp()],
   resolve: {
     alias: { "@engine": enginePackage },
   },

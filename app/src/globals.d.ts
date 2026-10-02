@@ -7,4 +7,6 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_URL?: string;
   /** Where the Browser Version is served, so the Desktop App's invite links open it. */
   readonly VITE_SITE_URL?: string;
+  /** This build's id, as `version.json` has it beside `index.html` (`new-deploy.ts`); only in a production build. */
+  readonly VITE_BUILD_ID?: string;
 }
