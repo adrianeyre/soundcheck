@@ -20,7 +20,7 @@
   "scripts": {
     "engine:build": "wasm-pack build engine --target web --release",
     "build": "pnpm engine:build && pnpm --filter @soundcheck/app build && node scripts/check-web-build.ts",
-    "test": "node --test scripts/check-example-plugins.test.ts scripts/check-web-build.test.ts scripts/export-htdemucs.test.ts scripts/sign-windows.test.ts scripts/sign-macos.test.ts scripts/updater.test.ts && cargo test --workspace && pnpm engine:build && pnpm --filter @soundcheck/app test",
+    "test": "node --test scripts/check-example-plugins.test.ts scripts/check-web-build.test.ts scripts/keep-live-assets.test.ts scripts/export-htdemucs.test.ts scripts/sign-windows.test.ts scripts/sign-macos.test.ts scripts/updater.test.ts && cargo test --workspace && pnpm engine:build && pnpm --filter @soundcheck/app test",
     "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && oxlint --deny-warnings && node scripts/check-example-plugins.ts",
     "typecheck": "pnpm engine:build && pnpm --filter @soundcheck/app typecheck",
     "dev": "pnpm engine:build && pnpm --filter @soundcheck/app dev",

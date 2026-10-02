@@ -100,6 +100,7 @@ import { AudioSettings } from "../settings/AudioSettings";
 import { type AudioPreferences, readAudioPreferences, writeAudioPreferences } from "../settings/audio-preferences";
 import { TransportBar } from "../transport/TransportBar";
 import { DEFAULT_TRANSPORT, playRange, type TransportSettings, transportCommands } from "../transport/transport-settings";
+import { reportIfMissingAsset } from "../update/new-deploy";
 import { UpdateNotice } from "../update/UpdateNotice";
 import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
@@ -625,6 +626,7 @@ export function SongPage({
       syncRef.current = new EngineSync();
       setOutput(opened);
     } catch (reason) {
+      reportIfMissingAsset(reason);
       setError(String(reason));
       setStartError(String(reason));
     } finally {

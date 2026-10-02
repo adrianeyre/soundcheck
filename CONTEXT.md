@@ -244,7 +244,7 @@ Soundcheck installed on Windows, macOS or Linux, with the Audio Engine on the ma
 _Avoid_: Native app, Tauri app
 
 **Browser Version**:
-Soundcheck as a web page, with the Audio Engine's WASM build on the browser's audio path. The lighter version: the same song and Project format, heard later, and without the Desktop App's features that need the machine.
+Soundcheck as a web page, with the Audio Engine's WASM build on the browser's audio path. The lighter version: the same song and Project format, heard later, and without the Desktop App's features that need the machine. It needs no server but the site it is served from. When the site is deployed again while a page is open, the page offers to reload to the new version; that is not an Update, which is the Desktop App's.
 _Avoid_: Web app, web build (that is how it is made), dev host (that is `pnpm dev`)
 
 **Release**:

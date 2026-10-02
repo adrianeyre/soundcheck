@@ -868,6 +868,18 @@ Version not deployed", and `web` is skipped; CI stays green. The build takes
 the site's address from Pages, for the share tags, `robots.txt` and the
 sitemap ([below](#search-engines-and-link-previews)).
 
+The Browser Version needs **no server of your own**: everything it loads is
+on the site. A deploy, though, replaces the whole site, and every file of a
+build is named by its hash. So the deploy also keeps the live site's files
+from the deploy before it (`scripts/keep-live-assets.ts`). A page opened
+before a deploy can then still load its engine and the parts it loads
+later, such as the Mixer page's. Each build also writes `version.json`.
+When the site has a newer one than the open page, or one of the page's
+files fails to load, the page says so and offers **Reload**
+([ADR 0016](docs/architectural-decision-record/0016-a-deploy-keeps-the-previous-deploys-files.md)).
+Only a Live Session needs a server (a Relay), and a Local model its own; each
+says so where it is set up.
+
 The Assistant's API key is kept in the browser's local storage there, and on
 `github.io` every Pages site of the same account shares one origin, so they
 can all read it. A custom domain gives the Browser Version an origin of its

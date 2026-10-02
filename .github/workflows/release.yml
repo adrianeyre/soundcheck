@@ -566,6 +566,12 @@ jobs:
           # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
           VITE_RELAY_URL: ${{ vars.RELAY_URL }}
 
+      # The live site's files, beside the new build's: a deploy replaces the
+      # whole site, and a page opened before it, still open, would otherwise
+      # get a 404 for its engine or a chunk it loads later. The page then
+      # offers to reload to the new version (`app/src/update/new-deploy.ts`).
+      - run: node scripts/keep-live-assets.ts "${{ steps.site.outputs.base_url }}" app/dist
+
       - uses: actions/upload-pages-artifact@v5
         with:
           path: app/dist
