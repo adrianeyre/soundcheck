@@ -51,7 +51,7 @@ export interface TrackBrowserProps {
 
 /**
  * The Track browser's loaded list: every file the DJ has added, with its BPM, key (in
- * Camelot notation too) and length once a Deck has analysed it, sortable by
+ * Camelot notation too) and length once it has been analysed, sortable by
  * any column. A row loads onto a Deck by its buttons, or is dragged onto one.
  */
 export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad, cursor = null, onCursor, onOrder }: TrackBrowserProps) {
@@ -92,7 +92,7 @@ export function TrackBrowser({ tracks, decks, canLoad, onAdd, onLoad, cursor = n
         </button>
       </div>
       {tracks.length === 0 ? (
-        <p className="hint">Add MP3, WAV or FLAC files, or drop them here. A file&apos;s BPM and key show once it is on a Deck.</p>
+        <p className="hint">Add MP3, WAV or FLAC files, or drop them here. A file&apos;s BPM and key show once it has been analysed.</p>
       ) : (
         <div className="dj-browser-scroll">
           <table className="dj-browser-table">

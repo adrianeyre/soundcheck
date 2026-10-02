@@ -126,6 +126,16 @@ export function useJevConnection(keyStore: KeyStore | undefined): JevConnection 
   return useSyncExternalStore(store ? store.subscribe : NO_JEV, () => store?.snapshot.settings?.jev ?? null);
 }
 
+/**
+ * The musician's saved Settings, where `keyStore` has them; null without a
+ * key store, or until they are read. For the Widgets outside the Request box
+ * that ask the chosen Provider, as the Mix Helper does.
+ */
+export function useSavedSettings(keyStore: KeyStore | undefined): Settings | null {
+  const store = keyStore && assistantSettingsFor(keyStore);
+  return useSyncExternalStore(store ? store.subscribe : NO_JEV, () => store?.snapshot.settings ?? null);
+}
+
 export function useAssistantSettings(keyStore: KeyStore): [AssistantSettingsState, AssistantSettingsStore] {
   const store = assistantSettingsFor(keyStore);
   const state = useSyncExternalStore(store.subscribe, () => store.snapshot);

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { Engine, engine_version, initSync, starter_kit } from "@engine";
+import { dj_analyse, encode_wav, Engine, engine_version, initSync, starter_kit } from "@engine";
 import { beforeAll, expect, test } from "vitest";
 
 import { STARTER_KIT } from "./project/model";
@@ -14,6 +14,15 @@ beforeAll(() => {
     new URL("../../engine/pkg/soundcheck_engine_bg.wasm", import.meta.url),
   );
   memory = initSync({ module: wasm }).memory;
+});
+
+test("the WASM engine analyses a Track browser file as a Deck would, without putting it on one", () => {
+  const rate = 44_100;
+  const wav = encode_wav(new Float32Array(rate * 2 * 2).fill(0.25), rate, 16)!;
+  const found = JSON.parse(dj_analyse(wav)) as { seconds: number; bpm: number; key: unknown; waveformRate: number };
+  expect(found.seconds).toBeCloseTo(2, 3);
+  expect(found.waveformRate).toBe(100);
+  expect(() => dj_analyse(new Uint8Array([1, 2, 3]))).toThrow("This isn't a WAV, FLAC or MP3 file");
 });
 
 test("the WASM engine reports a version", () => {

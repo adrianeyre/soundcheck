@@ -21,20 +21,17 @@ import Anthropic, {
   type ClientOptions,
 } from "@anthropic-ai/sdk";
 
-import type { Project } from "../project/model";
 import {
-  DIRECT,
-  sentTo,
   type Conversation,
-  type ConversationSoFar,
   type ModelReply,
+  sentTo,
   type StartConversation,
+  type StartExchange,
   type TokenUsage,
   type ToolResult,
 } from "./assistant";
 import { capabilitiesOf, type Capabilities } from "./catalogue";
-import { earlierExchanges, requestMessage, systemPrompt, turnsLeftNote } from "./context";
-import { EMPTY_LIBRARY, type LibraryContents } from "./library";
+import { type Opening, requestOpening, turnsLeftNote } from "./context";
 import type { ToolDefinition } from "./tools";
 
 /** The default model. */
@@ -73,25 +70,27 @@ export function claudeConversations(
   capabilities: Capabilities = capabilitiesOf("claude", choice.model ?? ASSISTANT_MODEL),
 ): StartConversation {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, ...options });
-  return (request, project, library = EMPTY_LIBRARY, soFar, mode = DIRECT) =>
-    conversation(client, choice, capabilities, systemPrompt(mode), request, project, library, soFar);
+  return (request, project, library, soFar, mode) =>
+    conversation(client, choice, capabilities, requestOpening(request, project, library, soFar, mode));
 }
 
-function conversation(
-  client: Anthropic,
-  choice: ModelChoice,
-  capabilities: Capabilities,
-  system: string,
-  request: string,
-  project: Project,
-  library: LibraryContents,
-  soFar: ConversationSoFar | undefined,
-): Conversation {
+/** A one-off exchange with Claude (`StartExchange`), on the same key and model as its Requests. */
+export function claudeExchanges(
+  apiKey: string,
+  options: ClaudeOptions = {},
+  choice: ModelChoice = {},
+  capabilities: Capabilities = capabilitiesOf("claude", choice.model ?? ASSISTANT_MODEL),
+): StartExchange {
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, ...options });
+  return (system, message) => conversation(client, choice, capabilities, { system, earlier: [], first: () => message });
+}
+
+function conversation(client: Anthropic, choice: ModelChoice, capabilities: Capabilities, { system, earlier, first: opening }: Opening): Conversation {
   // Claude's API has no audio input (the catalogue declares none), so no
   // result is sent with its audio.
   const block = (result: ToolResult) => toolResultBlock(sentTo({ ...capabilities, audioInput: false }, result));
   // The Conversation's earlier Requests come first, as plain text turns.
-  const messages: Anthropic.MessageParam[] = earlierExchanges(soFar).flatMap(({ request: asked, reply }): Anthropic.MessageParam[] => [
+  const messages: Anthropic.MessageParam[] = earlier.flatMap(({ request: asked, reply }): Anthropic.MessageParam[] => [
     { role: "user", content: asked },
     { role: "assistant", content: reply },
   ]);
@@ -100,7 +99,7 @@ function conversation(
     async next(results, turnsLeft, tools) {
       messages.push(
         first
-          ? { role: "user", content: requestMessage(request, project, library, soFar) }
+          ? { role: "user", content: opening() }
           : { role: "user", content: [...results.map(block), { type: "text", text: turnsLeftNote(turnsLeft) }] },
       );
       first = false;

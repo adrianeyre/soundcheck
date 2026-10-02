@@ -5941,6 +5941,46 @@ button[data-clipping="true"] {
   font-weight: 700;
 }
 
+/* ---- The Mix Helper ---- */
+
+.dj-helper {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.dj-helper-decks tr[data-target="true"] {
+  background: var(--primary-soft);
+}
+
+/* How well a track mixes in, as a bar at its row's start: green, amber, or red for a clash. */
+.dj-helper tr[data-fit] > th {
+  border-left: 4px solid transparent;
+}
+
+.dj-helper tr[data-fit="good"] > th {
+  border-left-color: var(--play);
+}
+
+.dj-helper tr[data-fit="fair"] > th {
+  border-left-color: var(--warning);
+}
+
+.dj-helper tr[data-fit="poor"] > th {
+  border-left-color: var(--record);
+}
+
+.dj-helper-picks h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.dj-helper-picks ol {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding-left: 1.5em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dj-readout[data-warn="true"],
   [data-light="blink"] {

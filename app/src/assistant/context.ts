@@ -224,6 +224,34 @@ function pluginsForModel() {
 }
 
 /**
+ * How a conversation with a Provider opens: its system prompt, the earlier
+ * exchanges sent before it as plain turns, and its first message, written
+ * when it is first sent. A Request opens with the Assistant's
+ * (`requestOpening`); a one-off exchange such as the Mix Helper's with its
+ * own (`StartExchange`).
+ */
+export interface Opening {
+  system: string;
+  earlier: readonly Exchange[];
+  first: () => string;
+}
+
+/** A Request's opening: the system prompt for its mode, the Conversation so far, and the Request with the Project. */
+export function requestOpening(
+  request: string,
+  project: Project,
+  library: LibraryContents = EMPTY_LIBRARY,
+  conversation?: ConversationSoFar,
+  mode: RequestMode = DIRECT,
+): Opening {
+  return {
+    system: systemPrompt(mode),
+    earlier: earlierExchanges(conversation),
+    first: () => requestMessage(request, project, library, conversation),
+  };
+}
+
+/**
  * The first message of a Request: what the musician asked, the song, its
  * audio files, and the musician's User Presets, saved Kits and sample
  * folders, which live outside the Project. A follow-up is also told what

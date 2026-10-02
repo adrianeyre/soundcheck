@@ -13,7 +13,7 @@
 import { encode_mp3, encode_wav, starter_kit_wav } from "@engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { AudioOutput } from "../audio/audio-output";
+import type { AudioOutput, DjAnalysis } from "../audio/audio-output";
 import { loadEngine } from "../engine";
 import type { LibraryStorage } from "../preset/library-storage";
 import { STARTER_KIT } from "../project/model";
@@ -106,6 +106,12 @@ export interface DjSessionProps {
   onAddToSong?: (request: AddTakeRequest) => Promise<AddedTake>;
   /** The Starter Kit's sounds for the Sampler's first bank; the engine's own by default. */
   bundled?: BundledSound;
+  /**
+   * Analyse a file of the Track browser as a Deck would, without loading it
+   * (`analyseTrack`), so every track has its BPM and key for the Mix Helper.
+   * Absent, a track is analysed only when it is loaded onto a Deck.
+   */
+  analyse?: (bytes: Uint8Array) => Promise<DjAnalysis>;
 }
 
 /** The engine's bundled Starter Kit sound at `index`, with its name. */
@@ -133,7 +139,7 @@ const withBpm = (held: SamplerSlot | null, bpm: number | undefined): SamplerSlot
   held && held.bpm === undefined && bpm !== undefined ? { ...held, bpm } : held;
 
 export function useDjSession(props: DjSessionProps) {
-  const { output, saver, samples = null, library: storage = null, onAddToSong, bundled = engineBundled } = props;
+  const { output, saver, samples = null, library: storage = null, onAddToSong, bundled = engineBundled, analyse } = props;
   const dj = output?.dj ?? null;
   const [layout, setLayout] = useState<2 | 4>(2);
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
@@ -249,11 +255,32 @@ export function useDjSession(props: DjSessionProps) {
     }
   };
 
-  /** A file from the folder tree, read once and kept in the loaded list. */
   const latest = useRef({ library, loadTrack });
   useEffect(() => {
     latest.current = { library, loadTrack };
   });
+
+  // ---- Every track of the Track browser analysed, one at a time, as it is added, for the Mix Helper.
+
+  const [unreadable, setUnreadable] = useState<ReadonlySet<string>>(() => new Set());
+  const toAnalyse = analyse ? (library.find((t) => t.analysis === null && !unreadable.has(t.id))?.id ?? null) : null;
+  useEffect(() => {
+    if (!analyse || !toAnalyse) return;
+    const track = latest.current.library.find((t) => t.id === toAnalyse);
+    if (!track) return;
+    // Once read, the library changes, and the next track still to analyse starts this again.
+    void analyse(track.bytes)
+      .then((found) => setLibrary((all) => all.map((t) => (t.id === track.id && t.analysis === null ? { ...t, analysis: found } : t))))
+      .catch(() => setUnreadable((all) => new Set([...all, track.id])));
+  }, [analyse, toAnalyse]);
+  /** How the Track browser's analysis is going: tracks still to analyse, and those that couldn't be. */
+  const trackAnalysis = {
+    pending: analyse ? library.filter((t) => t.analysis === null && !unreadable.has(t.id)).length : 0,
+    unreadable: library.filter((t) => t.analysis === null && unreadable.has(t.id)).length,
+    background: analyse !== undefined,
+  };
+
+  /** A file from the folder tree, read once and kept in the loaded list. */
   const readSample = useCallback(
     async (sample: SampleRef): Promise<LibraryTrack | null> => {
       if (!samples) return null;
@@ -797,6 +824,7 @@ export function useDjSession(props: DjSessionProps) {
     keyOf,
     baseKeyOf,
     masterKey,
+    analysis: trackAnalysis,
     titleOfDeck,
     cursor,
     setCursor: chooseTrack,

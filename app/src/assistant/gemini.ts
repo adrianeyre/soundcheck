@@ -17,21 +17,18 @@ import {
   type Part,
 } from "@google/genai";
 
-import type { Project } from "../project/model";
 import {
-  DIRECT,
-  sentTo,
   type Conversation,
-  type ConversationSoFar,
   type ModelReply,
+  sentTo,
   type StartConversation,
+  type StartExchange,
   type TokenUsage,
   type ToolResult,
 } from "./assistant";
 import { LISTENING } from "../audio/listening";
 import type { Capabilities } from "./catalogue";
-import { earlierExchanges, requestMessage, systemPrompt, turnsLeftNote } from "./context";
-import { EMPTY_LIBRARY, type LibraryContents } from "./library";
+import { type Opening, requestOpening, turnsLeftNote } from "./context";
 import type { ToolDefinition } from "./tools";
 
 /** Which model a Request uses, and at what thinking level; unset means the model's default. */
@@ -63,22 +60,19 @@ export function geminiConversations(
   capabilities: Capabilities,
 ): StartConversation {
   const client = new GoogleGenAI({ apiKey, httpOptions: options });
-  return (request, project, library = EMPTY_LIBRARY, soFar, mode = DIRECT) =>
-    conversation(client, choice, capabilities, systemPrompt(mode), request, project, library, soFar);
+  return (request, project, library, soFar, mode) =>
+    conversation(client, choice, capabilities, requestOpening(request, project, library, soFar, mode));
 }
 
-function conversation(
-  client: GoogleGenAI,
-  choice: GeminiChoice,
-  capabilities: Capabilities,
-  system: string,
-  request: string,
-  project: Project,
-  library: LibraryContents,
-  soFar: ConversationSoFar | undefined,
-): Conversation {
+/** A one-off exchange with Gemini (`StartExchange`), on the same key and model as its Requests. */
+export function geminiExchanges(apiKey: string, options: GeminiOptions, choice: GeminiChoice, capabilities: Capabilities): StartExchange {
+  const client = new GoogleGenAI({ apiKey, httpOptions: options });
+  return (system, message) => conversation(client, choice, capabilities, { system, earlier: [], first: () => message });
+}
+
+function conversation(client: GoogleGenAI, choice: GeminiChoice, capabilities: Capabilities, { system, earlier, first: opening }: Opening): Conversation {
   // The Conversation's earlier Requests come first, as plain text turns.
-  const contents: Content[] = earlierExchanges(soFar).flatMap(({ request: asked, reply }): Content[] => [
+  const contents: Content[] = earlier.flatMap(({ request: asked, reply }): Content[] => [
     { role: "user", parts: [{ text: asked }] },
     { role: "model", parts: [{ text: reply }] },
   ]);
@@ -92,7 +86,7 @@ function conversation(
     async next(results, turnsLeft, tools) {
       contents.push(
         first
-          ? { role: "user", parts: [{ text: requestMessage(request, project, library, soFar) }] }
+          ? { role: "user", parts: [{ text: opening() }] }
           : {
               role: "user",
               parts: [

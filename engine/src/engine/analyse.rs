@@ -15,13 +15,17 @@ const PRE_ROLL_SECONDS: f64 = 10.0;
 
 /// The measurements of one render, and what else `analyse_audio` asked for
 /// of the same render: a picture of it, the audio itself, or both.
-#[wasm_bindgen(getter_with_clone)]
+/// Only its strings are cloned out to JavaScript; the number is copied.
+#[wasm_bindgen]
 pub struct AnalysisWithAttachments {
     /// Compact JSON, as `Engine::analyse` writes it.
+    #[wasm_bindgen(getter_with_clone)]
     pub measurements: String,
     /// The spectrogram as a base64 PNG, as Claude's image input takes it.
+    #[wasm_bindgen(getter_with_clone)]
     pub spectrogram: Option<String>,
     /// The render as a base64 mono WAV file (see `Listening`).
+    #[wasm_bindgen(getter_with_clone)]
     pub audio: Option<String>,
     /// How long `audio` is, in seconds; 0 without it.
     pub audio_seconds: f64,

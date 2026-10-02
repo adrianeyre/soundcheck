@@ -69,7 +69,7 @@ export type WidgetId = EditorWidgetId | MixingWidgetId | PadsWidgetId;
 
 /**
  * The Mixer page's Widgets (ADR 0013): the waveforms across the top, each Deck, the mixer, two Track browsers,
- * and the Pad Controller, hidden until the DJ shows it.
+ * the Mix Helper, and the Pad Controller, hidden until the DJ shows it.
  */
 export type MixingWidgetId =
   | "djWaveforms"
@@ -80,6 +80,7 @@ export type MixingWidgetId =
   | "djMixer"
   | "djBrowser"
   | "djBrowser2"
+  | "djMixHelper"
   | "djPadController";
 
 /** The Pads page's Widgets: the Pad Controller across the Grid, and a Track browser under it. */
@@ -190,8 +191,10 @@ export const MIXING_WIDGETS: readonly WidgetSpec[] = [
     min: { w: 6, h: 5 },
     tuck: { under: "deck2", downTo: "djMixer" },
   },
+  // Under the Decks, the whole width, so its ranking has room for why each track mixes in.
+  { id: "djMixHelper", title: "Mix Helper", initial: { x: 0, y: 110, w: 24, h: 16 }, min: { w: 8, h: 6 } },
   // The Pads page's controller, here too for a DJ who wants it beside the Decks; hidden until then.
-  { id: "djPadController", title: "Pad Controller", initial: { x: 0, y: 110, w: 24, h: 40 }, min: { w: 12, h: 10 }, startsHidden: true },
+  { id: "djPadController", title: "Pad Controller", initial: { x: 0, y: 126, w: 24, h: 40 }, min: { w: 12, h: 10 }, startsHidden: true },
 ];
 
 /**

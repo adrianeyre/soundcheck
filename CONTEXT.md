@@ -168,7 +168,7 @@ Whose LLM the Assistant talks to: Claude, OpenAI, Google Gemini, xAI Grok, Meta 
 _Avoid_: Backend, vendor
 
 **Decision Engine**:
-A model that only picks between options the app or the Assistant defines, answering each with a probability, and never chats or makes a change: TypeSafe's Jev. The Assistant asks it for many small bounded musical choices and makes the changes itself; the Chords Widget asks it for the next chord. It is not a Provider, and its key is kept beside theirs.
+A model that only picks between options the app or the Assistant defines, answering each with a probability, and never chats or makes a change: TypeSafe's Jev. The Assistant asks it for many small bounded musical choices and makes the changes itself; the Chords Widget asks it for the next chord, and the Mix Helper for the track to mix in next. It is not a Provider, and its key is kept beside theirs.
 _Avoid_: Provider (it can't be one), classifier, System One (TypeSafe's own name for the kind)
 
 **Capability**:
@@ -280,7 +280,7 @@ _Avoid_: Share link (Share makes a Shared Project), room code
 ### The Mixer page
 
 **Mixer page**:
-The page, beside the Editor, the Pads page and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees, until the DJ adds a recording to the song.
+The page, beside the Editor, the Pads page and Settings, where a DJ plays audio files against each other on Decks through a DJ mixer, as on a club's players and mixer. The Editor's song stops while it is open. Nothing on it is part of a Project, its undo history, an export or what the Assistant sees in a Request, until the DJ adds a recording to the song. Only the Mix Helper, when the DJ asks it, sends the Decks and the Track browser's tracks to the Assistant's Provider or to Jev.
 _Avoid_: DJ mode, performance view, live page
 
 **Deck**:
@@ -300,8 +300,12 @@ A Deck's control modes. INT (internal): the Deck plays the file itself, as it al
 _Avoid_: Internal/relative/absolute mode (spelled out, except to explain them), thru mode
 
 **Track browser**:
-The Mixer and Pads pages' list of the files the DJ has added, with each one's BPM, key and length once a Deck has analysed it, from which a file is loaded onto a Deck or into a Sampler Slot. The Pad Controller's browse knob moves a cursor through its loaded list or its folder tree, and LOAD loads the file it is on (the chosen track).
+The Mixer and Pads pages' list of the files the DJ has added, with each one's BPM, key and length once it has been analysed (as it is added, in the app; else when a Deck loads it), from which a file is loaded onto a Deck or into a Sampler Slot. The Pad Controller's browse knob moves a cursor through its loaded list or its folder tree, and LOAD loads the file it is on (the chosen track).
 _Avoid_: Library (that is the app's Preset and Kit library), crate, playlist
+
+**Mix Helper**:
+The Mixer page's Widget for harmonic mixing: it shows what is on each Deck, with its tempo and key as heard now (after Key Shift, and after the tempo fader where Master Tempo is off), and ranks the Track browser's other tracks by how well each would mix into the Deck chosen, by key round the Camelot wheel and by tempo (its own, half or double), lower where its key clashes with another Deck playing. Where they are set up, the Assistant's Provider and Jev can be asked to pick from its ranking too; they only pick, and loading a pick onto a Deck is the DJ's to do.
+_Avoid_: Harmonic mixing (that is the practice), recommendations, Suggestion (that is a Request's changes), Key Sync (that shifts a Deck)
 
 **Beat Grid**:
 Where a Deck's file has its beats: a BPM and the time of its first beat, found by the engine when the file is loaded and put right by hand with Tap and the grid nudges. Sync, Quantize, loops and Beat Jump all go by it.

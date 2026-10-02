@@ -18,21 +18,18 @@ import OpenAI, {
   type ClientOptions,
 } from "openai";
 
-import type { Project } from "../project/model";
 import {
-  DIRECT,
-  sentTo,
   type Conversation,
-  type ConversationSoFar,
   type ModelReply,
+  sentTo,
   type StartConversation,
+  type StartExchange,
   type TokenUsage,
   type ToolResult,
 } from "./assistant";
 import { LISTENING } from "../audio/listening";
 import type { Capabilities } from "./catalogue";
-import { earlierExchanges, requestMessage, systemPrompt, turnsLeftNote } from "./context";
-import { EMPTY_LIBRARY, type LibraryContents } from "./library";
+import { type Opening, requestOpening, turnsLeftNote } from "./context";
 import type { ToolDefinition } from "./tools";
 
 /** Which model a Request uses, and at what reasoning effort; unset means the default. */
@@ -75,86 +72,83 @@ export function openaiTools(definitions: readonly ToolDefinition[]): OpenAI.Chat
   }));
 }
 
+/** The Providers that speak OpenAI's Chat Completions. */
+export type OpenAIShaped = "openai" | "grok" | "meta" | "local";
+
+/**
+ * Who each is: Meta AI's Muse Spark takes the token limit as `max_tokens`,
+ * which counts the reasoning too, as a local server does. A local model
+ * needs no key, but the SDK insists on one, and a local server ignores it;
+ * it takes no effort either.
+ */
+const SERVERS: Record<OpenAIShaped, Omit<Server, "capabilities"> & { local?: true }> = {
+  openai: { who: "OpenAI", maxTokens: "max_completion_tokens" },
+  grok: { who: "Grok", maxTokens: "max_completion_tokens", reasoningApart: true },
+  meta: { who: "Meta AI", maxTokens: "max_tokens" },
+  local: { who: "The local model", maxTokens: "max_tokens", local: true },
+};
+
+function serverOf(kind: OpenAIShaped, capabilities: Capabilities): Server {
+  const { local: _, ...server } = SERVERS[kind];
+  return { ...server, capabilities };
+}
+
+/** The client and model for `kind`. */
+function clientOf(kind: OpenAIShaped, apiKey: string, options: OpenAIOptions, choice: OpenAIChoice): [OpenAI, OpenAIChoice] {
+  if (SERVERS[kind].local) return [new OpenAI({ apiKey: apiKey || "local", dangerouslyAllowBrowser: true, ...options }), { model: choice.model }];
+  return [new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice];
+}
+
+function startFor(kind: OpenAIShaped, apiKey: string, options: OpenAIOptions, choice: OpenAIChoice, capabilities: Capabilities): StartConversation {
+  const [client, chosen] = clientOf(kind, apiKey, options, choice);
+  const server = serverOf(kind, capabilities);
+  return (request, project, library, soFar, mode) => conversation(client, chosen, server, requestOpening(request, project, library, soFar, mode));
+}
+
 /** Talks to OpenAI with the user's own key. */
-export function openaiConversations(
-  apiKey: string,
-  options: OpenAIOptions,
-  choice: OpenAIChoice,
-  capabilities: Capabilities,
-): StartConversation {
-  const server: Server = { who: "OpenAI", capabilities, maxTokens: "max_completion_tokens" };
-  return start(new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice, server);
+export function openaiConversations(apiKey: string, options: OpenAIOptions, choice: OpenAIChoice, capabilities: Capabilities): StartConversation {
+  return startFor("openai", apiKey, options, choice, capabilities);
 }
 
 /** Talks to Grok with the user's own key. */
-export function grokConversations(
+export function grokConversations(apiKey: string, options: OpenAIOptions, choice: OpenAIChoice, capabilities: Capabilities): StartConversation {
+  return startFor("grok", apiKey, options, choice, capabilities);
+}
+
+/** Talks to Meta AI's Muse Spark with the user's own key. */
+export function metaConversations(apiKey: string, options: OpenAIOptions, choice: OpenAIChoice, capabilities: Capabilities): StartConversation {
+  return startFor("meta", apiKey, options, choice, capabilities);
+}
+
+/** Talks to a model served on this machine. */
+export function localConversations(apiKey: string, options: OpenAIOptions, choice: OpenAIChoice, capabilities: Capabilities): StartConversation {
+  return startFor("local", apiKey, options, choice, capabilities);
+}
+
+/** A one-off exchange (`StartExchange`) with an OpenAI-shaped Provider, on the same key and model as its Requests. */
+export function openaiExchanges(
+  kind: OpenAIShaped,
   apiKey: string,
   options: OpenAIOptions,
   choice: OpenAIChoice,
   capabilities: Capabilities,
-): StartConversation {
-  const server: Server = { who: "Grok", capabilities, maxTokens: "max_completion_tokens", reasoningApart: true };
-  return start(new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice, server);
+): StartExchange {
+  const [client, chosen] = clientOf(kind, apiKey, options, choice);
+  const server = serverOf(kind, capabilities);
+  return (system, message) => conversation(client, chosen, server, { system, earlier: [], first: () => message });
 }
 
-/**
- * Talks to Meta AI's Muse Spark with the user's own key. Its Chat
- * Completions take the token limit as `max_tokens`, which counts the
- * reasoning too.
- */
-export function metaConversations(
-  apiKey: string,
-  options: OpenAIOptions,
-  choice: OpenAIChoice,
-  capabilities: Capabilities,
-): StartConversation {
-  const server: Server = { who: "Meta AI", capabilities, maxTokens: "max_tokens" };
-  return start(new OpenAI({ apiKey, dangerouslyAllowBrowser: true, ...options }), choice, server);
-}
-
-/**
- * Talks to a model served on this machine. It needs no key, but the SDK
- * insists on one, and a local server ignores it.
- */
-export function localConversations(
-  apiKey: string,
-  options: OpenAIOptions,
-  choice: OpenAIChoice,
-  capabilities: Capabilities,
-): StartConversation {
-  const server: Server = { who: "The local model", capabilities, maxTokens: "max_tokens" };
-  return start(
-    new OpenAI({ apiKey: apiKey || "local", dangerouslyAllowBrowser: true, ...options }),
-    { model: choice.model },
-    server,
-  );
-}
-
-function start(client: OpenAI, choice: OpenAIChoice, server: Server): StartConversation {
-  return (request, project, library = EMPTY_LIBRARY, soFar, mode = DIRECT) =>
-    conversation(client, choice, server, systemPrompt(mode), request, project, library, soFar);
-}
-
-function conversation(
-  client: OpenAI,
-  choice: OpenAIChoice,
-  server: Server,
-  system: string,
-  request: string,
-  project: Project,
-  library: LibraryContents,
-  soFar: ConversationSoFar | undefined,
-): Conversation {
+function conversation(client: OpenAI, choice: OpenAIChoice, server: Server, { system, earlier, first: opening }: Opening): Conversation {
   const messages: OpenAI.ChatCompletionMessageParam[] = [];
   return {
     async next(results, turnsLeft, tools) {
       if (messages.length === 0) {
         messages.push({ role: "system", content: system });
         // The Conversation's earlier Requests come first, as plain text turns.
-        for (const { request: asked, reply } of earlierExchanges(soFar)) {
+        for (const { request: asked, reply } of earlier) {
           messages.push({ role: "user", content: asked }, { role: "assistant", content: reply });
         }
-        messages.push({ role: "user", content: requestMessage(request, project, library, soFar) });
+        messages.push({ role: "user", content: opening() });
       } else {
         messages.push(...toolMessages(results, server.capabilities), { role: "user", content: turnsLeftNote(turnsLeft) });
       }

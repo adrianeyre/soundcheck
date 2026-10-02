@@ -5,6 +5,7 @@ import type { PageGrid } from "./DjPage";
 import { MixerPage } from "./DjPage";
 import { type DjSessionProps, useDjSession } from "./dj-session";
 import type { HeadphoneOutput } from "./headphone-output";
+import type { MixHelperAsk } from "./MixHelper";
 import { PadsPage } from "./PadsPage";
 import { type TimecodeInput, useTimecode } from "./timecode-input";
 
@@ -20,6 +21,8 @@ export interface DjPagesProps extends DjSessionProps {
   timecodeInput?: TimecodeInput | null;
   mixingGrid?: PageGrid;
   padsGrid?: PageGrid;
+  /** Who the Mixer page's Mix Helper can ask: the Assistant's Provider and Jev, where set up. */
+  mixHelper?: MixHelperAsk;
   /** Each page's panel id, for the app's menu to point at. */
   panelId: (view: DjView) => string;
 }
@@ -70,7 +73,7 @@ function DjSessionPages(props: DjPagesProps & { mixingSlot: HTMLElement | null; 
   const shared = { session, onStart, starting, headphones, samples, library, timecode };
   return (
     <>
-      {mixingSlot && createPortal(<MixerPage {...shared} active={view === "mixing"} grid={props.mixingGrid} />, mixingSlot)}
+      {mixingSlot && createPortal(<MixerPage {...shared} active={view === "mixing"} grid={props.mixingGrid} mixHelper={props.mixHelper} />, mixingSlot)}
       {padsSlot && createPortal(<PadsPage {...shared} active={view === "pads"} grid={props.padsGrid} />, padsSlot)}
     </>
   );

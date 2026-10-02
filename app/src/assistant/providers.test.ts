@@ -5,7 +5,7 @@ import { MAX_TURNS, withoutAudio, withoutImage, type ConversationSoFar, type Too
 import type { ProviderId } from "./catalogue";
 import type { Connection } from "./connection";
 import { turnsLeftNote } from "./context";
-import { conversationsFor } from "./providers";
+import { conversationsFor, exchangesFor } from "./providers";
 import { declareCapabilities, addTextOnlyModel, TEXT_ONLY_MODEL } from "./test-catalogue";
 import { AUDIO_ATTACHED, CORE_TOOL_DEFINITIONS, SPECTROGRAM_ATTACHED, toolDefinitions } from "./tools";
 
@@ -687,4 +687,24 @@ test("Meta AI: an effort the model doesn't take is left off, and reasoning can't
   expect(sent[0]!.body.model).toBe("muse-spark-1.2");
   expect(sent[0]!.body.reasoning_effort).toBeUndefined();
   expect(sent[1]!.body.reasoning_effort).toBeUndefined();
+});
+
+test("a one-off exchange goes to each Provider with its own system prompt and message, and no Project", async () => {
+  const tool = { name: "suggest_tracks", description: "Pick tracks.", input_schema: CORE_TOOL_DEFINITIONS[0]!.input_schema };
+  const call = { trackId: "track-1", why: "Up a fifth." };
+  const replies: Record<"claude" | "openai" | "gemini", unknown> = {
+    claude: claudeMessage([{ type: "tool_use", id: "toolu_1", name: "suggest_tracks", input: { picks: [call] } }], "tool_use"),
+    openai: completion({ tool_calls: [{ id: "call_1", type: "function", function: { name: "suggest_tracks", arguments: JSON.stringify({ picks: [call] }) } }] }),
+    gemini: generated([{ functionCall: { id: "call_1", name: "suggest_tracks", args: { picks: [call] } } }]),
+  };
+  for (const provider of ["claude", "openai", "gemini"] as const) {
+    const { fetch, sent } = stubbed(replies[provider]);
+    const reply = await exchangesFor(provider, { apiKey: "sk-test" }, fetch)("You are the Mix Helper.", "Mixing into Deck 1.").next([], 1, [tool]);
+    expect(reply.toolCalls).toEqual([{ id: expect.any(String), name: "suggest_tracks", input: { picks: [call] } }]);
+    const body = JSON.stringify(sent[0]!.body);
+    expect(body).toContain("You are the Mix Helper.");
+    expect(body).toContain("Mixing into Deck 1.");
+    expect(body).not.toContain("A summary of the Project");
+    expect(body).not.toContain("You are the Assistant in Soundcheck");
+  }
 });
