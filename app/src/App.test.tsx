@@ -424,6 +424,7 @@ test("the Grid menu lists the open page's Widgets, and each page keeps its own l
     "Deck 4 (empty)",
     "Track browser 1",
     "Track browser 2",
+    "Mix Helper",
     "Pad Controller",
   ]);
   // The Pad Controller is on the Mixer page's Grid menu, but hidden until the DJ shows it.

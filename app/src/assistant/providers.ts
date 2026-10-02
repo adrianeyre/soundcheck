@@ -3,12 +3,19 @@
  * that `runRequest` talks through, whichever model is behind it. Every
  * provider's requests go through the `fetch` given here, the platform's.
  */
-import type { StartConversation } from "./assistant";
+import type { StartConversation, StartExchange } from "./assistant";
 import { assistantModel, effortsFor, provider as providerOf, type ProviderId } from "./catalogue";
-import { claudeConversations } from "./claude";
+import { claudeConversations, claudeExchanges } from "./claude";
 import { capabilitiesFor, clientOptions, headersOf, modelChoice, type Connection } from "./connection";
-import { geminiConversations } from "./gemini";
-import { grokConversations, localConversations, metaConversations, openaiConversations, type OpenAIChoice } from "./openai";
+import { geminiConversations, geminiExchanges } from "./gemini";
+import {
+  grokConversations,
+  localConversations,
+  metaConversations,
+  openaiConversations,
+  openaiExchanges,
+  type OpenAIChoice,
+} from "./openai";
 
 export function conversationsFor(
   provider: ProviderId,
@@ -56,6 +63,38 @@ export function conversationsFor(
       );
     case "gemini":
       return geminiConversations(
+        connection.apiKey,
+        { ...(baseUrl && { baseUrl }), headers, ...(fetch && { fetch }) },
+        { model, ...(effort && { effort }) },
+        capabilities,
+      );
+  }
+}
+
+/**
+ * A one-off exchange with `provider`, outside any Request (`StartExchange`),
+ * on the same key, model, effort and gateway as its Requests: what the Mix
+ * Helper asks the musician's Provider through.
+ */
+export function exchangesFor(provider: ProviderId, connection: Connection, fetch: typeof globalThis.fetch | undefined): StartExchange {
+  const model = assistantModel(provider, connection.model);
+  const capabilities = capabilitiesFor(provider, connection);
+  const effort = connection.effort && effortsFor(provider, model).includes(connection.effort) ? connection.effort : undefined;
+  const baseUrl = connection.baseUrl?.trim();
+  const headers = headersOf(connection);
+  const openai = { ...(baseUrl && { baseURL: baseUrl }), ...(Object.keys(headers).length > 0 && { defaultHeaders: headers }), fetch };
+  const choice = { model, ...(effort && { effort: effort as OpenAIChoice["effort"] }) };
+  switch (provider) {
+    case "claude":
+      return claudeExchanges(connection.apiKey, { ...clientOptions(connection), fetch }, modelChoice({ ...connection, model }), capabilities);
+    case "openai":
+      return openaiExchanges("openai", connection.apiKey, openai, choice, capabilities);
+    case "grok":
+    case "meta":
+    case "local":
+      return openaiExchanges(provider, connection.apiKey, { ...openai, baseURL: baseUrl || providerOf(provider).baseUrl }, choice, capabilities);
+    case "gemini":
+      return geminiExchanges(
         connection.apiKey,
         { ...(baseUrl && { baseUrl }), headers, ...(fetch && { fetch }) },
         { model, ...(effort && { effort }) },

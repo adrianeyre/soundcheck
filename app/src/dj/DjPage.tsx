@@ -14,6 +14,7 @@ import { DeckPanel } from "./DeckPanel";
 import { type DjSession, type DjSessionProps, useDjSession } from "./dj-session";
 import { titleOf } from "./dj-state";
 import { MixerPanel } from "./MixerPanel";
+import { MixHelper, type MixHelperAsk } from "./MixHelper";
 import { PadController } from "./PadController";
 import type { DjRecordingSaver } from "./recording-saver";
 import type { TimecodeControls } from "./timecode-input";
@@ -73,6 +74,10 @@ export interface DjPageProps {
    * to say which Widgets have nothing to show. Without one the page keeps a layout of its own.
    */
   grid?: PageGrid;
+  /** Who the Mix Helper can ask to pick a track: the Assistant's Provider and Jev, where set up. */
+  mixHelper?: MixHelperAsk;
+  /** Analyse each Track browser file as it is added (`DjSessionProps.analyse`). */
+  analyse?: DjSessionProps["analyse"];
 }
 
 /**
@@ -97,6 +102,8 @@ export interface SessionPageProps {
   grid?: PageGrid;
   /** The Decks' timecode vinyl (`useTimecode`), or absent for none. */
   timecode?: TimecodeControls | null;
+  /** Who the Mix Helper can ask to pick a track: the Assistant's Provider and Jev, where set up. */
+  mixHelper?: MixHelperAsk;
 }
 
 /**
@@ -348,6 +355,7 @@ export function MixerPage(props: SessionPageProps) {
           ),
           djBrowser: <SessionBrowser session={session} number={1} samples={samples} library={folderLibrary} />,
           djBrowser2: <SessionBrowser session={session} number={2} samples={samples} library={folderLibrary} />,
+          djMixHelper: <MixHelper session={session} {...props.mixHelper} />,
           djPadController: <PadController session={session} id="mixing" timecode={props.timecode} />,
         }}
       />

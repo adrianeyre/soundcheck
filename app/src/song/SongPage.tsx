@@ -5,7 +5,10 @@ import { createPortal } from "react-dom";
 import type { Listen } from "../assistant/assistant";
 import { AssistantSettings } from "../assistant/AssistantSettings";
 import { RequestBox, type RequestBoxProps } from "../assistant/RequestBox";
-import { useJevConnection } from "../assistant/assistant-settings";
+import { useJevConnection, useSavedSettings } from "../assistant/assistant-settings";
+import { provider as providerOf } from "../assistant/catalogue";
+import { chosenConnection, readyProviders } from "../assistant/connection";
+import { exchangesFor } from "../assistant/providers";
 import { jevDecide } from "../assistant/jev";
 import type { KeyStore } from "../assistant/key-store";
 import { assistantLibrary } from "../assistant/library";
@@ -102,6 +105,8 @@ import type { Updater } from "../update/updater";
 import { UpdateSettings } from "../update/UpdateSettings";
 import { useUpdates } from "../update/useUpdates";
 import { DjPages } from "../dj/DjPages";
+import type { MixHelperAsk } from "../dj/MixHelper";
+import { analyseTrack } from "../dj/track-analysis";
 import type { AddedTake, AddTakeRequest } from "../dj/dj-session";
 import type { HeadphoneOutput } from "../dj/headphone-output";
 import type { TimecodeInput } from "../dj/timecode-input";
@@ -346,6 +351,17 @@ export function SongPage({
   // Jev, where it is set up, picks the Chords Widget's next chord.
   const jev = useJevConnection(keyStore);
   const nextChord = useMemo(() => (jev ? jevNextChord(jevDecide(jev, fetch), parallelKey) : undefined), [jev, fetch]);
+  // The Mixer page's Mix Helper asks the chosen Provider and Jev, each where it is set up.
+  const savedSettings = useSavedSettings(keyStore);
+  const mixHelper = useMemo<MixHelperAsk>(() => {
+    const provider = savedSettings?.provider;
+    const connection = chosenConnection(savedSettings);
+    const ready = provider !== undefined && connection !== null && readyProviders(savedSettings).includes(provider);
+    return {
+      assistant: ready ? { name: providerOf(provider).name, exchange: exchangesFor(provider, connection, fetch) } : null,
+      decide: jev ? jevDecide(jev, fetch) : null,
+    };
+  }, [savedSettings, jev, fetch]);
   // The notes held right now, from the on-screen keys, the computer keyboard or MIDI, for the pianos to light.
   const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
   const [samples, setSamples] = useState<LoadedSamples>(new Map());
@@ -1782,6 +1798,8 @@ export function SongPage({
         mixingGrid={mixingGrid}
         padsGrid={padsGrid}
         onAddToSong={addTakeToSong}
+        analyse={analyseTrack}
+        mixHelper={mixHelper}
       />
 
       <div id={viewPanelId("settings")} className="page" hidden={view !== "settings"} aria-labelledby="settings-title">

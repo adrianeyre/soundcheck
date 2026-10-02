@@ -531,6 +531,20 @@ lists what to try.
 
 ### Releases and updates
 
+Every Release on the
+[Releases page](https://github.com/adrianeyre/soundcheck/releases) has the
+Desktop App for **Windows** (`Soundcheck_<version>_x64-setup.exe`), **macOS**
+(`Soundcheck_<version>_aarch64.dmg`) and **Linux**
+(`Soundcheck_<version>_amd64.AppImage` and `.deb`), built by
+`.github/workflows/release.yml` from the version's tag, and one zip per
+system holding them: `Soundcheck_<version>_windows.zip`, `_macos.zip` and
+`_linux.zip`. A Release is a draft
+until all of them are on it. If a run fails after tagging, the next run
+finishes the newest tag's draft; any tag's installers can also be built by
+hand, with *Actions → Release → Run workflow* and the tag, or
+`gh workflow run release.yml -f tag=v1.6.0`. Building an older tag never
+makes it the latest Release.
+
 The installed Desktop App **updates itself** (#74,
 [ADR 0011](docs/architectural-decision-record/0011-the-desktop-app-updates-itself-from-the-latest-github-release.md)),
 through [Tauri's updater](https://v2.tauri.app/plugin/updater/): the Windows
@@ -925,6 +939,18 @@ which Instrument) through its `decide` tool, and still makes every change itself
 progression from the pads. It is a hosted service, so what it is asked leaves your
 machine; it is billed per input token to your TypeSafe account. See
 [ADR 0014](docs/architectural-decision-record/0014-jev-is-a-decision-engine-beside-the-assistant.md).
+
+On the **Mixer** page, the **Mix Helper** Widget helps you mix harmonically. Every
+file you add to the Track browser is analysed for its BPM and key as it is added.
+The Widget shows what is on each Deck, with its tempo and key as you hear them now.
+It ranks the other tracks by how well each would mix into the Deck you pick: by key
+round the Camelot wheel (the same key, a step either way, the relative major or minor,
+a diagonal step or an energy boost) and by the tempo change that beat-matches it. One
+click loads a match onto a free Deck. With the Assistant set up, **Ask the Assistant**
+has your Provider pick up to five tracks from that ranking, each with why. With Jev set
+up, **Ask Jev** has Jev choose too, with a probability for each pick. Either sends the
+Decks and your tracks' titles, BPM and keys, and nothing else. See
+[ADR 0015](docs/architectural-decision-record/0015-the-mix-helper-asks-outside-a-request.md).
 
 The Browser Version (and `pnpm dev`) has no credential store, so there it is
 kept in the browser's local storage; on Linux the credential store is the Secret

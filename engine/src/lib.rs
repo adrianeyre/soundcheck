@@ -258,6 +258,17 @@ pub fn dj_prepare(bytes: &[u8], sample_rate: f32) -> Result<DjPrepared, String> 
         .map_err(|error| error.message().to_string())
 }
 
+/// A file's BPM, Beat Grid, key and waveform, as `DjPrepared::analysis`
+/// writes them, without decoding it for a Deck: the Track browser's tracks,
+/// analysed as they are added, for the Mix Helper. Throws what is wrong with
+/// a file that isn't WAV, FLAC or MP3.
+#[wasm_bindgen]
+pub fn dj_analyse(bytes: &[u8]) -> Result<String, String> {
+    dj::analyse_track(bytes)
+        .map(|analysis| analysis.to_json())
+        .map_err(|error| error.message().to_string())
+}
+
 /// A sample decoded for a Sampler Slot at the engine's rate, and its tempo
 /// found, on the page's thread, so the audio thread only moves it in.
 #[wasm_bindgen]

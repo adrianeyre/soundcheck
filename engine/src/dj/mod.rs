@@ -140,6 +140,15 @@ impl PreparedDjTrack {
     }
 }
 
+/// A file's BPM, **Beat Grid**, key and waveform, as a Deck shows them,
+/// without putting it on one: the Track browser's tracks are analysed as
+/// they are added, so the Mix Helper can match them before any is loaded.
+/// It is measured at the file's own rate, so it needs no audio running.
+pub fn analyse_track(bytes: &[u8]) -> Result<TrackAnalysis, AudioFileError> {
+    let decoded = decode(bytes)?;
+    Ok(analyse(&decoded.left, &decoded.right, decoded.rate as f32))
+}
+
 /// One thing a host can set on the DJ Mixer. Parsed from its name off the
 /// audio thread, so applying it allocates nothing.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1360,6 +1369,29 @@ mod tests {
         let prepared = PreparedDjTrack::decode(bytes, RATE).unwrap();
         assert!((prepared.analysis.seconds - 0.25).abs() < 1e-3);
         assert_eq!(prepared.track.file.left().len(), 12_000);
+    }
+
+    #[test]
+    fn a_track_is_analysed_without_a_deck_at_its_own_rate() {
+        let rate = 44_100;
+        let beat = 60.0 / 126.0;
+        let mut clicks = vec![0.0f32; rate as usize * 20 * 2];
+        let mut at = 0.1;
+        while ((at * f64::from(rate)) as usize) < clicks.len() / 2 {
+            let start = (at * f64::from(rate)) as usize;
+            for i in 0..300.min(clicks.len() / 2 - start) {
+                let sample = (-(i as f32) / 70.0).exp() * if i % 2 == 0 { 0.8 } else { -0.8 };
+                clicks[(start + i) * 2] = sample;
+                clicks[(start + i) * 2 + 1] = sample;
+            }
+            at += beat;
+        }
+        let bytes =
+            crate::wav_writer::wav_bytes(&clicks, rate, crate::wav_writer::SampleFormat::Int16);
+        let found = analyse_track(&bytes).unwrap();
+        assert!((found.bpm - 126.0).abs() < 1.0, "{}", found.bpm);
+        assert!((found.seconds - 20.0).abs() < 1e-3);
+        assert!(analyse_track(b"not audio").is_err());
     }
 
     #[test]

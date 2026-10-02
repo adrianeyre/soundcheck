@@ -225,6 +225,14 @@ export type StartConversation = (
   mode?: RequestMode,
 ) => Conversation;
 
+/**
+ * Opens a one-off exchange with the musician's Provider outside any
+ * Request: its own system prompt and message, without the Project, and
+ * whatever tools its first `next` is given. It changes nothing and is no
+ * undo step; the Mix Helper asks for its picks this way.
+ */
+export type StartExchange = (system: string, message: string) => Conversation;
+
 /** How a Request runs, as the musician set the Assistant up for its Provider. */
 export interface RequestMode {
   /** It starts with the smaller core (`SMALL_CORE_TOOL_DEFINITIONS`): a Local model's default. */
