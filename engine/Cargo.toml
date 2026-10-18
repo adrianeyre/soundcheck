@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 png = "0.18.1"
 # Encodes an exported mix as MP3: pure Rust, so it builds for WASM too.
-rusty_mp3 = "0.8.0"
+rusty_mp3 = "1.0.0"
 # Reads a Plugin's manifest, which is JSON the Plugin writes (ADR 0003).
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
