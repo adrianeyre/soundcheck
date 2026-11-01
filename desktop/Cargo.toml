@@ -36,7 +36,7 @@ tauri-plugin-http = { version = "2.7.0", default-features = false, features = ["
 tauri-plugin-updater = "2.12.0"
 # Runs WASM Plugins (ADR 0003): core modules only, compiled by Cranelift,
 # with epoch interruption to stop a runaway one.
-wasmtime = { version = "49.0.1", default-features = false, features = ["cranelift", "runtime", "std"] }
+wasmtime = { version = "50.0.1", default-features = false, features = ["cranelift", "runtime", "std"] }
 
 # JACK as a second audio host on Linux, which PipeWire also serves through its
 # JACK layer. libjack is loaded when the host is first used, not linked, so
