@@ -206,8 +206,8 @@ importers:
   app:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^1.4.0
-        version: 1.4.0
+        specifier: ^0.137.0
+        version: 0.137.0
       '@google/genai':
         specifier: ^2.32.0
         version: 2.32.0(supports-color@7.2.0)
@@ -348,8 +348,8 @@ packages:
       modal:
         optional: true
 
-  '@anthropic-ai/sdk@1.4.0':
-    resolution: {integrity: sha512-tyuibnhQL57kLOx5oomY4Ld7jOVOPNC5v3IiyRtR3l+Friv66tI4VbuZYF2NMel/T0WMuQMBFOMKDBUbUh8gPA==}
+  '@anthropic-ai/sdk@0.137.0':
+    resolution: {integrity: sha512-YpEnbPz8kWF1BWthwUCnRhci7OvDLSUO8NFKoevoPkjNkK9CJeibZITgxr9vhqOP8Le61e5tNDHFTxw1dc6Png==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -3004,7 +3004,7 @@ snapshots:
     dependencies:
       '@clack/prompts': 1.8.1
 
-  '@anthropic-ai/sdk@1.4.0':
+  '@anthropic-ai/sdk@0.137.0':
     dependencies:
       '@opentelemetry/api': 1.10.0
       json-schema-to-ts: 3.1.1
