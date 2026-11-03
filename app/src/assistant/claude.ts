@@ -62,6 +62,23 @@ const MAX_TOKENS = 16_000;
  */
 export type ClaudeOptions = Pick<ClientOptions, "fetch" | "baseURL" | "defaultHeaders" | "maxRetries">;
 
+/**
+ * The SDK's client, with the key in `X-Api-Key`. From SDK 1.0 the key goes
+ * out as `Authorization: Bearer` by default. The Claude API takes either, but
+ * a gateway in front of it may read only `X-Api-Key`, which is where the key
+ * always went, so it stays there and no `Authorization` goes out with it. A
+ * `Connection`'s own headers come last, so a gateway that wants its own
+ * `Authorization` still gets it.
+ */
+function claudeClient(apiKey: string, { defaultHeaders, ...options }: ClaudeOptions): Anthropic {
+  return new Anthropic({
+    apiKey,
+    dangerouslyAllowBrowser: true,
+    ...options,
+    defaultHeaders: { "X-Api-Key": apiKey, Authorization: null, ...defaultHeaders },
+  });
+}
+
 /** Talks to Claude with the user's own key. */
 export function claudeConversations(
   apiKey: string,
@@ -69,7 +86,7 @@ export function claudeConversations(
   choice: ModelChoice = {},
   capabilities: Capabilities = capabilitiesOf("claude", choice.model ?? ASSISTANT_MODEL),
 ): StartConversation {
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, ...options });
+  const client = claudeClient(apiKey, options);
   return (request, project, library, soFar, mode) =>
     conversation(client, choice, capabilities, requestOpening(request, project, library, soFar, mode));
 }
@@ -81,7 +98,7 @@ export function claudeExchanges(
   choice: ModelChoice = {},
   capabilities: Capabilities = capabilitiesOf("claude", choice.model ?? ASSISTANT_MODEL),
 ): StartExchange {
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, ...options });
+  const client = claudeClient(apiKey, options);
   return (system, message) => conversation(client, choice, capabilities, { system, earlier: [], first: () => message });
 }
 
