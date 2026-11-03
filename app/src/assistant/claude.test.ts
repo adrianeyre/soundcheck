@@ -192,6 +192,27 @@ test("a connection's base URL and custom headers go on the request", async () =>
   expect(seen[0]?.headers.get("x-api-key")).toBe("sk-test");
 });
 
+// SDK 1.0 sends the key as `Authorization: Bearer`; a gateway may read only `X-Api-Key`.
+test("the key goes only in X-Api-Key, unless the connection sets its own Authorization", async () => {
+  const seen: Headers[] = [];
+  const fetch = (_input: string | URL | Request, init?: RequestInit) => {
+    seen.push(new Headers(init?.headers));
+    return Promise.resolve(
+      new Response(JSON.stringify(message([{ type: "text", text: "Done." }], "end_turn")), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+  await claudeConversations("sk-test", { fetch, maxRetries: 0 })("hello", createProject("Demo")).next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
+  const gateway = clientOptions({ apiKey: "sk-test", baseUrl: "https://gateway.example.com", customHeaders: "Authorization: Bearer gw-token" });
+  await claudeConversations("sk-test", { ...gateway, fetch, maxRetries: 0 })("hello", createProject("Demo")).next([], MAX_TURNS, CORE_TOOL_DEFINITIONS);
+
+  expect(seen[0]?.get("x-api-key")).toBe("sk-test");
+  expect(seen[0]?.has("authorization")).toBe(false);
+  expect(seen[1]?.get("x-api-key")).toBe("sk-test");
+  expect(seen[1]?.get("authorization")).toBe("Bearer gw-token");
+});
+
 test("the chosen model and effort go on the request, with effort left off for Haiku", async () => {
   const bodies: Record<string, unknown>[] = [];
   const fetch = (_input: string | URL | Request, init?: RequestInit) => {

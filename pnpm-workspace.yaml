@@ -37,3 +37,11 @@ minimumReleaseAgeExclude:
   - '@oxlint/binding-win32-x64-msvc@1.91.0'
   - openai@7.48.0
   - oxlint@1.91.0
+
+# conventional-changelog-conventionalcommits 10 renders only with
+# conventional-changelog-writer 9, and the latest
+# @semantic-release/release-notes-generator (14.1.1) still asks for ^8.
+# Writer 9 keeps the API it calls (writeChangelogString); drop this once
+# release-notes-generator depends on writer 9 itself.
+overrides:
+  conventional-changelog-writer: ^9.3.0
