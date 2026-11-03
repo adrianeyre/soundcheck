@@ -1,0 +1,48 @@
+/*
+ * Soundcheck's look for the website's illustrations: the app's own dark
+ * studio tokens (`app/src/styles.css`) mapped onto the Stageshow kit's, so a
+ * demo reads as Soundcheck, not as a generic window.
+ */
+.sc-look .ss-stage[data-theme="dark"] {
+  --ss-canvas: #0b0d17;
+  --ss-surface: #141726;
+  --ss-chrome: #1b1f33;
+  --ss-raised: #262b44;
+  --ss-well: #080a12;
+  --ss-fill: #2f3452;
+  --ss-ink-1: rgb(169 176 205 / 0.06);
+  --ss-ink-2: rgb(169 176 205 / 0.09);
+  --ss-ink-3: rgb(169 176 205 / 0.13);
+  --ss-ink-4: rgb(169 176 205 / 0.18);
+  --ss-ink-5: rgb(169 176 205 / 0.26);
+  --ss-line: #2c3150;
+  --ss-line-faint: #1f2340;
+  --ss-text-strong: #eef0fa;
+  --ss-text: #a9b0cd;
+  --ss-text-faint: #737ba3;
+  --ss-icon: #a9b0cd;
+  --ss-icon-faint: #4a5178;
+  --ss-accent: #9d8fff;
+  --ss-accent-2: #3ddc97;
+  --ss-accent-soft: #2d2a5c;
+  --ss-accent-text: #b3a8ff;
+  --ss-success: #3ddc97;
+  --ss-success-text: #3ddc97;
+  --ss-success-soft: rgb(61 220 151 / 0.14);
+  --ss-warning: #f5a524;
+  --ss-font: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --ss-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ss-radius-md: 8px;
+  --ss-radius-lg: 12px;
+  --ss-shadow-hero: 0 0 0 1px rgb(169 176 205 / 0.14), 0 40px 80px -20px rgb(0 0 0 / 0.7);
+
+  /* The app's own: each kind of Track's stripe, and a Pattern Clip's fill. */
+  --sc-kind-instrument: #8b9bff;
+  --sc-kind-drum: #f5a524;
+  --sc-kind-audio: #34d399;
+  --sc-clip: #4453b8;
+  --sc-clip-drum: #8a5a12;
+  --sc-clip-ink: #f5f7ff;
+  --sc-play: #3ddc97;
+  --sc-on-play: #06140e;
+}

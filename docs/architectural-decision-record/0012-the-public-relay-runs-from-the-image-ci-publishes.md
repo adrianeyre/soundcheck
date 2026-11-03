@@ -8,7 +8,7 @@ A **Live Session** needs a Relay: each member's Changes go to it, and it passes 
 
 ### What is built and wired
 
-- **The image.** CI builds `relay/Dockerfile` for every change and checks that the container starts and answers `GET /`. Once a change is on `main`, CI pushes the image to the GitHub Container Registry as `ghcr.io/<owner>/<repository>/relay`, tagged `latest` and with the commit. That needs only the workflow's own token: no secret.
+- **The image.** CI builds `relay/Dockerfile` for every change and checks that the container starts and answers `GET /`. Once a change is on `main`, CI pushes the image to the GitHub Container Registry as `ghcr.io/adrianeyre/soundcheck/relay`, tagged `latest` and with the commit. That needs only the workflow's own token: no secret.
 - **The default address.** The repository variable `RELAY_URL` (a variable, not a secret: the address is public) is built into the Desktop App and the Browser Version as `VITE_RELAY_URL`. It is the Relay they start with.
 - **Without it,** Soundcheck has no default Relay. *Start a Live Session* then says a Relay is needed and points to Settings → Collaboration → Relay address. Everything else works as before, and sharing a Project through a folder needs no Relay at all.
 - **Anyone can run their own** with `docker run` or `cargo run -p soundcheck-relay`, and point their copy at it in Settings. An invite link carries the Relay's address, so whoever joins uses the same one.

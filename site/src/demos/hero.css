@@ -1,0 +1,213 @@
+/* The page is the ground: no plate, the window lit a step above it. */
+.sc-hero .ss-stage {
+  overflow: hidden;
+  background: transparent;
+}
+
+/* Wide hero: inset top and left, off the right (later bars, filler) and
+   off the bottom (empty lanes). The Assistant column and the Build-up stay
+   whole. */
+.sc-hero .sc-hero__win {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  width: 1240px;
+  height: 640px;
+  box-shadow: var(--ss-shadow-hero);
+}
+
+.sc-hero .sc-hero__transport {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ss-line);
+  background: var(--ss-surface);
+  font-size: 12px;
+  color: var(--ss-text);
+}
+.sc-hero .sc-hero__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--sc-play) 22%, var(--ss-surface));
+  color: var(--sc-play);
+  font-weight: 600;
+}
+.sc-hero .sc-hero__pos {
+  min-width: 76px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--ss-well);
+  color: var(--ss-text-strong);
+  font-family: var(--ss-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-hero .sc-hero__undo {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  color: var(--ss-icon);
+}
+
+.sc-hero .sc-hero__body {
+  display: grid;
+  grid-template-columns: 328px 1fr;
+  height: calc(100% - 48px);
+  background: var(--ss-canvas);
+}
+.sc-hero .sc-hero__title {
+  padding: 14px 16px 10px;
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sc-hero .sc-hero__assistant {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  /* The composer ends a gutter above the stage's foot: the window runs off
+     under it, never at it */
+  padding-bottom: 148px;
+  border-right: 1px solid var(--ss-line);
+  background: var(--ss-surface);
+}
+.sc-hero .sc-hero__thread {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 0;
+  padding: 0 16px 16px;
+  overflow: hidden;
+}
+.sc-hero .sc-hero__past {
+  display: grid;
+  gap: 8px;
+}
+.sc-hero .sc-hero__past-q {
+  justify-self: end;
+}
+.sc-hero .sc-hero__q {
+  justify-self: end;
+  margin-left: auto;
+  width: fit-content;
+  max-width: 82%;
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--ss-accent-soft);
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+.sc-hero .sc-hero__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ss-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.sc-hero .sc-hero__status .ss-spinner {
+  flex: none;
+  color: var(--sc-play);
+}
+.sc-hero .sc-hero__a {
+  display: grid;
+  gap: 12px;
+}
+.sc-hero .sc-hero__stream {
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.sc-hero .sc-hero__changes {
+  display: grid;
+  will-change: transform;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sc-hero .sc-hero__changes[data-on] {
+  opacity: 1;
+  transform: none;
+}
+.sc-hero .sc-hero__change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  color: var(--ss-text);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.sc-hero .sc-hero__change i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--sc-play);
+}
+.sc-hero .sc-hero__change i[data-kind="clip"] {
+  background: var(--sc-clip);
+}
+.sc-hero .sc-hero__composer {
+  margin: 0 16px;
+}
+
+.sc-hero .sc-hero__timeline {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Phone column: the window a gutter in, off the right and the bottom; the
+   Timeline above, small, so the Build-up opening still shows, and the
+   Assistant under it. */
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__win {
+  top: 16px;
+  left: 16px;
+  width: 326px;
+  height: 680px;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__transport {
+  gap: 12px;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__body {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__timeline {
+  order: -1;
+  border-bottom: 1px solid var(--ss-line);
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__assistant {
+  padding-bottom: 56px;
+  border-right: 0;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__past {
+  display: none;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-hero__q {
+  max-width: 260px;
+}
+.sc-hero .ss-stage[data-layout="compact"] .sc-tl__section {
+  padding: 0 5px;
+}
