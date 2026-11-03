@@ -42,7 +42,7 @@ docker run -p 8080:8080 soundcheck-relay
 ```
 
 CI builds that image for every change, and once a change is on `main` it
-publishes it as `ghcr.io/<owner>/<repository>/relay`, tagged `latest` and with
+publishes it as `ghcr.io/adrianeyre/soundcheck/relay`, tagged `latest` and with
 the commit.
 
 `GET /` answers `Soundcheck Relay`, for a health check. Sessions are at

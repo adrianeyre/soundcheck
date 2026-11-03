@@ -558,23 +558,37 @@ jobs:
       - id: site
         uses: actions/configure-pages@v6
 
-      # The WASM engine and the app, then the check that the build works
-      # under the site's sub-path.
+      # The WASM engine and the Browser Version, the check that it works
+      # under a sub-path, then the website. The website is the site's root
+      # and the Browser Version is `app/` under it (ADR 0017), so each is
+      # built with its own address.
       - run: pnpm build
         env:
-          VITE_SITE_URL: ${{ steps.site.outputs.base_url }}
+          VITE_SITE_URL: ${{ steps.site.outputs.base_url }}/app
           # The Relay Live Sessions start with, if the maintainer has set one (ADR 0012).
           VITE_RELAY_URL: ${{ vars.RELAY_URL }}
+      - run: pnpm --filter @soundcheck/site build
+        env:
+          VITE_SITE_URL: ${{ steps.site.outputs.base_url }}
+
+      - name: Put the website at the root and the Browser Version under app/
+        run: |
+          mkdir _site
+          cp -R site/dist/. _site/
+          cp -R app/dist _site/app
 
       # The live site's files, beside the new build's: a deploy replaces the
       # whole site, and a page opened before it, still open, would otherwise
       # get a 404 for its engine or a chunk it loads later. The page then
       # offers to reload to the new version (`app/src/update/new-deploy.ts`).
-      - run: node scripts/keep-live-assets.ts "${{ steps.site.outputs.base_url }}" app/dist
+      # Both places: `app/` for the Browser Version now, and the root, where
+      # it was until ADR 0017, for a page left open across that move.
+      - run: node scripts/keep-live-assets.ts "${{ steps.site.outputs.base_url }}/app" _site/app
+      - run: node scripts/keep-live-assets.ts "${{ steps.site.outputs.base_url }}" _site
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: app/dist
+          path: _site
 
       - id: deploy
         uses: actions/deploy-pages@v5

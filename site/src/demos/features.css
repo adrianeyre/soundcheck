@@ -1,0 +1,405 @@
+/* Every tile: the stage is the shot, cut to the tile's shape, on the tile's ground. */
+.sc-tile .ss-stage {
+  overflow: hidden;
+  background: transparent;
+}
+.sc-tile .ss-window {
+  box-shadow: var(--ss-shadow-hero);
+}
+
+/* --- Mix Helper: the spectrum window bleeds right and down; the note straddles its left edge. */
+.sc-mix .sc-mix__win {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  width: 340px;
+  height: 330px;
+}
+.sc-mix .sc-mix__body {
+  height: 100%;
+  padding: 16px 20px;
+  background: var(--ss-surface);
+}
+.sc-mix .sc-mix__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sc-mix .sc-mix__lufs {
+  color: var(--ss-text-strong);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.sc-mix .sc-mix__lufs small {
+  margin-left: 2px;
+  color: var(--ss-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sc-mix .sc-mix__chart {
+  position: relative;
+}
+.sc-mix .sc-mix__chart .ss-chart {
+  --ss-accent: #8b9bff;
+}
+/* 50 to 90 Hz on the chart's log axis: the band the note is about */
+.sc-mix .sc-mix__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14%;
+  width: 13%;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--sc-kind-drum) 18%, transparent);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--sc-kind-drum) 60%, transparent), inset -1px 0 0 color-mix(in srgb, var(--sc-kind-drum) 60%, transparent);
+}
+.sc-mix .sc-mix__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--ss-text-faint);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.sc-mix .sc-mix__note {
+  position: absolute;
+  top: 96px;
+  left: 258px;
+  width: 220px;
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  background: var(--ss-raised);
+  box-shadow: var(--ss-shadow-satellite);
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sc-mix .sc-mix__note-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--ss-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sc-mix .sc-mix__note p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.sc-mix .sc-mix__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sc-mix .sc-mix__apply,
+.sc-mix .sc-mix__later {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.sc-mix .sc-mix__apply {
+  background: var(--ss-accent);
+  color: #0b0d17;
+}
+.sc-mix .sc-mix__later {
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  color: var(--ss-text);
+}
+.sc-mix .ss-stage[data-layout="compact"] .sc-mix__win {
+  left: 16px;
+  width: 326px;
+}
+/* Narrow: over the quiet top end of the spectrum, clear of the low-end peak */
+.sc-mix .ss-stage[data-layout="compact"] .sc-mix__note {
+  top: 104px;
+  left: 142px;
+  width: 200px;
+}
+
+/* --- Stems: pinned, bottom bleed; the lanes open one by one. */
+.sc-stems .sc-stems__win {
+  position: absolute;
+  top: 28px;
+  left: 44px;
+  width: 520px;
+  height: 330px;
+}
+.sc-stems .sc-stems__body {
+  height: 100%;
+  padding: 12px 0;
+  background: var(--ss-surface);
+}
+.sc-stems .sc-stems__lane {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+}
+.sc-stems .sc-stems__lane--source {
+  height: 44px;
+}
+.sc-stems .sc-stems__name {
+  overflow: hidden;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sc-stems .sc-stems__name::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--sc-kind-audio);
+  vertical-align: -2px;
+}
+.sc-stems .sc-stems__clip {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #1f7a5c;
+  fill: #d7ffef;
+  overflow: hidden;
+}
+.sc-stems .sc-stems__lane--source .sc-stems__clip {
+  height: 36px;
+  background: #175c46;
+}
+.sc-stems .sc-stems__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 16px 6px 124px;
+  color: var(--ss-text);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.sc-stems .sc-stems__status[data-done] {
+  color: var(--sc-play);
+}
+.sc-stems .sc-stems__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sc-play);
+  animation: sc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sc-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sc-stems .ss-stage[data-layout="compact"] .sc-stems__win {
+  left: 16px;
+  width: 380px;
+}
+.sc-stems .ss-stage[data-layout="compact"] .sc-stems__lane {
+  grid-template-columns: 84px 1fr;
+}
+.sc-stems .ss-stage[data-layout="compact"] .sc-stems__status {
+  margin-left: 100px;
+}
+
+/* --- DJ: two Decks, Deck 1 blue and Deck 2 orange as the Mixer page colours them. */
+.sc-dj .sc-dj__win {
+  position: absolute;
+  top: 28px;
+  left: 39px;
+  width: 470px;
+  height: 330px;
+}
+.sc-dj .sc-dj__body {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+  align-content: start;
+  padding: 14px 16px;
+  background: var(--ss-surface);
+}
+.sc-dj .sc-dj__deck {
+  --deck: #4aa3ff;
+  display: grid;
+  gap: 8px;
+}
+.sc-dj .sc-dj__deck[data-deck="2"] {
+  --deck: #ff8a3d;
+}
+.sc-dj .sc-dj__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ss-text);
+}
+.sc-dj .sc-dj__n {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--deck);
+  color: #0b0d17;
+  font-weight: 700;
+}
+.sc-dj .sc-dj__track {
+  color: var(--ss-text-strong);
+  font-weight: 600;
+}
+.sc-dj .sc-dj__bpm {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ss-text-strong);
+}
+.sc-dj .sc-dj__sync {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--deck) 24%, transparent);
+  color: var(--deck);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sc-dj .sc-dj__wave {
+  position: relative;
+  height: 48px;
+  padding: 4px 0;
+  border-radius: 6px;
+  background: #07080f;
+  fill: var(--deck);
+  overflow: hidden;
+}
+.sc-dj .sc-dj__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: #ff5c5c;
+}
+.sc-dj .sc-dj__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+.sc-dj .sc-dj__play {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  color: var(--ss-icon);
+}
+.sc-dj .sc-dj__play[data-on] {
+  background: color-mix(in srgb, var(--sc-play) 22%, var(--ss-surface));
+  box-shadow: none;
+  color: var(--sc-play);
+}
+.sc-dj .sc-dj__fader {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ss-raised);
+}
+.sc-dj .sc-dj__thumb {
+  position: absolute;
+  top: 50%;
+  left: 62%;
+  width: 14px;
+  height: 26px;
+  border-radius: 4px;
+  background: var(--ss-text-strong);
+  translate: -50% -50%;
+}
+.sc-dj .ss-stage[data-layout="compact"] .sc-dj__win {
+  left: 16px;
+  width: 326px;
+}
+.sc-dj .ss-stage[data-layout="compact"] .sc-dj__key {
+  display: none;
+}
+
+/* --- Live: each person one colour: their face, their tag, their selection. */
+.sc-live .sc-live__win {
+  position: absolute;
+  top: 28px;
+  left: 39px;
+  width: 470px;
+  height: 330px;
+}
+.sc-live .sc-live__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ss-line);
+  background: var(--ss-surface);
+}
+.sc-live .sc-live__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sc-live .sc-live__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sc-play);
+}
+.sc-live .sc-live__tl {
+  position: relative;
+  height: 100%;
+  background: var(--ss-canvas);
+}
+.sc-live .sc-live__sel {
+  --who: #c47a9e;
+  position: absolute;
+  height: 40px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 2px var(--who);
+  pointer-events: none;
+}
+.sc-live .sc-live__sel[data-who="maya"] {
+  --who: #c98f6e;
+}
+.sc-live .sc-live__tag {
+  position: absolute;
+  top: -11px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: var(--who);
+  color: #0b0d17;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.sc-live .ss-stage[data-layout="compact"] .sc-live__win {
+  left: 16px;
+  width: 326px;
+}

@@ -1,6 +1,24 @@
 # Soundcheck
 
 A music-creation app (a DAW) whose Assistant can edit and listen to your song.
+
+**[Website](https://adrianeyre.github.io/soundcheck/)** ·
+**[Open the Browser Version](https://adrianeyre.github.io/soundcheck/app/)** ·
+**[Download for Windows, macOS or Linux](https://github.com/adrianeyre/soundcheck/releases/latest)** ·
+[Changelog](CHANGELOG.md)
+
+![The Editor with a song open: the transport, the Assistant's Request box, the Tracks and the Timeline with its Sections and Clips](docs/screenshots/editor.png)
+
+| | |
+| --- | --- |
+| ![The Mixer page: two Decks, their waveforms, and the four-channel DJ Mixer](docs/screenshots/mixer.png) | ![The Pads page: the pad controller for the Decks and the Sampler](docs/screenshots/pads.png) |
+| **The Mixer page**: two or four Decks, beat-matched in the Audio Engine | **The Pads page**: a pad controller for the Decks, played from the keyboard |
+| ![The Settings page: what the Browser Version lacks, and the Assistant's Provider and model](docs/screenshots/settings.png) | ![The Editor in the light theme](docs/screenshots/editor-light.png) |
+| **Settings**: the Assistant's Provider and model, Plugins, Collaboration | **The light theme**, beside the dark one, each with six palettes |
+
+The screenshots are of the Browser Version, with a short demo song open.
+[The website](#the-website) is in `site/`.
+
 The Audio Engine is Rust and the UI is React. The MVP ships as a Tauri
 desktop app for Windows ([ADR 0002](docs/architectural-decision-record/0002-mvp-is-a-desktop-app.md)),
 with the engine running natively on the audio device through cpal. The same UI
@@ -861,7 +879,9 @@ secret, only Pages turned on:
    GitHub Actions**.
 2. Push to `main` (or re-run the latest CI run on it). The run's `web` job
    links to the site: `https://adrianeyre.github.io/soundcheck/`, unless
-   Pages has a custom domain.
+   Pages has a custom domain. The root is [the website](#the-website), and
+   the Browser Version is under it at `app/`
+   ([ADR 0017](docs/architectural-decision-record/0017-the-website-is-the-pages-root-and-the-browser-version-is-under-app.md)).
 
 Until Pages is on (and on a fork), the `pages` job leaves a notice, "Browser
 Version not deployed", and `web` is skipped; CI stays green. The build takes
@@ -885,10 +905,35 @@ The Assistant's API key is kept in the browser's local storage there, and on
 can all read it. A custom domain gives the Browser Version an origin of its
 own.
 
+### The website
+
+`site/` is the page at the root of the Pages site: what Soundcheck is, its
+features, the downloads (each the latest GitHub Release) and a link into the
+Browser Version. `pnpm site:dev` serves it on port 5146. It doesn't need the
+engine, and CI checks it in a `site` job of its own.
+
+![The website: the headline, the downloads, and the hero illustration of the Editor, where the Assistant has added a Build-up before the drop](docs/screenshots/website.png)
+
+Its illustrations are faux product UI, not screenshots: Soundcheck's Editor,
+the Mix Helper, Stem Separation, the Mixer page and a Live Session, drawn in
+the app's own colours with the [Stageshow](https://github.com/benjitaylor/skills/tree/main/stageshow)
+kit (MIT, vendored unchanged in `site/src/kit/`; see `VENDORED.md` there). The
+hero plays once, an Assistant Request adding a build-up before the drop, and
+**Replay** plays it again; under reduced motion each shows its finished
+still. They live in `site/src/demos/`.
+
+The Browser Version used to be the root, so the website sends the app's own
+`#` routes (`#settings`, an invite link's `#live=…`) on to `app/` before it
+draws: bookmarks, and invite links an older Desktop App makes, keep working.
+A page left open from before the move gets the reload notice, and the old
+cross-origin-isolation service worker at the root is replaced by one that
+unregisters itself (ADR 0017).
+
 ### Checking it by hand
 
 Nothing here plays sound in CI, so once it is deployed, in current Chrome or
-Edge: the page loads from `/soundcheck/` with its icons; **Play** is heard;
+Edge: the website loads at `/soundcheck/` and `/soundcheck/#settings` goes on
+to the Browser Version; the Browser Version loads from `/soundcheck/app/` with its icons; **Play** is heard;
 a MIDI keyboard plays the Synth; a Project folder saves and opens again;
 Settings lists what the Browser Version lacks; an Assistant Request with a
 Claude key edits the song. In Firefox it plays, and **File → Save** says
@@ -984,11 +1029,14 @@ reaches `localhost`.
 `app/index.html` carries the page's description, Open Graph and X card tags
 (the preview Slack, Teams and LinkedIn show for a shared link, with
 `app/public/og-image.png`), structured data, the favicons and the web app
-manifest. The build writes `robots.txt` and `sitemap.xml`. Previews and
-crawlers need absolute URLs, so they are built from `VITE_SITE_URL`, which
-defaults to `https://adrianeyre.github.io/soundcheck`; set it when deploying
-anywhere else: `VITE_SITE_URL=https://example.com pnpm build`. CI's `web` job
-sets it to the address GitHub Pages reports. The icons'
+manifest; `site/index.html` carries the website's own. The website's build
+writes `robots.txt` and `sitemap.xml` for the whole site, naming both pages.
+Previews and crawlers need absolute URLs, so each is built from
+`VITE_SITE_URL`: the website's defaults to
+`https://adrianeyre.github.io/soundcheck`, and the app's to that with `/app`
+on the end, which the Desktop App's invite links use too. Set them when
+deploying anywhere else: `VITE_SITE_URL=https://example.com/app pnpm build`.
+CI's `web` job sets both from the address GitHub Pages reports. The icons'
 sources are in `app/brand/`.
 
 ## Commands
@@ -1001,7 +1049,8 @@ Run from the repo root:
 | `pnpm desktop:dev` | Runs the desktop app, with live reload |
 | `pnpm vst3:build` | Builds the VST3 helper, with CMake, and the Plugins its tests load |
 | `pnpm desktop:build` | Builds the desktop app, and its installer on Windows (on macOS, an app and a disk image; on Linux, a `.deb` and an AppImage), with signed update packages when the updater's key is set |
-| `pnpm build` | Production build into `app/dist`: the Browser Version, and the UI the Desktop App bundles |
+| `pnpm site:dev` | Serves [the website](#the-website) |
+| `pnpm build` | Production build into `app/dist` (the Browser Version, and the UI the Desktop App bundles), then the website into `site/dist` |
 | `pnpm test` | Rust tests, then the WASM build, then the UI tests |
 | `pnpm lint` | `cargo fmt --check`, `cargo clippy -D warnings`, `oxlint` |
 | `pnpm typecheck` | TypeScript, against a fresh engine build |
@@ -1097,6 +1146,8 @@ lists the checks by hand.
 - `desktop/`: the Tauri desktop app. It runs the engine natively on cpal and
   reads MIDI through midir; everything device-specific lives here.
   `desktop/vst3-host/` is the VST3 helper, the only C++ in Soundcheck.
+- `site/`: the website at the root of GitHub Pages (ADR 0017), with the
+  Stageshow kit its illustrations are drawn with.
 - `relay/`: the Relay a Live Session goes through (ADR 0007, ADR 0012), with
   its container image.
 - `sdk/`: the SDK a WASM Plugin is written against, stable from 1.0.0. Its

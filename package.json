@@ -19,30 +19,31 @@
   },
   "scripts": {
     "engine:build": "wasm-pack build engine --target web --release",
-    "build": "pnpm engine:build && pnpm --filter @soundcheck/app build && node scripts/check-web-build.ts",
-    "test": "node --test scripts/check-example-plugins.test.ts scripts/check-web-build.test.ts scripts/keep-live-assets.test.ts scripts/export-htdemucs.test.ts scripts/sign-windows.test.ts scripts/sign-macos.test.ts scripts/updater.test.ts && cargo test --workspace && pnpm engine:build && pnpm --filter @soundcheck/app test",
+    "build": "pnpm engine:build && pnpm --filter @soundcheck/app build && node scripts/check-web-build.ts && pnpm --filter @soundcheck/site build",
+    "test": "node --test scripts/check-example-plugins.test.ts scripts/check-web-build.test.ts scripts/keep-live-assets.test.ts scripts/export-htdemucs.test.ts scripts/sign-windows.test.ts scripts/sign-macos.test.ts scripts/updater.test.ts && cargo test --workspace && pnpm engine:build && pnpm --filter @soundcheck/app test && pnpm --filter @soundcheck/site test",
     "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && oxlint --deny-warnings && node scripts/check-example-plugins.ts",
-    "typecheck": "pnpm engine:build && pnpm --filter @soundcheck/app typecheck",
+    "typecheck": "pnpm engine:build && pnpm --filter @soundcheck/app typecheck && pnpm --filter @soundcheck/site typecheck",
     "dev": "pnpm engine:build && pnpm --filter @soundcheck/app dev",
     "desktop:dev": "tauri dev",
     "desktop:build": "node scripts/updater.ts build",
     "vst3:build": "cmake -S desktop/vst3-host -B desktop/vst3-host/build -DCMAKE_BUILD_TYPE=Release && cmake --build desktop/vst3-host/build --config Release --parallel",
     "sandcastle": "node .sandcastle/main.ts",
-    "htdemucs:export": "node scripts/export-htdemucs.ts"
+    "htdemucs:export": "node scripts/export-htdemucs.ts",
+    "site:dev": "pnpm --filter @soundcheck/site dev"
   },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.12.0",
+    "@ai-hero/sandcastle": "^0.14.0",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^11.0.1",
     "@semantic-release/github": "^12.0.10",
     "@semantic-release/npm": "^13.2.0",
     "@semantic-release/release-notes-generator": "^14.1.1",
-    "@tauri-apps/cli": "2.12.0",
+    "@tauri-apps/cli": "2.12.4",
     "conventional-changelog-conventionalcommits": "^9.3.1",
-    "oxlint": "^1.85.0",
+    "oxlint": "^1.91.0",
     "semantic-release": "^25.0.9",
-    "wasm-pack": "^0.15.0"
+    "wasm-pack": "^0.15.1"
   },
-  "packageManager": "pnpm@12.6.0"
+  "packageManager": "pnpm@12.16.1"
 }

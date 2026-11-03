@@ -24,8 +24,10 @@ const { version, author } = JSON.parse(readFileSync(new URL("../package.json", i
  * Where the web build is hosted. Share previews (Slack, Teams, LinkedIn, X)
  * and search engines need absolute URLs for the page and its image, so a
  * deploy elsewhere sets `VITE_SITE_URL` (`VITE_SITE_URL=https://… pnpm build`).
+ * On GitHub Pages it is `app/`, under the website at the root (ADR 0017); the
+ * Desktop App's invite links name it too.
  */
-process.env.VITE_SITE_URL ||= "https://adrianeyre.github.io/soundcheck";
+process.env.VITE_SITE_URL ||= "https://adrianeyre.github.io/soundcheck/app";
 
 /** The dev server's port. Tauri's `devUrl` names it too, so it must not drift. */
 const PORT = 5145;

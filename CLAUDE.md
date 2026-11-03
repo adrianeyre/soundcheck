@@ -12,6 +12,7 @@ A music-creation app (a DAW) whose Assistant can edit and listen to a song. Read
 - `engine/`: the Rust Audio Engine core. Platform-free: no audio devices, files or browser APIs (ADR 0001).
 - `app/`: the React UI (Vite, TypeScript). It imports the engine's WASM build as `@engine` and never processes audio itself.
 - `desktop/`: the Tauri desktop app (ADR 0002). It runs the engine natively on cpal and reads MIDI through midir. Everything device-specific lives here, never in `engine/`.
+- `site/`: the website at the root of GitHub Pages, with the Browser Version under it at `app/` (ADR 0017). Its illustrations use the Stageshow kit vendored in `site/src/kit/`; don't edit that copy.
 - `sdk/`: the stable SDK a WASM Plugin is written against (ADR 0003). `examples/plugins/` are Plugins written only against it; a check in `pnpm lint` keeps them that way.
 - `spikes/`: throwaway prototypes behind an ADR, each its own workspace, outside the app's checks. Don't build on them.
 

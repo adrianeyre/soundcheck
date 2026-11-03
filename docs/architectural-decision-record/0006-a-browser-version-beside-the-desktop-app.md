@@ -43,7 +43,7 @@ The Desktop App's list only ever grows: a new feature that needs the machine goe
 The maintainer has to:
 
 1. **Turn Pages on**: the repository's *Settings → Pages → Build and deployment → Source: GitHub Actions*. Until then the `web` job skips its deploy.
-2. **Choose the address.** CI builds with the URL Pages reports (`https://adrianeyre.github.io/soundcheck/` unless a custom domain is set). The `VITE_SITE_URL` default that local builds use is `https://adrianeyre.github.io/soundcheck`, which is right once the repository is renamed from `temp` to `soundcheck`; change it if the site is meant to be elsewhere.
+2. **Choose the address.** CI builds with the URL Pages reports (`https://adrianeyre.github.io/soundcheck/` unless a custom domain is set). The `VITE_SITE_URL` default that local builds use is the repository's own Pages address; change it if the site is meant to be elsewhere. Since [ADR 0017](0017-the-website-is-the-pages-root-and-the-browser-version-is-under-app.md) the Browser Version is `app/` under that address, beside the website.
 3. **Accept the API-key risk above**, or set a custom domain for the Browser Version.
 4. **Check by hand** once it is deployed, in current Chrome or Edge, which the sandbox this was written in can't do (it has no display or sound device): the page loads from its sub-path with its icons; **Play** is heard; a MIDI keyboard plays the Synth; a Project folder saves and opens again; the Settings page lists what the Browser Version lacks and links to the Desktop App; an Assistant Request with a Claude key edits the song. Then in Firefox: it plays, and the File menu says Project folders need the Desktop App.
 

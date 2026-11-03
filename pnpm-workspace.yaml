@@ -1,5 +1,6 @@
 packages:
   - app
+  - site
 
 # wasm-pack's npm package downloads its binary in a postinstall script.
 # esbuild's (tsx's, for `real-model-check`) only checks the platform binary
@@ -13,6 +14,26 @@ allowBuilds:
   wasm-pack: true
 
 minimumReleaseAgeExclude:
-  - lucide-react@1.48.0
-  - '@tauri-apps/api@2.12.0'
-  - '@tauri-apps/plugin-http@2.7.0'
+  - lucide-react@1.67.0
+  - '@ai-hero/sandcastle@0.14.0'
+  - '@oxlint/binding-android-arm-eabi@1.91.0'
+  - '@oxlint/binding-android-arm64@1.91.0'
+  - '@oxlint/binding-darwin-arm64@1.91.0'
+  - '@oxlint/binding-darwin-x64@1.91.0'
+  - '@oxlint/binding-freebsd-x64@1.91.0'
+  - '@oxlint/binding-linux-arm-gnueabihf@1.91.0'
+  - '@oxlint/binding-linux-arm-musleabihf@1.91.0'
+  - '@oxlint/binding-linux-arm64-gnu@1.91.0'
+  - '@oxlint/binding-linux-arm64-musl@1.91.0'
+  - '@oxlint/binding-linux-ppc64-gnu@1.91.0'
+  - '@oxlint/binding-linux-riscv64-gnu@1.91.0'
+  - '@oxlint/binding-linux-riscv64-musl@1.91.0'
+  - '@oxlint/binding-linux-s390x-gnu@1.91.0'
+  - '@oxlint/binding-linux-x64-gnu@1.91.0'
+  - '@oxlint/binding-linux-x64-musl@1.91.0'
+  - '@oxlint/binding-openharmony-arm64@1.91.0'
+  - '@oxlint/binding-win32-arm64-msvc@1.91.0'
+  - '@oxlint/binding-win32-ia32-msvc@1.91.0'
+  - '@oxlint/binding-win32-x64-msvc@1.91.0'
+  - openai@7.48.0
+  - oxlint@1.91.0

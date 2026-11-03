@@ -15,7 +15,8 @@
   "ignorePatterns": [
     "engine/pkg/**",
     "**/dist/**",
-    "target/**"
+    "target/**",
+    "site/src/kit/**"
   ],
   "rules": {
     "react/react-in-jsx-scope": "off",
@@ -28,6 +29,8 @@
           "./text-codec-polyfill"
         ]
       }
-    ]
+    ],
+    "react/immutability": "off",
+    "react/purity": "off"
   }
 }
