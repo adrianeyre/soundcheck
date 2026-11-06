@@ -555,8 +555,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # The site's address, for the share tags, robots.txt and the sitemap.
-      - id: site
+      - id: pages
         uses: actions/configure-pages@v6
+      # Pages reports `http://` for a custom domain whose HTTPS it doesn't
+      # enforce itself (Cloudflare does). A share card, canonical link or
+      # sitemap that names a redirect is one a crawler marks down.
+      - id: site
+        run: echo "base_url=${BASE_URL/#http:/https:}" >> "$GITHUB_OUTPUT"
+        env:
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
 
       # The WASM engine and the Browser Version, the check that it works
       # under a sub-path, then the website. The website is the site's root
