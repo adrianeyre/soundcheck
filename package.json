@@ -1,6 +1,6 @@
 {
   "name": "soundcheck",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "private": false,
   "description": "Music creation with an LLM co-producer",
   "license": "GPL-3.0-or-later",
