@@ -6,47 +6,112 @@
     <meta name="theme-color" content="#0b0d17" />
     <meta name="color-scheme" content="dark" />
 
-    <title>Soundcheck — Make music with an AI co-producer that listens</title>
+    <title>Soundcheck: the free DAW with an AI co-producer that listens</title>
     <meta
       name="description"
-      content="Soundcheck is a free, open-source music-creation app (a DAW) for Windows, macOS, Linux and the browser. Its Assistant edits your song and listens to it: ask for a change in words and hear it. Synth, Drum Sampler, Step Sequencer, Mixer, Stem Separation, a DJ Mixer and Live Sessions."
+      content="Soundcheck is a free, open-source DAW for Windows, macOS, Linux and the browser. Ask its AI Assistant for a change in words, and it edits your song and listens."
     />
     <meta name="author" content="Adrian Eyre" />
+    <meta name="application-name" content="Soundcheck" />
+    <meta name="apple-mobile-web-app-title" content="Soundcheck" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="canonical" href="%VITE_SITE_URL%/" />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="sitemap" type="application/xml" href="%VITE_SITE_URL%/sitemap.xml" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
+    <!-- Open Graph: the card Slack, Teams, Discord, WhatsApp, LinkedIn, Facebook and iMessage show for a pasted link. -->
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:site_name" content="Soundcheck" />
-    <meta property="og:title" content="Soundcheck — Make music with an AI co-producer that listens" />
-    <meta property="og:description" content="A free, open-source DAW for the desktop and the browser, whose Assistant edits your song and listens to it." />
+    <meta property="og:title" content="Soundcheck: the free DAW with an AI co-producer that listens" />
+    <meta property="og:description" content="A free, open-source DAW for the desktop and the browser. Ask its Assistant for a change in words: it edits your song, then listens back." />
     <meta property="og:url" content="%VITE_SITE_URL%/" />
     <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta property="og:image:secure_url" content="%VITE_SITE_URL%/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Soundcheck: make music with an AI co-producer" />
+    <meta property="og:image:alt" content="The Soundcheck logo and name above a timeline of coloured Clips with a red playhead." />
+
+    <!-- X / Twitter card; Slack and Discord read these too. -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Soundcheck — Make music with an AI co-producer that listens" />
-    <meta name="twitter:description" content="A free, open-source DAW for the desktop and the browser, whose Assistant edits your song and listens to it." />
+    <meta name="twitter:title" content="Soundcheck: the free DAW with an AI co-producer that listens" />
+    <meta name="twitter:description" content="A free, open-source DAW for the desktop and the browser. Ask its Assistant for a change in words: it edits your song, then listens back." />
     <meta name="twitter:image" content="%VITE_SITE_URL%/og-image.png" />
+    <meta name="twitter:image:alt" content="The Soundcheck logo and name above a timeline of coloured Clips with a red playhead." />
 
     <link rel="icon" href="favicon.ico" sizes="48x48" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 
+    <!-- Structured data, for search results: what Soundcheck is, who makes it, and where it runs. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Soundcheck",
-        "applicationCategory": "MultimediaApplication",
-        "operatingSystem": "Windows, macOS, Linux, Web",
-        "url": "%VITE_SITE_URL%/",
-        "image": "%VITE_SITE_URL%/og-image.png",
-        "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
-        "author": { "@type": "Person", "name": "Adrian Eyre" },
-        "codeRepository": "https://github.com/adrianeyre/soundcheck"
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "%VITE_SITE_URL%/#website",
+            "url": "%VITE_SITE_URL%/",
+            "name": "Soundcheck",
+            "description": "A free, open-source DAW whose AI Assistant edits your song and listens to it.",
+            "inLanguage": "en-GB",
+            "publisher": { "@id": "%VITE_SITE_URL%/#author" }
+          },
+          {
+            "@type": "Person",
+            "@id": "%VITE_SITE_URL%/#author",
+            "name": "Adrian Eyre",
+            "url": "https://github.com/adrianeyre"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "%VITE_SITE_URL%/#app",
+            "name": "Soundcheck",
+            "alternateName": "Soundcheck DAW",
+            "description": "Soundcheck is a free, open-source music-creation app (a DAW) for Windows, macOS, Linux and the browser. Its Assistant edits your song and listens to it: ask for a change in words and hear it.",
+            "applicationCategory": "MultimediaApplication",
+            "applicationSubCategory": "Digital audio workstation",
+            "operatingSystem": "Windows 10, Windows 11, macOS, Linux, Web browser",
+            "browserRequirements": "Chrome, Edge, Firefox or Safari",
+            "softwareVersion": "%VITE_APP_VERSION%",
+            "url": "%VITE_SITE_URL%/",
+            "downloadUrl": "https://github.com/adrianeyre/soundcheck/releases/latest",
+            "installUrl": "%VITE_SITE_URL%/app/",
+            "releaseNotes": "https://github.com/adrianeyre/soundcheck/blob/main/CHANGELOG.md",
+            "image": "%VITE_SITE_URL%/og-image.png",
+            "screenshot": "%VITE_SITE_URL%/og-image.png",
+            "isAccessibleForFree": true,
+            "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+            "featureList": [
+              "AI Assistant that edits and listens to your song",
+              "Mix Helper",
+              "Stem Separation",
+              "DJ Mixer with two or four Decks",
+              "Live Sessions for making music together",
+              "Synth, Keys and Drum Sampler",
+              "Step Sequencer",
+              "Audio and MIDI recording, with ASIO on Windows",
+              "Mixer and effects",
+              "VST3 and WASM Plugins",
+              "Export to WAV or MP3"
+            ],
+            "author": { "@id": "%VITE_SITE_URL%/#author" },
+            "publisher": { "@id": "%VITE_SITE_URL%/#author" },
+            "isPartOf": { "@id": "%VITE_SITE_URL%/#website" },
+            "sameAs": ["https://github.com/adrianeyre/soundcheck"]
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "name": "Soundcheck",
+            "codeRepository": "https://github.com/adrianeyre/soundcheck",
+            "programmingLanguage": ["Rust", "TypeScript"],
+            "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+            "targetProduct": { "@id": "%VITE_SITE_URL%/#app" },
+            "author": { "@id": "%VITE_SITE_URL%/#author" }
+          }
+        ]
       }
     </script>
   </head>

@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { appAddressFor } from "./forward";
@@ -12,11 +12,13 @@ if (forward) {
   location.replace(forward);
 } else {
   const root = document.getElementById("root");
-  if (root) {
-    createRoot(root).render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
-  }
+  const app = (
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+  // The build draws the page into the root ahead of time (`prerender` in
+  // `vite.config.ts`); `pnpm dev` doesn't, and leaves it empty.
+  if (root?.firstElementChild) hydrateRoot(root, app);
+  else if (root) createRoot(root).render(app);
 }
